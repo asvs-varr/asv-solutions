@@ -8,6 +8,7 @@ import 'pec_calculator_screen.dart';
 import 'workflow_screen.dart';
 import 'plan_canvas_screen.dart';
 import 'commercial_suite_screen.dart';
+import 'future_proofing_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -115,6 +116,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ),
                     ),
                     const SizedBox(width: 12),
+                    Expanded(
+                      child: _quickActionTile(
+                        icon: Icons.electric_car,
+                        title: 'Future-Proof',
+                        subtitle: 'Solar, EV & IoT',
+                        color: Colors.tealAccent,
+                        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const FutureProofingScreen())),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
                     Expanded(
                       child: _quickActionTile(
                         icon: Icons.request_quote_outlined,
