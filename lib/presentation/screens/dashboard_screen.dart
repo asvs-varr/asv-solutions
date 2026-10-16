@@ -148,9 +148,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     const Text('Active Electrical Projects', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                    TextButton(
-                      child: const Text('New Project +', style: TextStyle(color: BanaagTheme.primaryAmber)),
-                      onPressed: () {},
+                    TextButton.icon(
+                      icon: const Icon(Icons.add, size: 16, color: BanaagTheme.primaryAmber),
+                      label: const Text('New Project', style: TextStyle(color: BanaagTheme.primaryAmber, fontWeight: FontWeight.bold)),
+                      onPressed: () => _showNewProjectDialog(context),
                     ),
                   ],
                 ),
@@ -274,6 +275,130 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  void _showNewProjectDialog(BuildContext context) {
+    final titleController = TextEditingController();
+    final clientController = TextEditingController();
+    final addressController = TextEditingController();
+    final amountController = TextEditingController();
+    String utility = 'Meralco';
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          backgroundColor: BanaagTheme.surfaceCard,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Row(
+            children: [
+              Icon(Icons.add_business, color: BanaagTheme.primaryAmber),
+              SizedBox(width: 8),
+              Text('Create New Project', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: titleController,
+                  decoration: const InputDecoration(
+                    labelText: 'Project Name / Scope',
+                    hintText: 'e.g. 3-Storey Commercial Fit-Out',
+                    labelStyle: TextStyle(color: BanaagTheme.textMuted),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: clientController,
+                  decoration: const InputDecoration(
+                    labelText: 'Client Name',
+                    hintText: 'e.g. Arch. Roberto Ramos',
+                    labelStyle: TextStyle(color: BanaagTheme.textMuted),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: addressController,
+                  decoration: const InputDecoration(
+                    labelText: 'Site Address',
+                    hintText: 'e.g. Barangay San Jose, Pasig City',
+                    labelStyle: TextStyle(color: BanaagTheme.textMuted),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: amountController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Contract Amount (₱)',
+                    hintText: 'e.g. 450000',
+                    labelStyle: TextStyle(color: BanaagTheme.textMuted),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  initialValue: utility,
+                  dropdownColor: BanaagTheme.surfaceCard,
+                  decoration: const InputDecoration(
+                    labelText: 'Utility Provider',
+                    labelStyle: TextStyle(color: BanaagTheme.textMuted),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'Meralco', child: Text('Meralco')),
+                    DropdownMenuItem(value: 'CANORECO', child: Text('CANORECO')),
+                    DropdownMenuItem(value: 'BATELEC II', child: Text('BATELEC II')),
+                    DropdownMenuItem(value: 'Electric Coop (Provincial)', child: Text('Electric Coop (Provincial)')),
+                  ],
+                  onChanged: (val) {
+                    if (val != null) {
+                      setDialogState(() => utility = val);
+                    }
+                  },
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              child: const Text('Cancel', style: TextStyle(color: BanaagTheme.textMuted)),
+              onPressed: () => Navigator.pop(ctx),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: BanaagTheme.primaryAmber,
+                foregroundColor: Colors.black,
+              ),
+              child: const Text('Create Project', style: TextStyle(fontWeight: FontWeight.bold)),
+              onPressed: () {
+                if (titleController.text.trim().isEmpty) return;
+                final double contractAmt = double.tryParse(amountController.text.trim()) ?? 150000.0;
+                final newProject = Project(
+                  id: 'PRJ-${DateTime.now().year}-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}',
+                  title: titleController.text.trim(),
+                  clientName: clientController.text.trim().isEmpty ? 'Walk-in Client' : clientController.text.trim(),
+                  clientContact: '+63 9XX XXX XXXX',
+                  siteAddress: addressController.text.trim().isEmpty ? 'Philippines' : addressController.text.trim(),
+                  utilityProvider: utility,
+                  contractAmount: contractAmt,
+                  retentionPercent: 10.0,
+                  currentPhaseNumber: 1, // Starts at Consultation
+                  phases: repo.createDefaultPhases(),
+                  createdAt: DateTime.now(),
+                );
+
+                repo.addProject(newProject);
+                Navigator.pop(ctx);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('⚡ New project "${newProject.title}" successfully created!')),
+                );
+              },
+            ),
+          ],
         ),
       ),
     );

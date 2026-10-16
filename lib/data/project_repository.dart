@@ -147,6 +147,20 @@ class ProjectRepository {
     )).toList();
   }
 
+  List<ProjectPhase> createDefaultPhases() {
+    return _clonePhases(_projects.first.phases.map((p) => ProjectPhase(
+      type: p.type,
+      isCompleted: false,
+      checklist: p.checklist.map((c) => PhaseCheckItem(
+        id: c.id,
+        title: c.title,
+        isMandatory: c.isMandatory,
+        isCompleted: false,
+        notes: c.notes,
+      )).toList(),
+    )).toList());
+  }
+
   void addProject(Project project) {
     _projects.add(project);
     _projectsStreamController.add(_projects);
