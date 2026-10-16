@@ -57,6 +57,7 @@ class Project {
   final double contractAmount;
   final double retentionPercent; // default 10%
   int currentPhaseNumber;
+  List<ApplianceItem> applianceLoads;
   final List<ProjectPhase> phases;
   final DateTime createdAt;
 
@@ -70,12 +71,34 @@ class Project {
     required this.contractAmount,
     this.retentionPercent = 10.0,
     this.currentPhaseNumber = 1,
+    List<ApplianceItem>? applianceLoads,
     required this.phases,
     required this.createdAt,
-  });
+  }) : applianceLoads = applianceLoads ?? [];
 
   double get retentionAmount => contractAmount * (retentionPercent / 100.0);
   double get billableAmount => contractAmount - retentionAmount;
+  double get totalConnectedLoadVA => applianceLoads.fold(0.0, (sum, item) => sum + item.totalVA);
+}
+
+class ApplianceItem {
+  final String id;
+  final String name;
+  final String roomCategory; // 'Living & Dining', 'Kitchen', 'Bedrooms', 'Bathrooms & Laundry', 'Outdoor'
+  final double ratingVA; // Standard connected volt-amperes
+  int quantity;
+  final bool isDedicatedCircuit; // e.g. Aircon, Water Heater, Range
+
+  ApplianceItem({
+    required this.id,
+    required this.name,
+    required this.roomCategory,
+    required this.ratingVA,
+    this.quantity = 1,
+    this.isDedicatedCircuit = false,
+  });
+
+  double get totalVA => ratingVA * quantity;
 }
 
 class CanvasPoint {
