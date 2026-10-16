@@ -269,8 +269,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text('Stage: ${currentPhase.type.title}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-                  Text('₱${project.contractAmount.toStringAsFixed(0)}',
-                      style: const TextStyle(fontWeight: FontWeight.bold, color: BanaagTheme.successGreen, fontSize: 13)),
+                  Text(
+                    project.contractAmount > 0
+                        ? '₱${project.contractAmount.toStringAsFixed(0)}'
+                        : 'Pending Takeoff Estimate',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: project.contractAmount > 0 ? BanaagTheme.successGreen : BanaagTheme.warningOrange,
+                      fontSize: 13,
+                    ),
+                  ),
                 ],
               ),
             ],
@@ -335,9 +343,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   controller: amountController,
                   keyboardType: TextInputType.number,
                   decoration: const InputDecoration(
-                    labelText: 'Contract Amount (₱)',
-                    hintText: 'e.g. 450000',
+                    labelText: 'Client Target Budget (₱) - Optional',
+                    hintText: 'Leave blank for Stage 2 Auto-BOM Takeoff',
                     labelStyle: TextStyle(color: BanaagTheme.textMuted),
+                    helperText: 'Default: ₱0.00 (Auto-computes from Plan Layout Takeoff)',
+                    helperStyle: TextStyle(color: Colors.amber, fontSize: 10),
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -376,7 +386,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               child: const Text('Create Project', style: TextStyle(fontWeight: FontWeight.bold)),
               onPressed: () {
                 if (titleController.text.trim().isEmpty) return;
-                final double contractAmt = double.tryParse(amountController.text.trim()) ?? 150000.0;
+                final double contractAmt = double.tryParse(amountController.text.trim()) ?? 0.0;
                 final newProject = Project(
                   id: 'PRJ-${DateTime.now().year}-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}',
                   title: titleController.text.trim(),
