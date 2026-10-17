@@ -10,6 +10,7 @@ import 'plan_canvas_screen.dart';
 import 'commercial_suite_screen.dart';
 import 'future_proofing_screen.dart';
 import 'banaag_pro_screen.dart';
+import '../widgets/project_management_dialogs.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -20,6 +21,7 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   final repo = ProjectRepository.instance;
+  int _selectedProjectTab = 0; // 0 = Active, 1 = Archived
 
   @override
   Widget build(BuildContext context) {
@@ -145,21 +147,99 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
                 const SizedBox(height: 24),
 
-                // Active Projects List
+                // Projects Section Header with Active vs Archived Filter Tabs
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text('Active Electrical Projects', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    Row(
+                      children: [
+                        ChoiceChip(
+                          label: Text('Active (${projects.where((p) => !p.isArchived).length})'),
+                          selected: _selectedProjectTab == 0,
+                          selectedColor: BanaagTheme.primaryAmber,
+                          backgroundColor: BanaagTheme.surfaceCard,
+                          labelStyle: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: _selectedProjectTab == 0 ? Colors.black : Colors.white70,
+                          ),
+                          onSelected: (val) {
+                            if (val) setState(() => _selectedProjectTab = 0);
+                          },
+                        ),
+                        const SizedBox(width: 8),
+                        ChoiceChip(
+                          label: Text('Archived (${projects.where((p) => p.isArchived).length})'),
+                          selected: _selectedProjectTab == 1,
+                          selectedColor: BanaagTheme.warningOrange,
+                          backgroundColor: BanaagTheme.surfaceCard,
+                          labelStyle: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: _selectedProjectTab == 1 ? Colors.black : Colors.white70,
+                          ),
+                          onSelected: (val) {
+                            if (val) setState(() => _selectedProjectTab = 1);
+                          },
+                        ),
+                      ],
+                    ),
                     TextButton.icon(
                       icon: const Icon(Icons.add, size: 16, color: BanaagTheme.primaryAmber),
-                      label: const Text('New Project', style: TextStyle(color: BanaagTheme.primaryAmber, fontWeight: FontWeight.bold)),
+                      label: const Text('New Project', style: TextStyle(color: BanaagTheme.primaryAmber, fontWeight: FontWeight.bold, fontSize: 13)),
                       onPressed: () => _showNewProjectDialog(context),
                     ),
                   ],
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 10),
 
-                ...projects.map((project) => _buildProjectCard(project)),
+                // Render Filtered Projects or Empty State
+                ...(() {
+                  final filtered = projects.where((p) => _selectedProjectTab == 0 ? !p.isArchived : p.isArchived).toList();
+                  if (filtered.isEmpty) {
+                    return [
+                      Container(
+                        padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 16),
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: BanaagTheme.surfaceCard,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: BanaagTheme.surfaceCardBorder),
+                        ),
+                        child: Column(
+                          children: [
+                            Icon(
+                              _selectedProjectTab == 0 ? Icons.folder_open_outlined : Icons.archive_outlined,
+                              size: 44,
+                              color: BanaagTheme.textMuted,
+                            ),
+                            const SizedBox(height: 10),
+                            Text(
+                              _selectedProjectTab == 0
+                                  ? 'Walang active electrical project sa ngayon.'
+                                  : 'Walang naka-archive na project.',
+                              style: const TextStyle(color: BanaagTheme.textMuted, fontSize: 13),
+                            ),
+                            if (_selectedProjectTab == 0) ...[
+                              const SizedBox(height: 12),
+                              ElevatedButton.icon(
+                                style: ElevatedButton.styleFrom(
+                                  minimumSize: const Size(180, 40),
+                                  backgroundColor: BanaagTheme.primaryAmber,
+                                  foregroundColor: Colors.black,
+                                ),
+                                icon: const Icon(Icons.add, size: 16),
+                                label: const Text('Create First Project', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                                onPressed: () => _showNewProjectDialog(context),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ];
+                  }
+                  return filtered.map((project) => _buildProjectCard(project)).toList();
+                })(),
               ],
             ),
           );
@@ -241,6 +321,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   Expanded(
                     child: Text(project.title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
                   ),
+                  const SizedBox(width: 6),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
@@ -252,9 +333,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       style: const TextStyle(color: BanaagTheme.primaryAmber, fontWeight: FontWeight.bold, fontSize: 11),
                     ),
                   ),
+                  IconButton(
+                    icon: const Icon(Icons.more_vert, size: 20, color: BanaagTheme.textMuted),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                    tooltip: 'Project Options',
+                    onPressed: () => ProjectManagementDialogs.showProjectActionSheet(context, project),
+                  ),
                 ],
               ),
-              const SizedBox(height: 6),
+              const SizedBox(height: 2),
               Text('${project.clientName} • ${project.utilityProvider}', style: const TextStyle(color: BanaagTheme.textMuted, fontSize: 12)),
               const SizedBox(height: 12),
               ClipRRect(
@@ -270,7 +358,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('Stage: ${currentPhase.type.title}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                  Expanded(
+                    child: Text(
+                      'Stage: ${currentPhase.type.title}',
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
                   Text(
                     project.contractAmount > 0
                         ? '₱${project.contractAmount.toStringAsFixed(0)}'

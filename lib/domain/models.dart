@@ -230,6 +230,7 @@ class Project {
   final double retentionPercent; // default 10%
   int currentPhaseNumber;
   final String intakeMode; // 'SITE_INTERVIEW', 'BLUEPRINT_PHOTO', 'AUTOCAD_DXF'
+  bool isArchived;
   List<ApplianceItem> applianceLoads;
   List<CanvasPoint> canvasPoints;
   List<ConduitRoute> conduitRoutes;
@@ -247,6 +248,7 @@ class Project {
     this.retentionPercent = 10.0,
     this.currentPhaseNumber = 1,
     this.intakeMode = 'SITE_INTERVIEW',
+    this.isArchived = false,
     List<ApplianceItem>? applianceLoads,
     List<CanvasPoint>? canvasPoints,
     List<ConduitRoute>? conduitRoutes,
@@ -271,6 +273,7 @@ class Project {
     'retentionPercent': retentionPercent,
     'currentPhaseNumber': currentPhaseNumber,
     'intakeMode': intakeMode,
+    'isArchived': isArchived,
     'applianceLoads': applianceLoads.map((a) => a.toJson()).toList(),
     'canvasPoints': canvasPoints.map((c) => c.toJson()).toList(),
     'conduitRoutes': conduitRoutes.map((r) => r.toJson()).toList(),
@@ -289,6 +292,7 @@ class Project {
     retentionPercent: (json['retentionPercent'] as num?)?.toDouble() ?? 10.0,
     currentPhaseNumber: json['currentPhaseNumber'] ?? 1,
     intakeMode: json['intakeMode'] ?? 'SITE_INTERVIEW',
+    isArchived: json['isArchived'] ?? false,
     applianceLoads: (json['applianceLoads'] as List<dynamic>?)
             ?.map((a) => ApplianceItem.fromJson(a as Map<String, dynamic>))
             .toList() ??

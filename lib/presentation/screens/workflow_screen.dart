@@ -5,6 +5,7 @@ import '../../domain/models.dart';
 import '../../data/project_repository.dart';
 import '../theme/banaag_theme.dart';
 import 'client_needs_analysis_screen.dart';
+import '../widgets/project_management_dialogs.dart';
 
 class WorkflowScreen extends StatefulWidget {
   final Project project;
@@ -51,6 +52,73 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
             ),
           ],
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.edit_outlined, color: BanaagTheme.primaryAmber),
+            tooltip: 'Edit Project Info',
+            onPressed: () {
+              ProjectManagementDialogs.showEditProjectDialog(
+                context,
+                _project,
+                onProjectUpdated: () {
+                  setState(() {
+                    _project = ProjectRepository.instance.allProjects.firstWhere(
+                      (p) => p.id == _project.id,
+                      orElse: () => _project,
+                    );
+                  });
+                },
+              );
+            },
+          ),
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert, color: Colors.white70),
+            tooltip: 'More Options',
+            color: BanaagTheme.surfaceCard,
+            onSelected: (val) {
+              if (val == 'archive') {
+                ProjectManagementDialogs.toggleArchiveProject(
+                  context,
+                  _project,
+                  onStateChanged: () {
+                    setState(() {});
+                  },
+                );
+              } else if (val == 'delete') {
+                ProjectManagementDialogs.showSafeDeleteProjectDialog(
+                  context,
+                  _project,
+                  onDeleted: () {
+                    Navigator.pop(context); // Exit Workflow back to Dashboard
+                  },
+                );
+              }
+            },
+            itemBuilder: (ctx) => [
+              PopupMenuItem(
+                value: 'archive',
+                child: Row(
+                  children: [
+                    Icon(_project.isArchived ? Icons.unarchive : Icons.archive_outlined,
+                        color: _project.isArchived ? BanaagTheme.successGreen : BanaagTheme.warningOrange, size: 20),
+                    const SizedBox(width: 8),
+                    Text(_project.isArchived ? 'Restore Project' : 'Archive Project'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'delete',
+                child: Row(
+                  children: [
+                    Icon(Icons.delete_forever, color: BanaagTheme.alertRed, size: 20),
+                    SizedBox(width: 8),
+                    Text('Delete Project', style: TextStyle(color: BanaagTheme.alertRed, fontWeight: FontWeight.bold)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
       body: ListView.builder(
         padding: const EdgeInsets.all(16.0),

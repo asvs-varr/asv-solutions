@@ -109,73 +109,325 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
 
   void _promptAddCustomAppliance() {
     final nameController = TextEditingController();
-    final vaController = TextEditingController(text: '300');
+    final wattsController = TextEditingController(text: '1000');
+    final vaController = TextEditingController(text: '1000');
+    double powerFactor = 1.0;
+    String activeLoadType = 'Resistive';
     bool isDedicated = false;
+    bool isUpdatingFromWatts = false;
+    bool isUpdatingFromVA = false;
+
+    // Quick common wattage buttons
+    final List<int> quickWattages = [150, 350, 800, 1500, 2500, 3500];
+
+    // Power factor preset definitions
+    final Map<String, double> pfPresets = {
+      'Resistive (1.0)': 1.0,
+      'Inverter (0.85)': 0.85,
+      'Motor/ACU (0.80)': 0.80,
+      'LED Light (0.75)': 0.75,
+    };
 
     showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          backgroundColor: BanaagTheme.surfaceCard,
-          title: Row(
-            children: [
-              const Icon(Icons.add_circle_outline, color: BanaagTheme.primaryAmber),
-              const SizedBox(width: 8),
-              Text('Add Appliance: $_activeSpaceName', style: const TextStyle(fontSize: 16)),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              TextField(
-                controller: nameController,
-                decoration: const InputDecoration(
-                  labelText: 'Appliance Name',
-                  hintText: 'e.g. Espresso Machine / Air Fryer',
-                  labelStyle: TextStyle(color: BanaagTheme.textMuted),
+        builder: (context, setDialogState) {
+          void updateDedicatedStatus(double calculatedVA, String loadType) {
+            if (calculatedVA >= 1500.0 || loadType.contains('Motor') || loadType.contains('ACU')) {
+              isDedicated = true;
+            }
+          }
+
+          void syncFromWatts(String val) {
+            if (isUpdatingFromVA) return;
+            isUpdatingFromWatts = true;
+            final double? w = double.tryParse(val);
+            if (w != null && powerFactor > 0) {
+              final double calculatedVA = w / powerFactor;
+              vaController.text = calculatedVA.toStringAsFixed(0);
+              updateDedicatedStatus(calculatedVA, activeLoadType);
+            }
+            isUpdatingFromWatts = false;
+            setDialogState(() {});
+          }
+
+          void syncFromVA(String val) {
+            if (isUpdatingFromWatts) return;
+            isUpdatingFromVA = true;
+            final double? v = double.tryParse(val);
+            if (v != null) {
+              final double calculatedW = v * powerFactor;
+              wattsController.text = calculatedW.toStringAsFixed(0);
+              updateDedicatedStatus(v, activeLoadType);
+            }
+            isUpdatingFromVA = false;
+            setDialogState(() {});
+          }
+
+          void applyPF(double newPF, String label) {
+            powerFactor = newPF;
+            activeLoadType = label;
+            final double? w = double.tryParse(wattsController.text);
+            if (w != null && powerFactor > 0) {
+              final double calculatedVA = w / powerFactor;
+              vaController.text = calculatedVA.toStringAsFixed(0);
+              updateDedicatedStatus(calculatedVA, activeLoadType);
+            }
+            setDialogState(() {});
+          }
+
+          final double currentVA = double.tryParse(vaController.text) ?? 0.0;
+          final double currentAmps = currentVA / 230.0;
+
+          return AlertDialog(
+            backgroundColor: BanaagTheme.surfaceCard,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: Row(
+              children: [
+                const Icon(Icons.bolt, color: BanaagTheme.primaryAmber, size: 24),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Add Appliance: $_activeSpaceName',
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
                 ),
+              ],
+            ),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  TextField(
+                    controller: nameController,
+                    decoration: const InputDecoration(
+                      labelText: 'Appliance Name',
+                      hintText: 'e.g. Espresso Machine / Range / Booster Pump',
+                      labelStyle: TextStyle(color: BanaagTheme.textMuted),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+
+                  // Quick 1-Tap Wattage Selector
+                  const Text(
+                    '1-Tap Wattage Presets (Nameplate Common):',
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: BanaagTheme.textMuted),
+                  ),
+                  const SizedBox(height: 6),
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: quickWattages.map((w) {
+                        return Padding(
+                          padding: const EdgeInsets.only(right: 6.0),
+                          child: ActionChip(
+                            label: Text('${w}W', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                            backgroundColor: Colors.white10,
+                            onPressed: () {
+                              wattsController.text = w.toString();
+                              syncFromWatts(w.toString());
+                            },
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Dual Input: Watts & VA
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: wattsController,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                            labelText: 'Real Power (Watts)',
+                            suffixText: 'W',
+                            labelStyle: TextStyle(color: BanaagTheme.textMuted),
+                          ),
+                          onChanged: syncFromWatts,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      const Icon(Icons.arrow_forward, size: 16, color: BanaagTheme.textMuted),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextField(
+                          controller: vaController,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                            labelText: 'Apparent (VA)',
+                            suffixText: 'VA',
+                            labelStyle: TextStyle(color: BanaagTheme.primaryAmber),
+                          ),
+                          onChanged: syncFromVA,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+
+                  // Power Factor (PF) Presets
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Power Factor (PF):',
+                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: BanaagTheme.primaryAmber.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          'PF: ${powerFactor.toStringAsFixed(2)}',
+                          style: const TextStyle(
+                            color: BanaagTheme.primaryAmber,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    children: pfPresets.entries.map((entry) {
+                      final bool isSelected = (powerFactor - entry.value).abs() < 0.02;
+                      return ChoiceChip(
+                        label: Text(entry.key, style: const TextStyle(fontSize: 10)),
+                        selected: isSelected,
+                        selectedColor: BanaagTheme.primaryAmber,
+                        backgroundColor: BanaagTheme.surfaceCard,
+                        labelStyle: TextStyle(
+                          color: isSelected ? Colors.black : Colors.white70,
+                          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                        ),
+                        onSelected: (val) {
+                          if (val) applyPF(entry.value, entry.key);
+                        },
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 8),
+
+                  // Power Factor Fine-Tune Slider
+                  SliderTheme(
+                    data: SliderTheme.of(context).copyWith(
+                      thumbColor: BanaagTheme.primaryAmber,
+                      activeTrackColor: BanaagTheme.primaryAmber,
+                      inactiveTrackColor: Colors.white24,
+                      trackHeight: 3,
+                    ),
+                    child: Slider(
+                      value: powerFactor,
+                      min: 0.50,
+                      max: 1.0,
+                      divisions: 50,
+                      label: powerFactor.toStringAsFixed(2),
+                      onChanged: (val) {
+                        applyPF(val, 'Custom');
+                      },
+                    ),
+                  ),
+
+                  // Live Electrical Conversion Summary Ribbon
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.black26,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.white12),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('Formula: VA = Watts ÷ PF', style: TextStyle(fontSize: 10, color: BanaagTheme.textMuted)),
+                            Text('${wattsController.text}W ÷ ${powerFactor.toStringAsFixed(2)} = ${currentVA.toStringAsFixed(0)} VA',
+                                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white)),
+                          ],
+                        ),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            const Text('Current (230V)', style: TextStyle(fontSize: 10, color: BanaagTheme.textMuted)),
+                            Text('${currentAmps.toStringAsFixed(2)} A',
+                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: BanaagTheme.primaryAmber)),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Dedicated Circuit Checkbox
+                  CheckboxListTile(
+                    contentPadding: EdgeInsets.zero,
+                    activeColor: BanaagTheme.primaryAmber,
+                    title: Row(
+                      children: [
+                        const Text('Dedicated Circuit Line', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                        if (isDedicated) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                            decoration: BoxDecoration(
+                              color: Colors.redAccent.withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: const Text('PEC SUGGESTED', style: TextStyle(color: Colors.redAccent, fontSize: 8, fontWeight: FontWeight.bold)),
+                          ),
+                        ],
+                      ],
+                    ),
+                    subtitle: Text(
+                      isDedicated
+                          ? 'Automatic flagged: >1.5kVA o Motor load. Nangangailangan ng sariling homerun wire at breaker.'
+                          : 'I-check kung kailangan ng sariling homerun wire at breaker sa panelboard.',
+                      style: TextStyle(fontSize: 10, color: isDedicated ? Colors.redAccent.shade100 : BanaagTheme.textMuted),
+                    ),
+                    value: isDedicated,
+                    onChanged: (val) => setDialogState(() => isDedicated = val ?? false),
+                  ),
+                ],
               ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: vaController,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: 'Rating (VA or Watts)',
-                  hintText: 'e.g. 1500',
-                  suffixText: 'VA',
-                  labelStyle: TextStyle(color: BanaagTheme.textMuted),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel', style: TextStyle(color: BanaagTheme.textMuted)),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  minimumSize: const Size(120, 42),
+                  backgroundColor: BanaagTheme.primaryAmber,
+                  foregroundColor: Colors.black,
                 ),
-              ),
-              const SizedBox(height: 12),
-              CheckboxListTile(
-                contentPadding: EdgeInsets.zero,
-                activeColor: BanaagTheme.primaryAmber,
-                title: const Text('Dedicated Circuit Line', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
-                subtitle: const Text('Direct homerun wire & dedicated breaker (PEC required for >1.5kW / motors)', style: TextStyle(fontSize: 10, color: BanaagTheme.textMuted)),
-                value: isDedicated,
-                onChanged: (val) => setDialogState(() => isDedicated = val ?? false),
+                onPressed: () {
+                  final name = nameController.text.trim();
+                  final double va = double.tryParse(vaController.text.trim()) ?? 200.0;
+                  if (name.isNotEmpty) {
+                    _addOrIncrementAppliance(name: name, ratingVA: va, isDedicated: isDedicated);
+                    Navigator.pop(ctx);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('⚡ Added "$name" (${va.toStringAsFixed(0)} VA, PF: ${powerFactor.toStringAsFixed(2)}) to $_activeSpaceName!')),
+                    );
+                  }
+                },
+                child: const Text('Add to Room', style: TextStyle(fontWeight: FontWeight.bold)),
               ),
             ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel', style: TextStyle(color: BanaagTheme.textMuted)),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                final name = nameController.text.trim();
-                final double va = double.tryParse(vaController.text.trim()) ?? 200.0;
-                if (name.isNotEmpty) {
-                  _addOrIncrementAppliance(name: name, ratingVA: va, isDedicated: isDedicated);
-                  Navigator.pop(ctx);
-                }
-              },
-              child: const Text('Add to Room'),
-            ),
-          ],
-        ),
+          );
+        },
       ),
     );
   }
@@ -395,22 +647,23 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          // Telemetry Summary Ribbon
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            color: const Color(0xFF1B2028),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                _metricColumn('Connected Load', '${(totalConnectedVA / 1000.0).toStringAsFixed(1)} kVA', 'Total Rating'),
-                _metricColumn('Total Amps', '${totalCurrentAmps.toStringAsFixed(1)} A', '230V 1-Phase'),
-                _metricColumn('Dedicated Lines', '$dedicatedLinesCount Lines', 'Heaters/ACU/Ref', color: BanaagTheme.primaryAmber),
-                _metricColumn('Total Units', '$totalApplianceUnits pcs', 'Tallied Items'),
-              ],
+      body: SafeArea(
+        child: Column(
+          children: [
+            // Telemetry Summary Ribbon
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              color: const Color(0xFF1B2028),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  _metricColumn('Connected Load', '${(totalConnectedVA / 1000.0).toStringAsFixed(1)} kVA', 'Total Rating'),
+                  _metricColumn('Total Amps', '${totalCurrentAmps.toStringAsFixed(1)} A', '230V 1-Phase'),
+                  _metricColumn('Dedicated Lines', '$dedicatedLinesCount Lines', 'Heaters/ACU/Ref', color: BanaagTheme.primaryAmber),
+                  _metricColumn('Total Units', '$totalApplianceUnits pcs', 'Tallied Items'),
+                ],
+              ),
             ),
-          ),
 
           // Horizontal Space Selector Ribbon
           Container(
@@ -486,6 +739,7 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
                 ),
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
+                    minimumSize: const Size(0, 36),
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                     backgroundColor: BanaagTheme.primaryAmber,
                     foregroundColor: Colors.black,
@@ -522,6 +776,7 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
                           children: [
                             ElevatedButton.icon(
                               style: ElevatedButton.styleFrom(
+                                minimumSize: const Size(220, 44),
                                 backgroundColor: BanaagTheme.primaryAmber,
                                 foregroundColor: Colors.black,
                               ),
@@ -558,73 +813,160 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
                     itemBuilder: (context, index) {
                       final item = currentSpaceItems[index];
                       return Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                         decoration: BoxDecoration(
                           color: BanaagTheme.surfaceCard,
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(14),
                           border: Border.all(
-                            color: item.isDedicatedCircuit ? Colors.redAccent.withValues(alpha: 0.5) : BanaagTheme.surfaceCardBorder,
+                            color: item.isDedicatedCircuit
+                                ? Colors.redAccent.withValues(alpha: 0.6)
+                                : BanaagTheme.surfaceCardBorder,
+                            width: item.isDedicatedCircuit ? 1.2 : 1.0,
                           ),
                         ),
-                        child: Row(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            CircleAvatar(
-                              radius: 16,
-                              backgroundColor: item.isDedicatedCircuit ? Colors.redAccent.withValues(alpha: 0.15) : BanaagTheme.primaryAmber.withValues(alpha: 0.15),
-                              foregroundColor: item.isDedicatedCircuit ? Colors.redAccent : BanaagTheme.primaryAmber,
-                              child: Icon(item.isDedicatedCircuit ? Icons.electrical_services : Icons.power, size: 18),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                CircleAvatar(
+                                  radius: 17,
+                                  backgroundColor: item.isDedicatedCircuit
+                                      ? Colors.redAccent.withValues(alpha: 0.15)
+                                      : BanaagTheme.primaryAmber.withValues(alpha: 0.15),
+                                  foregroundColor: item.isDedicatedCircuit
+                                      ? Colors.redAccent
+                                      : BanaagTheme.primaryAmber,
+                                  child: Icon(
+                                    item.isDedicatedCircuit ? Icons.electrical_services : Icons.power,
+                                    size: 19,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
-                                      Expanded(
-                                        child: Text(
-                                          item.name,
-                                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ),
-                                      if (item.isDedicatedCircuit)
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                          decoration: BoxDecoration(
-                                            color: Colors.redAccent.withValues(alpha: 0.2),
-                                            borderRadius: BorderRadius.circular(4),
+                                      Row(
+                                        children: [
+                                          Expanded(
+                                            child: Text(
+                                              item.name,
+                                              style: const TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 14,
+                                                color: Colors.white,
+                                                height: 1.2,
+                                              ),
+                                              softWrap: true,
+                                            ),
                                           ),
-                                          child: const Text('DEDICATED', style: TextStyle(color: Colors.redAccent, fontSize: 8, fontWeight: FontWeight.bold)),
-                                        ),
+                                          if (item.isDedicatedCircuit) ...[
+                                            const SizedBox(width: 6),
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                                              decoration: BoxDecoration(
+                                                color: Colors.redAccent.withValues(alpha: 0.2),
+                                                borderRadius: BorderRadius.circular(4),
+                                                border: Border.all(color: Colors.redAccent.withValues(alpha: 0.5)),
+                                              ),
+                                              child: const Text(
+                                                'DEDICATED',
+                                                style: TextStyle(
+                                                  color: Colors.redAccent,
+                                                  fontSize: 9,
+                                                  fontWeight: FontWeight.w900,
+                                                  letterSpacing: 0.5,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ],
+                                      ),
+                                      const SizedBox(height: 6),
+                                      Row(
+                                        children: [
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                            decoration: BoxDecoration(
+                                              color: Colors.white10,
+                                              borderRadius: BorderRadius.circular(4),
+                                            ),
+                                            child: Text(
+                                              '${item.ratingVA.toStringAsFixed(0)} VA (${(item.ratingVA / 230.0).toStringAsFixed(1)}A)',
+                                              style: const TextStyle(
+                                                color: BanaagTheme.primaryAmber,
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Text(
+                                            'Subtotal: ${(item.totalVA / 1000.0).toStringAsFixed(2)} kVA',
+                                            style: const TextStyle(
+                                              color: Colors.white70,
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
                                     ],
                                   ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    '${item.ratingVA.toStringAsFixed(0)} VA (${(item.ratingVA / 230.0).toStringAsFixed(1)}A) • Subtotal: ${(item.totalVA / 1000.0).toStringAsFixed(2)} kVA',
-                                    style: const TextStyle(color: BanaagTheme.textMuted, fontSize: 11),
-                                  ),
-                                ],
-                              ),
+                                ),
+                              ],
                             ),
+                            const SizedBox(height: 8),
+                            const Divider(color: Colors.white10, height: 1),
+                            const SizedBox(height: 4),
                             Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                IconButton(
-                                  icon: const Icon(Icons.remove_circle_outline, color: Colors.white70, size: 20),
-                                  onPressed: () => _decrementAppliance(item),
+                                Text(
+                                  'Dami / Quantity:',
+                                  style: TextStyle(fontSize: 12, color: BanaagTheme.textMuted),
                                 ),
-                                Text('${item.quantity}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                                IconButton(
-                                  icon: const Icon(Icons.add_circle_outline, color: BanaagTheme.primaryAmber, size: 20),
-                                  onPressed: () => _addOrIncrementAppliance(
-                                    name: item.name,
-                                    ratingVA: item.ratingVA,
-                                    isDedicated: item.isDedicatedCircuit,
-                                  ),
-                                ),
-                                IconButton(
-                                  icon: const Icon(Icons.delete_outline, color: Colors.grey, size: 18),
-                                  onPressed: () => _deleteAppliance(item),
+                                Row(
+                                  children: [
+                                    IconButton(
+                                      icon: const Icon(Icons.remove_circle_outline, color: Colors.white70, size: 22),
+                                      visualDensity: VisualDensity.compact,
+                                      onPressed: () => _decrementAppliance(item),
+                                    ),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: Colors.black26,
+                                        borderRadius: BorderRadius.circular(6),
+                                        border: Border.all(color: Colors.white12),
+                                      ),
+                                      child: Text(
+                                        '${item.quantity}',
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 15,
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(Icons.add_circle_outline, color: BanaagTheme.primaryAmber, size: 22),
+                                      visualDensity: VisualDensity.compact,
+                                      onPressed: () => _addOrIncrementAppliance(
+                                        name: item.name,
+                                        ratingVA: item.ratingVA,
+                                        isDedicated: item.isDedicatedCircuit,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    IconButton(
+                                      icon: const Icon(Icons.delete_outline, color: Colors.grey, size: 20),
+                                      visualDensity: VisualDensity.compact,
+                                      onPressed: () => _deleteAppliance(item),
+                                    ),
+                                  ],
                                 ),
                               ],
                             ),
@@ -695,7 +1037,8 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
           ),
         ],
       ),
-    );
+    ),
+  );
   }
 
   Widget _metricColumn(String label, String value, String subtext, {Color? color}) {
