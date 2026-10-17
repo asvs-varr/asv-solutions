@@ -163,4 +163,41 @@
 
 ---
 
+### [HRZ-011] Modular Client Needs Analysis & Smart PEC/IESNA Lighting Sizer
+- **Status**: 🧊 DEFERRED (Planned for Stage 1 Refactor)
+- **Blocker Category**: `[UX/ENGINEERING-DEFERRED]`
+- **Strategic / Business Impact**: 🏆 Game-Changer (Professional contractor UX, custom dwelling modeling, automated lumen estimation)
+- **Technical Effort**: Medium
+- **Why It's Vaulted Today**: Kailangang i-refactor ang kasalukuyang fixed-category grid system tungo sa dynamic, user-driven list architecture.
+- **Architectural Specifications & Required Features**:
+  1. **Vertical List View Architecture**:
+     - Palitan ang 2-column grid cards ng sleek, high-density vertical ListTiles.
+     - Mas mabilis mag-scroll, may malinaw na counters, at may instant visual tags para sa Dedicated vs General circuits.
+  2. **Zero-Default Initial State (Clean Canvas)**:
+     - Walang unsolicited default appliances sa simula. Magsisimula ang bawat kwarto sa 0 kVA.
+     - May collapsible "Quick Preset Library" (para sa mga nais ng mabilisang pagpili tulad ng 2.0HP Inverter, Induction Cooker, etc.).
+  3. **Custom Space / Room Creator**:
+     - Pwedeng mag-add ng custom spaces (e.g., *Dirty Kitchen, Roof Deck, Home Office, Pump Room, Master Bedroom*).
+     - Bawat kwarto ay may fields para sa **Floor Area ($m^2$)** at **Ceiling Height ($m$)**.
+  4. **Custom Appliance Dialog**:
+     - Dynamic input modal: Appliance Name, Rating in VA o Watts, Power Factor (0.85 default), at Checkbox para sa `[x] Dedicated Circuit (Direct Home Run to Panel)`.
+  5. **Smart Lighting Suggestion Engine (PEC / IESNA Standards)**:
+     - **Lighting Formula**:
+       $$\text{Target Lumens} = \text{Area } (m^2) \times \text{Lux Standard}$$
+       $$\text{Fixture Count} = \left\lceil \frac{\text{Target Lumens}}{\text{Fixture Lumens}} \right\rceil$$
+     - **Lux Standards by Room Type**:
+       - Living / Dining Room: **150 - 200 Lux**
+       - Kitchen / Food Prep: **300 Lux**
+       - Bedroom: **100 - 150 Lux**
+       - Bathroom: **200 Lux**
+       - Garage / Storage: **100 Lux**
+     - **Auto-Recommendation Output**:
+       - Halimbawa para sa $15m^2$ Kitchen: *"Recommended: 4 pcs 12W LED Downlights (900 lumens each) para sa 300 Lux total work illumination."*
+- **Actionable Implementation Steps**:
+  1. I-refactor ang `ApplianceItem` at `Project` domain models upang suportahan ang dynamic `RoomSpace` objects na may dimensions.
+  2. Gumawa ng `LightingSizerEngine` sa `lib/domain/lighting_engine.dart`.
+  3. Palitan ang GridView ng ListView sa `client_needs_analysis_screen.dart` na may custom space tabs at add modals.
+
+---
+
 *Laging panatilihing updated ang file na ito gamit ang `/horizon` tuwing may bagong situational development o unblocked feature!*
