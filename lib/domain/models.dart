@@ -123,6 +123,34 @@ class ApplianceItem {
   );
 }
 
+class RoomSpace {
+  final String id;
+  final String name; // e.g. 'Living & Dining', 'Master Bedroom', 'Dirty Kitchen'
+  final double areaSqm;
+  final double ceilingHeight;
+
+  RoomSpace({
+    required this.id,
+    required this.name,
+    this.areaSqm = 16.0,
+    this.ceilingHeight = 2.7,
+  });
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'name': name,
+    'areaSqm': areaSqm,
+    'ceilingHeight': ceilingHeight,
+  };
+
+  factory RoomSpace.fromJson(Map<String, dynamic> json) => RoomSpace(
+    id: json['id'] ?? '',
+    name: json['name'] ?? 'Custom Space',
+    areaSqm: (json['areaSqm'] as num?)?.toDouble() ?? 16.0,
+    ceilingHeight: (json['ceilingHeight'] as num?)?.toDouble() ?? 2.7,
+  );
+}
+
 class CanvasPoint {
   final String id;
   final String type; // 'PANEL', 'LIGHT', 'SWITCH_1G', 'OUTLET_DUPLEX', 'ACU'

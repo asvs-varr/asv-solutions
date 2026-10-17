@@ -1,7 +1,8 @@
-// BANAAG Client Needs Analysis Screen: Rapid 1-Tap Appliance Tally & Voice Dictation Assist
+// BANAAG Client Needs Analysis Screen: Modular List View, Custom Spaces, Custom Appliances & Smart Lighting Sizer
 
 import 'package:flutter/material.dart';
 import '../../domain/models.dart';
+import '../../domain/lighting_engine.dart';
 import '../../data/project_repository.dart';
 import '../theme/banaag_theme.dart';
 import 'plan_canvas_screen.dart';
@@ -14,391 +15,639 @@ class ClientNeedsAnalysisScreen extends StatefulWidget {
   State<ClientNeedsAnalysisScreen> createState() => _ClientNeedsAnalysisScreenState();
 }
 
-class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> with SingleTickerProviderStateMixin {
-  late TabController _tabController;
-  final TextEditingController _voiceTextController = TextEditingController();
-
-  final List<String> _categories = [
-    'Living & Dining',
-    'Kitchen',
-    'Bedrooms',
-    'Bath & Laundry',
-    'Outdoor & Utility',
+class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
+  final List<RoomSpace> _spaces = [
+    RoomSpace(id: 'sp-1', name: 'Living & Dining', areaSqm: 24.0, ceilingHeight: 2.7),
+    RoomSpace(id: 'sp-2', name: 'Kitchen', areaSqm: 14.0, ceilingHeight: 2.7),
+    RoomSpace(id: 'sp-3', name: 'Master Bedroom', areaSqm: 18.0, ceilingHeight: 2.7),
+    RoomSpace(id: 'sp-4', name: 'Bath & Laundry', areaSqm: 8.0, ceilingHeight: 2.6),
   ];
 
-  // Standard Philippine Appliance Presets with PEC VA Ratings
-  final List<Map<String, dynamic>> _presetCatalog = [
-    // Living & Dining
-    {'name': '2.5HP Split Aircon (Living)', 'category': 'Living & Dining', 'va': 2600.0, 'dedicated': true, 'icon': Icons.ac_unit},
-    {'name': '65" Smart 4K TV & Soundbar', 'category': 'Living & Dining', 'va': 350.0, 'dedicated': false, 'icon': Icons.tv},
-    {'name': 'Ceiling Fan with Light', 'category': 'Living & Dining', 'va': 150.0, 'dedicated': false, 'icon': Icons.mode_fan_off_outlined},
-    {'name': 'Cove / Drop LED Strips', 'category': 'Living & Dining', 'va': 200.0, 'dedicated': false, 'icon': Icons.lightbulb_outline},
+  late String _activeSpaceName;
 
-    // Kitchen
-    {'name': 'Two-Door Inverter Refrigerator', 'category': 'Kitchen', 'va': 800.0, 'dedicated': true, 'icon': Icons.kitchen},
-    {'name': 'Induction Cooktop (Double Burner)', 'category': 'Kitchen', 'va': 3500.0, 'dedicated': true, 'icon': Icons.soup_kitchen},
-    {'name': 'Microwave & Oven Toaster', 'category': 'Kitchen', 'va': 1800.0, 'dedicated': false, 'icon': Icons.microwave},
-    {'name': 'Range Hood Exhaust', 'category': 'Kitchen', 'va': 250.0, 'dedicated': false, 'icon': Icons.air},
-    {'name': 'Rice Cooker & Air Fryer', 'category': 'Kitchen', 'va': 1500.0, 'dedicated': false, 'icon': Icons.dinner_dining},
-
-    // Bedrooms
-    {'name': '1.5HP Inverter Aircon (Master)', 'category': 'Bedrooms', 'va': 1650.0, 'dedicated': true, 'icon': Icons.ac_unit},
-    {'name': '1.0HP Inverter Aircon (Room 2)', 'category': 'Bedrooms', 'va': 1100.0, 'dedicated': true, 'icon': Icons.ac_unit},
-    {'name': 'Workstation PC / Laptop Desk', 'category': 'Bedrooms', 'va': 450.0, 'dedicated': false, 'icon': Icons.computer},
-    {'name': '43" Bedroom Smart TV', 'category': 'Bedrooms', 'va': 180.0, 'dedicated': false, 'icon': Icons.tv},
-
-    // Bath & Laundry
-    {'name': 'Multipoint Water Heater (3.5kW)', 'category': 'Bath & Laundry', 'va': 3500.0, 'dedicated': true, 'icon': Icons.hot_tub},
-    {'name': 'Single-point Shower Heater', 'category': 'Bath & Laundry', 'va': 2500.0, 'dedicated': true, 'icon': Icons.shower},
-    {'name': 'Front-load Washing Machine', 'category': 'Bath & Laundry', 'va': 1800.0, 'dedicated': true, 'icon': Icons.local_laundry_service},
-    {'name': 'Electric Clothes Dryer', 'category': 'Bath & Laundry', 'va': 2200.0, 'dedicated': true, 'icon': Icons.dry},
-
-    // Outdoor & Utility
-    {'name': '1.0HP Jet Pump / Water Pressure Pump', 'category': 'Outdoor & Utility', 'va': 1200.0, 'dedicated': true, 'icon': Icons.water_drop},
-    {'name': 'Lanai & Perimeter Floodlights', 'category': 'Outdoor & Utility', 'va': 300.0, 'dedicated': false, 'icon': Icons.highlight},
-    {'name': 'CCTV System & NVR Rack', 'category': 'Outdoor & Utility', 'va': 250.0, 'dedicated': false, 'icon': Icons.videocam},
-    {'name': 'Pressure Washer Outlet', 'category': 'Outdoor & Utility', 'va': 1800.0, 'dedicated': true, 'icon': Icons.cleaning_services},
+  // Standard Philippine Quick-Pick Preset Catalog
+  final List<Map<String, dynamic>> _quickPresets = [
+    {'name': '2.5HP Inverter Split ACU', 'va': 2600.0, 'dedicated': true, 'icon': Icons.ac_unit},
+    {'name': '1.5HP Inverter Split ACU', 'va': 1650.0, 'dedicated': true, 'icon': Icons.ac_unit},
+    {'name': 'Two-Door Inverter Refrigerator', 'va': 800.0, 'dedicated': true, 'icon': Icons.kitchen},
+    {'name': 'Induction Cooktop (Double Burner)', 'va': 3500.0, 'dedicated': true, 'icon': Icons.soup_kitchen},
+    {'name': 'Multipoint Water Heater (3.5kW)', 'va': 3500.0, 'dedicated': true, 'icon': Icons.hot_tub},
+    {'name': 'Single-point Shower Heater', 'va': 2500.0, 'dedicated': true, 'icon': Icons.shower},
+    {'name': 'Front-load Washing Machine', 'va': 1800.0, 'dedicated': true, 'icon': Icons.local_laundry_service},
+    {'name': 'Microwave & Oven Toaster', 'va': 1800.0, 'dedicated': false, 'icon': Icons.microwave},
+    {'name': '65" Smart 4K TV & Audio Rack', 'va': 350.0, 'dedicated': false, 'icon': Icons.tv},
+    {'name': 'General Convenience Outlet (Duplex)', 'va': 180.0, 'dedicated': false, 'icon': Icons.power},
+    {'name': 'Workstation PC / Desktop', 'va': 450.0, 'dedicated': false, 'icon': Icons.computer},
+    {'name': 'Ceiling Fan with Drop Light', 'va': 120.0, 'dedicated': false, 'icon': Icons.mode_fan_off_outlined},
   ];
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: _categories.length, vsync: this);
-
-    // Seed realistic sample items if empty
-    if (widget.project.applianceLoads.isEmpty) {
-      widget.project.applianceLoads = [
-        ApplianceItem(id: 'a1', name: '2.5HP Split Aircon (Living)', roomCategory: 'Living & Dining', ratingVA: 2600.0, quantity: 1, isDedicatedCircuit: true),
-        ApplianceItem(id: 'a2', name: 'Two-Door Inverter Refrigerator', roomCategory: 'Kitchen', ratingVA: 800.0, quantity: 1, isDedicatedCircuit: true),
-        ApplianceItem(id: 'a3', name: '1.5HP Inverter Aircon (Master)', roomCategory: 'Bedrooms', ratingVA: 1650.0, quantity: 2, isDedicatedCircuit: true),
-        ApplianceItem(id: 'a4', name: 'Multipoint Water Heater (3.5kW)', roomCategory: 'Bath & Laundry', ratingVA: 3500.0, quantity: 1, isDedicatedCircuit: true),
-      ];
-    }
+    _activeSpaceName = _spaces.first.name;
+    // Strictly Zero-Default: Keep clean canvas, do NOT inject unwanted items
   }
 
-  void _incrementAppliance(Map<String, dynamic> preset) {
+  RoomSpace get _currentSpace => _spaces.firstWhere(
+        (s) => s.name == _activeSpaceName,
+        orElse: () => _spaces.first,
+      );
+
+  RoomType _mapSpaceToRoomType(String spaceName) {
+    final lower = spaceName.toLowerCase();
+    if (lower.contains('kitchen')) return RoomType.kitchen;
+    if (lower.contains('bed')) return RoomType.bedroom;
+    if (lower.contains('bath') || lower.contains('laundry')) return RoomType.bathroom;
+    if (lower.contains('office') || lower.contains('study')) return RoomType.homeOffice;
+    if (lower.contains('garage') || lower.contains('outdoor') || lower.contains('deck')) return RoomType.garageStorage;
+    return RoomType.livingDining;
+  }
+
+  void _addOrIncrementAppliance({
+    required String name,
+    required double ratingVA,
+    required bool isDedicated,
+  }) {
     setState(() {
-      final existingIndex = widget.project.applianceLoads.indexWhere((a) => a.name == preset['name']);
+      final existingIndex = widget.project.applianceLoads.indexWhere(
+        (a) => a.name == name && a.roomCategory == _activeSpaceName,
+      );
+
       if (existingIndex != -1) {
         widget.project.applianceLoads[existingIndex].quantity++;
       } else {
         widget.project.applianceLoads.add(ApplianceItem(
           id: 'app-${DateTime.now().millisecondsSinceEpoch}',
-          name: preset['name'],
-          roomCategory: preset['category'],
-          ratingVA: preset['va'],
+          name: name,
+          roomCategory: _activeSpaceName,
+          ratingVA: ratingVA,
           quantity: 1,
-          isDedicatedCircuit: preset['dedicated'],
+          isDedicatedCircuit: isDedicated,
         ));
       }
       ProjectRepository.instance.updateProject(widget.project);
     });
   }
 
-  void _decrementAppliance(String name) {
+  void _decrementAppliance(ApplianceItem item) {
     setState(() {
-      final index = widget.project.applianceLoads.indexWhere((a) => a.name == name);
-      if (index != -1) {
-        if (widget.project.applianceLoads[index].quantity > 1) {
-          widget.project.applianceLoads[index].quantity--;
-        } else {
-          widget.project.applianceLoads.removeAt(index);
-        }
-        ProjectRepository.instance.updateProject(widget.project);
+      if (item.quantity > 1) {
+        item.quantity--;
+      } else {
+        widget.project.applianceLoads.remove(item);
       }
+      ProjectRepository.instance.updateProject(widget.project);
     });
   }
 
-  int _getQuantity(String name) {
-    final item = widget.project.applianceLoads.where((a) => a.name == name).firstOrNull;
-    return item?.quantity ?? 0;
+  void _deleteAppliance(ApplianceItem item) {
+    setState(() {
+      widget.project.applianceLoads.remove(item);
+      ProjectRepository.instance.updateProject(widget.project);
+    });
   }
 
-  void _processVoiceNotes(String text) {
-    final lower = text.toLowerCase();
-    int addedCount = 0;
+  void _promptAddCustomAppliance() {
+    final nameController = TextEditingController();
+    final vaController = TextEditingController(text: '300');
+    bool isDedicated = false;
 
-    for (final preset in _presetCatalog) {
-      final presetLower = (preset['name'] as String).toLowerCase();
-      // Match keywords (e.g. "aircon", "heater", "ref", "pump", "induction", "tv")
-      final keywords = ['aircon', 'heater', 'ref', 'pump', 'cooktop', 'microwave', 'tv', 'washer'];
-      for (final kw in keywords) {
-        if (lower.contains(kw) && presetLower.contains(kw)) {
-          _incrementAppliance(preset);
-          addedCount++;
-          break;
-        }
-      }
-    }
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('🎙️ Voice Assist processed: $addedCount appliances recognized & tallied!')),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final totalVA = widget.project.totalConnectedLoadVA;
-    final totalAmps = totalVA / 230.0;
-    final dedicatedCount = widget.project.applianceLoads.where((a) => a.isDedicatedCircuit).fold(0, (sum, a) => sum + a.quantity);
-
-    return Scaffold(
-      appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('📋 Client Needs Analysis'),
-            Text(widget.project.title, style: const TextStyle(color: BanaagTheme.primaryAmber, fontSize: 12)),
-          ],
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.mic, color: BanaagTheme.primaryAmber),
-            tooltip: 'Voice Notes Dictation Assist',
-            onPressed: () => _showVoiceDictationDialog(context),
-          ),
-        ],
-        bottom: TabBar(
-          controller: _tabController,
-          isScrollable: true,
-          indicatorColor: BanaagTheme.primaryAmber,
-          labelColor: BanaagTheme.primaryAmber,
-          unselectedLabelColor: BanaagTheme.textMuted,
-          tabs: _categories.map((c) => Tab(text: c)).toList(),
-        ),
-      ),
-      body: Column(
-        children: [
-          // Live Tally Summary Ribbon
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            color: const Color(0xFF1B2028),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                _metricMini('Total Load', '${(totalVA / 1000).toStringAsFixed(1)} kVA', 'Connected Rating'),
-                _metricMini('Total Current', '${totalAmps.toStringAsFixed(1)} A', 'Single Phase 230V'),
-                _metricMini('Dedicated Circuits', '$dedicatedCount Lines', 'Heaters/ACU/Ref', color: BanaagTheme.primaryAmber),
-                _metricMini('Total Units', '${widget.project.applianceLoads.fold(0, (sum, a) => sum + a.quantity)} pcs', 'Tallied'),
-              ],
-            ),
-          ),
-
-          // Appliance Grid
-          Expanded(
-            child: TabBarView(
-              controller: _tabController,
-              children: _categories.map((category) => _buildCategoryGrid(category)).toList(),
-            ),
-          ),
-        ],
-      ),
-      bottomNavigationBar: SafeArea(
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          decoration: const BoxDecoration(
-            color: BanaagTheme.surfaceCard,
-            border: Border(top: BorderSide(color: BanaagTheme.surfaceCardBorder)),
-          ),
-          child: Row(
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          backgroundColor: BanaagTheme.surfaceCard,
+          title: Row(
             children: [
-              Expanded(
-                child: ElevatedButton.icon(
-                  icon: const Icon(Icons.arrow_forward_rounded),
-                  label: const Text('Complete & Proceed to Stage 2 Plan Canvas'),
-                  onPressed: () {
-                    // Mark checklist item complete
-                    final consultationPhase = widget.project.phases[0];
-                    final needsItem = consultationPhase.checklist.firstWhere((c) => c.id == 'c1', orElse: () => consultationPhase.checklist.first);
-                    needsItem.isCompleted = true;
-                    ProjectRepository.instance.updateProject(widget.project);
-
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('✅ Client Needs Analysis complete! Generating auto-layout on Plan Canvas...')),
-                    );
-
-                    // Seamless transition to Stage 2 Plan Canvas
-                    Navigator.pushReplacement(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => PlanCanvasScreen(project: widget.project),
-                      ),
-                    );
-                  },
+              const Icon(Icons.add_circle_outline, color: BanaagTheme.primaryAmber),
+              const SizedBox(width: 8),
+              Text('Add Appliance: $_activeSpaceName', style: const TextStyle(fontSize: 16)),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TextField(
+                controller: nameController,
+                decoration: const InputDecoration(
+                  labelText: 'Appliance Name',
+                  hintText: 'e.g. Espresso Machine / Air Fryer',
+                  labelStyle: TextStyle(color: BanaagTheme.textMuted),
                 ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: vaController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Rating (VA or Watts)',
+                  hintText: 'e.g. 1500',
+                  suffixText: 'VA',
+                  labelStyle: TextStyle(color: BanaagTheme.textMuted),
+                ),
+              ),
+              const SizedBox(height: 12),
+              CheckboxListTile(
+                contentPadding: EdgeInsets.zero,
+                activeColor: BanaagTheme.primaryAmber,
+                title: const Text('Dedicated Circuit Line', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                subtitle: const Text('Direct homerun wire & dedicated breaker (PEC required for >1.5kW / motors)', style: TextStyle(fontSize: 10, color: BanaagTheme.textMuted)),
+                value: isDedicated,
+                onChanged: (val) => setDialogState(() => isDedicated = val ?? false),
               ),
             ],
           ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel', style: TextStyle(color: BanaagTheme.textMuted)),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                final name = nameController.text.trim();
+                final double va = double.tryParse(vaController.text.trim()) ?? 200.0;
+                if (name.isNotEmpty) {
+                  _addOrIncrementAppliance(name: name, ratingVA: va, isDedicated: isDedicated);
+                  Navigator.pop(ctx);
+                }
+              },
+              child: const Text('Add to Room'),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildCategoryGrid(String category) {
-    final items = _presetCatalog.where((p) => p['category'] == category).toList();
+  void _promptAddCustomSpace() {
+    final nameController = TextEditingController();
+    final areaController = TextEditingController(text: '16.0');
+    final heightController = TextEditingController(text: '2.7');
 
-    return GridView.builder(
-      padding: const EdgeInsets.all(12),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        crossAxisSpacing: 10,
-        mainAxisSpacing: 10,
-        childAspectRatio: 1.15,
-      ),
-      itemCount: items.length,
-      itemBuilder: (context, index) {
-        final preset = items[index];
-        final String name = preset['name'];
-        final int qty = _getQuantity(name);
-        final bool isSelected = qty > 0;
-
-        return Card(
-          color: isSelected ? const Color(0xFF232A36) : BanaagTheme.surfaceCard,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-            side: BorderSide(
-              color: isSelected ? BanaagTheme.primaryAmber : BanaagTheme.surfaceCardBorder,
-              width: isSelected ? 1.5 : 1.0,
-            ),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(10.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    CircleAvatar(
-                      radius: 16,
-                      backgroundColor: BanaagTheme.primaryAmber.withValues(alpha: 0.15),
-                      foregroundColor: BanaagTheme.primaryAmber,
-                      child: Icon(preset['icon'], size: 18),
-                    ),
-                    if (preset['dedicated'] == true)
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: Colors.redAccent.withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: const Text('DEDICATED', style: TextStyle(color: Colors.redAccent, fontSize: 8, fontWeight: FontWeight.bold)),
-                      ),
-                  ],
-                ),
-                Text(
-                  name,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
-                ),
-                Text(
-                  '${preset['va']} VA (${(preset['va'] / 230.0).toStringAsFixed(1)}A)',
-                  style: const TextStyle(color: BanaagTheme.textMuted, fontSize: 10),
-                ),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    if (qty > 0)
-                      InkWell(
-                        onTap: () => _decrementAppliance(name),
-                        child: Container(
-                          padding: const EdgeInsets.all(4),
-                          decoration: BoxDecoration(color: const Color(0xFF2F3644), borderRadius: BorderRadius.circular(6)),
-                          child: const Icon(Icons.remove, size: 16, color: Colors.white),
-                        ),
-                      )
-                    else
-                      const SizedBox(width: 24),
-                    Text(
-                      qty > 0 ? '$qty' : '',
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: BanaagTheme.primaryAmber),
-                    ),
-                    InkWell(
-                      onTap: () => _incrementAppliance(preset),
-                      child: Container(
-                        padding: const EdgeInsets.all(4),
-                        decoration: BoxDecoration(color: BanaagTheme.primaryAmber, borderRadius: BorderRadius.circular(6)),
-                        child: const Icon(Icons.add, size: 16, color: Colors.black),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  void _showVoiceDictationDialog(BuildContext context) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: BanaagTheme.surfaceCard,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Row(
           children: [
-            Icon(Icons.mic, color: BanaagTheme.primaryAmber),
+            Icon(Icons.meeting_room_outlined, color: BanaagTheme.primaryAmber),
             SizedBox(width: 8),
-            Text('Voice Dictation Assist'),
+            Text('Create Custom Space / Room', style: TextStyle(fontSize: 16)),
           ],
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Habang naglalakad sa site kasama si client, magsalita o mag-paste ng notes (e.g. "May dalawang aircon sa master, isang ref sa kitchen, at water heater sa banyo"):',
-              style: TextStyle(fontSize: 12, color: BanaagTheme.textMuted),
+            TextField(
+              controller: nameController,
+              decoration: const InputDecoration(
+                labelText: 'Room Name',
+                hintText: 'e.g. Dirty Kitchen / Home Office / Balcony',
+                labelStyle: TextStyle(color: BanaagTheme.textMuted),
+              ),
             ),
             const SizedBox(height: 12),
-            TextField(
-              controller: _voiceTextController,
-              maxLines: 3,
-              decoration: const InputDecoration(
-                hintText: 'Type or speak: "Aircon, heater, ref, water pump..."',
-                filled: true,
-                fillColor: Color(0xFF16191F),
-                border: OutlineInputBorder(),
-              ),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: areaController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'Floor Area',
+                      suffixText: 'm²',
+                      labelStyle: TextStyle(color: BanaagTheme.textMuted),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: TextField(
+                    controller: heightController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'Ceiling Ht',
+                      suffixText: 'm',
+                      labelStyle: TextStyle(color: BanaagTheme.textMuted),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ],
         ),
         actions: [
           TextButton(
-            child: const Text('Cancel', style: TextStyle(color: BanaagTheme.textMuted)),
             onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel', style: TextStyle(color: BanaagTheme.textMuted)),
           ),
-          ElevatedButton.icon(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: BanaagTheme.primaryAmber,
-              foregroundColor: Colors.black,
-            ),
-            icon: const Icon(Icons.auto_awesome, size: 16),
-            label: const Text('Parse & Add'),
+          ElevatedButton(
             onPressed: () {
-              if (_voiceTextController.text.trim().isNotEmpty) {
-                _processVoiceNotes(_voiceTextController.text.trim());
-                _voiceTextController.clear();
+              final name = nameController.text.trim();
+              final area = double.tryParse(areaController.text.trim()) ?? 16.0;
+              final height = double.tryParse(heightController.text.trim()) ?? 2.7;
+              if (name.isNotEmpty) {
+                setState(() {
+                  _spaces.add(RoomSpace(
+                    id: 'sp-${DateTime.now().millisecondsSinceEpoch}',
+                    name: name,
+                    areaSqm: area,
+                    ceilingHeight: height,
+                  ));
+                  _activeSpaceName = name;
+                });
                 Navigator.pop(ctx);
               }
             },
+            child: const Text('Create Space'),
           ),
         ],
       ),
     );
   }
 
-  Widget _metricMini(String label, String value, String sub, {Color color = BanaagTheme.textHighEmphasis}) {
+  void _showQuickPresetPicker() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: BanaagTheme.surfaceCard,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Quick Preset Library: $_activeSpaceName', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(ctx)),
+              ],
+            ),
+            const Text('Pumili ng appliance para ma-add sa active room nang mabilis:', style: TextStyle(color: BanaagTheme.textMuted, fontSize: 12)),
+            const SizedBox(height: 12),
+            Expanded(
+              child: ListView.separated(
+                itemCount: _quickPresets.length,
+                separatorBuilder: (context, index) => const Divider(color: Colors.white10),
+                itemBuilder: (context, index) {
+                  final preset = _quickPresets[index];
+                  return ListTile(
+                    leading: CircleAvatar(
+                      backgroundColor: BanaagTheme.primaryAmber.withValues(alpha: 0.15),
+                      foregroundColor: BanaagTheme.primaryAmber,
+                      child: Icon(preset['icon'], size: 20),
+                    ),
+                    title: Text(preset['name'], style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                    subtitle: Text('${preset['va']} VA (${(preset['va'] / 230.0).toStringAsFixed(1)}A) ${preset['dedicated'] ? '• [DEDICATED]' : ''}',
+                        style: TextStyle(color: preset['dedicated'] ? Colors.redAccent : BanaagTheme.textMuted, fontSize: 11)),
+                    trailing: const Icon(Icons.add_circle, color: BanaagTheme.primaryAmber),
+                    onTap: () {
+                      _addOrIncrementAppliance(
+                        name: preset['name'],
+                        ratingVA: preset['va'],
+                        isDedicated: preset['dedicated'],
+                      );
+                      Navigator.pop(ctx);
+                    },
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final double totalConnectedVA = widget.project.totalConnectedLoadVA;
+    final double totalCurrentAmps = totalConnectedVA / 230.0;
+    final int dedicatedLinesCount = widget.project.applianceLoads.where((a) => a.isDedicatedCircuit).length;
+    final int totalApplianceUnits = widget.project.applianceLoads.fold(0, (sum, a) => sum + a.quantity);
+
+    final currentSpaceItems = widget.project.applianceLoads.where((a) => a.roomCategory == _activeSpaceName).toList();
+    final lightingRec = LightingEngine.calculate(
+      roomType: _mapSpaceToRoomType(_activeSpaceName),
+      areaSqm: _currentSpace.areaSqm,
+      ceilingHeightMeters: _currentSpace.ceilingHeight,
+    );
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('📋 Modular Client Needs Analysis', style: TextStyle(fontSize: 16)),
+            Text(widget.project.title, style: const TextStyle(fontSize: 11, color: BanaagTheme.textMuted)),
+          ],
+        ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.add_home_work_outlined, color: BanaagTheme.primaryAmber),
+            tooltip: 'Add Custom Space / Room',
+            onPressed: _promptAddCustomSpace,
+          ),
+        ],
+      ),
+      body: Column(
+        children: [
+          // Telemetry Summary Ribbon
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            color: const Color(0xFF1B2028),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                _metricColumn('Connected Load', '${(totalConnectedVA / 1000.0).toStringAsFixed(1)} kVA', 'Total Rating'),
+                _metricColumn('Total Amps', '${totalCurrentAmps.toStringAsFixed(1)} A', '230V 1-Phase'),
+                _metricColumn('Dedicated Lines', '$dedicatedLinesCount Lines', 'Heaters/ACU/Ref', color: BanaagTheme.primaryAmber),
+                _metricColumn('Total Units', '$totalApplianceUnits pcs', 'Tallied Items'),
+              ],
+            ),
+          ),
+
+          // Horizontal Space Selector Ribbon
+          Container(
+            height: 48,
+            color: const Color(0xFF14171E),
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              itemCount: _spaces.length + 1,
+              itemBuilder: (context, index) {
+                if (index == _spaces.length) {
+                  return Padding(
+                    padding: const EdgeInsets.only(left: 6),
+                    child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                        side: const BorderSide(color: Colors.white24),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                      ),
+                      icon: const Icon(Icons.add, size: 14, color: BanaagTheme.primaryAmber),
+                      label: const Text('Add Space', style: TextStyle(fontSize: 11, color: Colors.white70)),
+                      onPressed: _promptAddCustomSpace,
+                    ),
+                  );
+                }
+
+                final space = _spaces[index];
+                final bool isSelected = space.name == _activeSpaceName;
+
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: ChoiceChip(
+                    label: Text('${space.name} (${space.areaSqm.toStringAsFixed(0)}m²)'),
+                    selected: isSelected,
+                    selectedColor: BanaagTheme.primaryAmber,
+                    backgroundColor: BanaagTheme.surfaceCard,
+                    labelStyle: TextStyle(
+                      fontSize: 12,
+                      fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                      color: isSelected ? Colors.black : Colors.white70,
+                    ),
+                    onSelected: (val) {
+                      if (val) setState(() => _activeSpaceName = space.name);
+                    },
+                  ),
+                );
+              },
+            ),
+          ),
+
+          // Smart Lighting Sizer Suggestion Ribbon
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            color: const Color(0xFF1E2430),
+            child: Row(
+              children: [
+                const Icon(Icons.auto_awesome, color: BanaagTheme.primaryAmber, size: 20),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Smart Lighting: ${lightingRec.fixtureCount} pcs ${lightingRec.recommendedWattagePerFixture}W LED Downlight (${lightingRec.lumensPerFixture} lm)',
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.white),
+                      ),
+                      Text(
+                        'Target: ${lightingRec.targetLumens.toStringAsFixed(0)} lm (${lightingRec.roomType.recommendedLux} Lux standard para sa $_activeSpaceName)',
+                        style: const TextStyle(fontSize: 10, color: BanaagTheme.textMuted),
+                      ),
+                    ],
+                  ),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    backgroundColor: BanaagTheme.primaryAmber,
+                    foregroundColor: Colors.black,
+                  ),
+                  onPressed: () {
+                    _addOrIncrementAppliance(
+                      name: '${lightingRec.recommendedWattagePerFixture}W LED Downlight ($_activeSpaceName)',
+                      ratingVA: 15.0,
+                      isDedicated: false,
+                    );
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('💡 Added recommended LED lighting fixture to $_activeSpaceName!')),
+                    );
+                  },
+                  child: const Text('+ Add Light', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                ),
+              ],
+            ),
+          ),
+
+          // High-Density Vertical List View for Active Room
+          Expanded(
+            child: currentSpaceItems.isEmpty
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.inbox_outlined, size: 48, color: Colors.white24),
+                        const SizedBox(height: 12),
+                        Text('Walang nakalistang appliance sa $_activeSpaceName.', style: const TextStyle(color: BanaagTheme.textMuted, fontSize: 13)),
+                        const SizedBox(height: 16),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            ElevatedButton.icon(
+                              icon: const Icon(Icons.flash_on, size: 16),
+                              label: const Text('Quick Preset'),
+                              onPressed: _showQuickPresetPicker,
+                            ),
+                            const SizedBox(width: 10),
+                            OutlinedButton.icon(
+                              style: OutlinedButton.styleFrom(foregroundColor: BanaagTheme.primaryAmber),
+                              icon: const Icon(Icons.add, size: 16),
+                              label: const Text('Custom Appliance'),
+                              onPressed: _promptAddCustomAppliance,
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  )
+                : ListView.separated(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    itemCount: currentSpaceItems.length,
+                    separatorBuilder: (context, index) => const SizedBox(height: 8),
+                    itemBuilder: (context, index) {
+                      final item = currentSpaceItems[index];
+                      return Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: BanaagTheme.surfaceCard,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: item.isDedicatedCircuit ? Colors.redAccent.withValues(alpha: 0.5) : BanaagTheme.surfaceCardBorder,
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            CircleAvatar(
+                              radius: 16,
+                              backgroundColor: item.isDedicatedCircuit ? Colors.redAccent.withValues(alpha: 0.15) : BanaagTheme.primaryAmber.withValues(alpha: 0.15),
+                              foregroundColor: item.isDedicatedCircuit ? Colors.redAccent : BanaagTheme.primaryAmber,
+                              child: Icon(item.isDedicatedCircuit ? Icons.electrical_services : Icons.power, size: 18),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          item.name,
+                                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                      if (item.isDedicatedCircuit)
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: Colors.redAccent.withValues(alpha: 0.2),
+                                            borderRadius: BorderRadius.circular(4),
+                                          ),
+                                          child: const Text('DEDICATED', style: TextStyle(color: Colors.redAccent, fontSize: 8, fontWeight: FontWeight.bold)),
+                                        ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    '${item.ratingVA.toStringAsFixed(0)} VA (${(item.ratingVA / 230.0).toStringAsFixed(1)}A) • Subtotal: ${(item.totalVA / 1000.0).toStringAsFixed(2)} kVA',
+                                    style: const TextStyle(color: BanaagTheme.textMuted, fontSize: 11),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Row(
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.remove_circle_outline, color: Colors.white70, size: 20),
+                                  onPressed: () => _decrementAppliance(item),
+                                ),
+                                Text('${item.quantity}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                IconButton(
+                                  icon: const Icon(Icons.add_circle_outline, color: BanaagTheme.primaryAmber, size: 20),
+                                  onPressed: () => _addOrIncrementAppliance(
+                                    name: item.name,
+                                    ratingVA: item.ratingVA,
+                                    isDedicated: item.isDedicatedCircuit,
+                                  ),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.delete_outline, color: Colors.grey, size: 18),
+                                  onPressed: () => _deleteAppliance(item),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+          ),
+
+          // Bottom Quick Actions Bar
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            color: const Color(0xFF14171E),
+            child: Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(foregroundColor: BanaagTheme.primaryAmber),
+                    icon: const Icon(Icons.library_add_outlined, size: 16),
+                    label: const Text('Quick Presets'),
+                    onPressed: _showQuickPresetPicker,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    icon: const Icon(Icons.add, size: 16),
+                    label: const Text('Add Appliance'),
+                    onPressed: _promptAddCustomAppliance,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // Complete & Proceed to Stage 2 Plan Canvas Bridge
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: const BoxDecoration(
+              color: BanaagTheme.surfaceCard,
+              border: Border(top: BorderSide(color: BanaagTheme.surfaceCardBorder)),
+            ),
+            child: ElevatedButton.icon(
+              icon: const Icon(Icons.arrow_forward_rounded),
+              label: const Text('Complete & Proceed to Stage 2 Plan Canvas'),
+              onPressed: () {
+                final consultationPhase = widget.project.phases[0];
+                final needsItem = consultationPhase.checklist.firstWhere(
+                  (c) => c.id == 'c1',
+                  orElse: () => consultationPhase.checklist.first,
+                );
+                needsItem.isCompleted = true;
+                ProjectRepository.instance.updateProject(widget.project);
+
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('✅ Client Needs Analysis complete! Generating auto-layout on Plan Canvas...')),
+                );
+
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => PlanCanvasScreen(project: widget.project),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _metricColumn(String label, String value, String subtext, {Color? color}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        Text(value, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: color ?? Colors.white)),
         Text(label, style: const TextStyle(color: BanaagTheme.textMuted, fontSize: 10)),
-        Text(value, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 14)),
-        Text(sub, style: const TextStyle(color: BanaagTheme.textMuted, fontSize: 9)),
+        Text(subtext, style: const TextStyle(color: Colors.white24, fontSize: 8)),
       ],
     );
   }
