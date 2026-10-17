@@ -9,6 +9,7 @@ import 'workflow_screen.dart';
 import 'plan_canvas_screen.dart';
 import 'commercial_suite_screen.dart';
 import 'future_proofing_screen.dart';
+import 'banaag_pro_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -33,13 +34,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
         actions: [
           IconButton(
+            icon: const Icon(Icons.workspace_premium, color: BanaagTheme.primaryAmber),
+            tooltip: 'BANAAG PRO Settings',
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BanaagProScreen())),
+          ),
+          IconButton(
             icon: const Icon(Icons.shield_outlined, color: BanaagTheme.primaryAmber),
             tooltip: 'PS/ICC Material Shield',
             onPressed: () => _showMaterialShieldDialog(context),
-          ),
-          IconButton(
-            icon: const Icon(Icons.notifications_none),
-            onPressed: () {},
           ),
         ],
       ),
