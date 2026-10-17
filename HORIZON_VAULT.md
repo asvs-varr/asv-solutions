@@ -164,11 +164,16 @@
 ---
 
 ### [HRZ-011] Modular Client Needs Analysis & Smart PEC/IESNA Lighting Sizer
-- **Status**: 🧊 DEFERRED (Planned for Stage 1 Refactor)
-- **Blocker Category**: `[UX/ENGINEERING-DEFERRED]`
+- **Status**: ✅ GRADUATED & LIVE IN PRODUCTION (v1.0.0)
+- **Blocker Category**: `[UX/ENGINEERING-DEFERRED] (RESOLVED)`
 - **Strategic / Business Impact**: 🏆 Game-Changer (Professional contractor UX, custom dwelling modeling, automated lumen estimation)
 - **Technical Effort**: Medium
-- **Why It's Vaulted Today**: Kailangang i-refactor ang kasalukuyang fixed-category grid system tungo sa dynamic, user-driven list architecture.
+- **Implementation Status**:
+  - ✅ **Sleek Vertical List View**: Pinalitan ang masikip na 2-column grid ng high-density compact ListTiles.
+  - ✅ **Zero-Default Initial State**: Malinis na 0 kVA by default, walang unsolicited auto-inserted presets.
+  - ✅ **Custom Space Creator**: May 1-tap `+ Add Space` para gumawa ng kahit anong kwarto (Dirty Kitchen, Balcony, Home Office) na may $m^2$ area at ceiling height.
+  - ✅ **Custom Appliance Dialog**: Dynamic modal na tumatanggap ng Appliance Name, VA rating, at `[x] Dedicated Circuit` flag.
+  - ✅ **Smart Lighting Engine (`lighting_engine.dart`)**: Awtomatikong nagko-compute ng target lumens at nagrerekomenda ng bilang ng 12W LED Downlights ayon sa PEC/IESNA standards na may 1-tap `+ Add Light` action.
 - **Architectural Specifications & Required Features**:
   1. **Vertical List View Architecture**:
      - Palitan ang 2-column grid cards ng sleek, high-density vertical ListTiles.
