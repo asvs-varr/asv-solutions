@@ -92,6 +92,8 @@ class ApplianceItem {
   final double ratingVA; // Standard connected volt-amperes
   int quantity;
   final bool isDedicatedCircuit; // e.g. Aircon, Water Heater, Range
+  final bool isLighting; // true = Lighting, false = Power/Outlet
+  int circuitNumber; // PEC Circuit number assignment (e.g. 1, 2, 3...)
 
   ApplianceItem({
     required this.id,
@@ -100,6 +102,8 @@ class ApplianceItem {
     required this.ratingVA,
     this.quantity = 1,
     this.isDedicatedCircuit = false,
+    this.isLighting = false,
+    this.circuitNumber = 1,
   });
 
   double get totalVA => ratingVA * quantity;
@@ -111,6 +115,8 @@ class ApplianceItem {
     'ratingVA': ratingVA,
     'quantity': quantity,
     'isDedicatedCircuit': isDedicatedCircuit,
+    'isLighting': isLighting,
+    'circuitNumber': circuitNumber,
   };
 
   factory ApplianceItem.fromJson(Map<String, dynamic> json) => ApplianceItem(
@@ -120,6 +126,8 @@ class ApplianceItem {
     ratingVA: (json['ratingVA'] as num?)?.toDouble() ?? 100.0,
     quantity: json['quantity'] ?? 1,
     isDedicatedCircuit: json['isDedicatedCircuit'] ?? false,
+    isLighting: json['isLighting'] ?? false,
+    circuitNumber: json['circuitNumber'] ?? (json['isLighting'] == true ? 1 : (json['isDedicatedCircuit'] == true ? 3 : 2)),
   );
 }
 
@@ -231,6 +239,7 @@ class Project {
   int currentPhaseNumber;
   final String intakeMode; // 'SITE_INTERVIEW', 'BLUEPRINT_PHOTO', 'AUTOCAD_DXF'
   bool isArchived;
+  List<RoomSpace> spaces;
   List<ApplianceItem> applianceLoads;
   List<CanvasPoint> canvasPoints;
   List<ConduitRoute> conduitRoutes;
@@ -249,12 +258,19 @@ class Project {
     this.currentPhaseNumber = 1,
     this.intakeMode = 'SITE_INTERVIEW',
     this.isArchived = false,
+    List<RoomSpace>? spaces,
     List<ApplianceItem>? applianceLoads,
     List<CanvasPoint>? canvasPoints,
     List<ConduitRoute>? conduitRoutes,
     required this.phases,
     required this.createdAt,
-  })  : applianceLoads = applianceLoads ?? [],
+  })  : spaces = spaces ?? [
+          RoomSpace(id: 'sp-1', name: 'Living & Dining', areaSqm: 24.0, ceilingHeight: 2.7),
+          RoomSpace(id: 'sp-2', name: 'Kitchen', areaSqm: 14.0, ceilingHeight: 2.7),
+          RoomSpace(id: 'sp-3', name: 'Master Bedroom', areaSqm: 18.0, ceilingHeight: 2.7),
+          RoomSpace(id: 'sp-4', name: 'Bath & Laundry', areaSqm: 8.0, ceilingHeight: 2.6),
+        ],
+        applianceLoads = applianceLoads ?? [],
         canvasPoints = canvasPoints ?? [],
         conduitRoutes = conduitRoutes ?? [];
 
@@ -274,6 +290,7 @@ class Project {
     'currentPhaseNumber': currentPhaseNumber,
     'intakeMode': intakeMode,
     'isArchived': isArchived,
+    'spaces': spaces.map((s) => s.toJson()).toList(),
     'applianceLoads': applianceLoads.map((a) => a.toJson()).toList(),
     'canvasPoints': canvasPoints.map((c) => c.toJson()).toList(),
     'conduitRoutes': conduitRoutes.map((r) => r.toJson()).toList(),
@@ -293,6 +310,15 @@ class Project {
     currentPhaseNumber: json['currentPhaseNumber'] ?? 1,
     intakeMode: json['intakeMode'] ?? 'SITE_INTERVIEW',
     isArchived: json['isArchived'] ?? false,
+    spaces: (json['spaces'] as List<dynamic>?)
+            ?.map((s) => RoomSpace.fromJson(s as Map<String, dynamic>))
+            .toList() ??
+        [
+          RoomSpace(id: 'sp-1', name: 'Living & Dining', areaSqm: 24.0, ceilingHeight: 2.7),
+          RoomSpace(id: 'sp-2', name: 'Kitchen', areaSqm: 14.0, ceilingHeight: 2.7),
+          RoomSpace(id: 'sp-3', name: 'Master Bedroom', areaSqm: 18.0, ceilingHeight: 2.7),
+          RoomSpace(id: 'sp-4', name: 'Bath & Laundry', areaSqm: 8.0, ceilingHeight: 2.6),
+        ],
     applianceLoads: (json['applianceLoads'] as List<dynamic>?)
             ?.map((a) => ApplianceItem.fromJson(a as Map<String, dynamic>))
             .toList() ??
