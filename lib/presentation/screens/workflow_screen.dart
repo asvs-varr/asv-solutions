@@ -201,51 +201,49 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
     return ListTile(
       dense: true,
       enabled: !isLocked,
+      onTap: item.id == 'c1' && !isLocked
+          ? () async {
+              await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => ClientNeedsAnalysisScreen(project: _project),
+                ),
+              );
+              setState(() {});
+            }
+          : null,
       leading: Checkbox(
         value: item.isCompleted,
         activeColor: BanaagTheme.primaryAmber,
         checkColor: Colors.black,
         onChanged: isLocked ? null : (_) => _toggleCheckItem(phase, item),
       ),
-      title: InkWell(
-        onTap: item.id == 'c1' && !isLocked
-            ? () async {
-                await Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => ClientNeedsAnalysisScreen(project: _project),
-                  ),
-                );
-                setState(() {});
-              }
-            : null,
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                item.title,
-                style: TextStyle(
-                  fontSize: 13,
-                  decoration: item.isCompleted ? TextDecoration.lineThrough : null,
-                  color: item.isCompleted
-                      ? BanaagTheme.textMuted
-                      : (item.id == 'c1' ? BanaagTheme.primaryAmber : BanaagTheme.textHighEmphasis),
-                  fontWeight: item.id == 'c1' ? FontWeight.bold : FontWeight.normal,
-                ),
+      title: Row(
+        children: [
+          Expanded(
+            child: Text(
+              item.title,
+              style: TextStyle(
+                fontSize: 13,
+                decoration: item.isCompleted ? TextDecoration.lineThrough : null,
+                color: item.isCompleted
+                    ? BanaagTheme.textMuted
+                    : (item.id == 'c1' ? BanaagTheme.primaryAmber : BanaagTheme.textHighEmphasis),
+                fontWeight: item.id == 'c1' ? FontWeight.bold : FontWeight.normal,
               ),
             ),
-            if (item.id == 'c1' && !isLocked)
-              Container(
-                margin: const EdgeInsets.only(left: 6),
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: BanaagTheme.primaryAmber.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: const Text('OPEN TALLY ➔', style: TextStyle(color: BanaagTheme.primaryAmber, fontSize: 10, fontWeight: FontWeight.bold)),
+          ),
+          if (item.id == 'c1' && !isLocked)
+            Container(
+              margin: const EdgeInsets.only(left: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: BanaagTheme.primaryAmber.withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(4),
               ),
-          ],
-        ),
+              child: const Text('OPEN TALLY ➔', style: TextStyle(color: BanaagTheme.primaryAmber, fontSize: 10, fontWeight: FontWeight.bold)),
+            ),
+        ],
       ),
       trailing: item.id == 'r3' // Rough-in mandatory photo proof
           ? IconButton(
