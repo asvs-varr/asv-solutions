@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../domain/models.dart';
 import '../../data/project_repository.dart';
 import '../theme/banaag_theme.dart';
+import 'plan_canvas_screen.dart';
 
 class ClientNeedsAnalysisScreen extends StatefulWidget {
   final Project project;
@@ -203,8 +204,8 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> w
             children: [
               Expanded(
                 child: ElevatedButton.icon(
-                  icon: const Icon(Icons.check_circle_outline),
-                  label: const Text('Complete & Proceed to Stage 2'),
+                  icon: const Icon(Icons.arrow_forward_rounded),
+                  label: const Text('Complete & Proceed to Stage 2 Plan Canvas'),
                   onPressed: () {
                     // Mark checklist item complete
                     final consultationPhase = widget.project.phases[0];
@@ -212,9 +213,16 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> w
                     needsItem.isCompleted = true;
                     ProjectRepository.instance.updateProject(widget.project);
 
-                    Navigator.pop(context);
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('✅ Client Needs Analysis complete! Load tally linked to Project.')),
+                      const SnackBar(content: Text('✅ Client Needs Analysis complete! Generating auto-layout on Plan Canvas...')),
+                    );
+
+                    // Seamless transition to Stage 2 Plan Canvas
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => PlanCanvasScreen(project: widget.project),
+                      ),
                     );
                   },
                 ),

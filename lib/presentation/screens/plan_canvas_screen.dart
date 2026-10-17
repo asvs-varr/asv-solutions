@@ -3,30 +3,95 @@
 import 'package:flutter/material.dart';
 import '../../domain/models.dart';
 import '../../domain/takeoff_engine.dart';
+import '../../data/project_repository.dart';
 import '../theme/banaag_theme.dart';
 
 class PlanCanvasScreen extends StatefulWidget {
-  const PlanCanvasScreen({super.key});
+  final Project? project;
+  const PlanCanvasScreen({super.key, this.project});
 
   @override
   State<PlanCanvasScreen> createState() => _PlanCanvasScreenState();
 }
 
 class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
-  final List<CanvasPoint> _points = [
-    CanvasPoint(id: 'pt-1', type: 'PANEL', label: 'Main Panel (LP-1)', x: 60, y: 150),
-    CanvasPoint(id: 'pt-2', type: 'SWITCH_1G', label: '1G Switch Living', x: 160, y: 150),
-    CanvasPoint(id: 'pt-3', type: 'LIGHT', label: 'LED Drop Light', x: 260, y: 150),
-    CanvasPoint(id: 'pt-4', type: 'OUTLET_DUPLEX', label: 'Duplex CO Master', x: 160, y: 260),
-    CanvasPoint(id: 'pt-5', type: 'ACU', label: '2.0HP Inverter ACU', x: 280, y: 260),
-  ];
+  late List<CanvasPoint> _points;
+  late List<ConduitRoute> _routes;
 
-  final List<ConduitRoute> _routes = [
-    ConduitRoute(id: 'rt-1', fromPointId: 'pt-1', toPointId: 'pt-2', measuredLengthMeters: 4.5),
-    ConduitRoute(id: 'rt-2', fromPointId: 'pt-2', toPointId: 'pt-3', measuredLengthMeters: 3.2),
-    ConduitRoute(id: 'rt-3', fromPointId: 'pt-1', toPointId: 'pt-4', measuredLengthMeters: 5.0),
-    ConduitRoute(id: 'rt-4', fromPointId: 'pt-4', toPointId: 'pt-5', measuredLengthMeters: 4.8),
-  ];
+  @override
+  void initState() {
+    super.initState();
+    if (widget.project != null && widget.project!.canvasPoints.isNotEmpty) {
+      _points = widget.project!.canvasPoints;
+      _routes = widget.project!.conduitRoutes;
+    } else if (widget.project != null && widget.project!.applianceLoads.isNotEmpty) {
+      _autoGenerateFromAppliances(widget.project!.applianceLoads);
+    } else {
+      _points = [
+        CanvasPoint(id: 'pt-1', type: 'PANEL', label: 'Main Panel (LP-1)', x: 60, y: 150),
+        CanvasPoint(id: 'pt-2', type: 'SWITCH_1G', label: '1G Switch Living', x: 160, y: 150),
+        CanvasPoint(id: 'pt-3', type: 'LIGHT', label: 'LED Drop Light', x: 260, y: 150),
+        CanvasPoint(id: 'pt-4', type: 'OUTLET_DUPLEX', label: 'Duplex CO Master', x: 160, y: 260),
+        CanvasPoint(id: 'pt-5', type: 'ACU', label: '2.0HP Inverter ACU', x: 280, y: 260),
+      ];
+      _routes = [
+        ConduitRoute(id: 'rt-1', fromPointId: 'pt-1', toPointId: 'pt-2', measuredLengthMeters: 4.5),
+        ConduitRoute(id: 'rt-2', fromPointId: 'pt-2', toPointId: 'pt-3', measuredLengthMeters: 3.2),
+        ConduitRoute(id: 'rt-3', fromPointId: 'pt-1', toPointId: 'pt-4', measuredLengthMeters: 5.0),
+        ConduitRoute(id: 'rt-4', fromPointId: 'pt-4', toPointId: 'pt-5', measuredLengthMeters: 4.8),
+      ];
+    }
+  }
+
+  void _autoGenerateFromAppliances(List<ApplianceItem> appliances) {
+    _points = [
+      CanvasPoint(id: 'pt-panel', type: 'PANEL', label: 'Main Panel (LP-1)', x: 60, y: 150),
+    ];
+    _routes = [];
+
+    double curX = 160.0;
+    double curY = 100.0;
+    int index = 1;
+
+    for (final app in appliances) {
+      for (int i = 0; i < app.quantity; i++) {
+        final id = 'pt-$index';
+        String pointType = 'OUTLET_DUPLEX';
+        if (app.name.toLowerCase().contains('aircon')) {
+          pointType = 'ACU';
+        } else if (app.name.toLowerCase().contains('light') || app.name.toLowerCase().contains('fan')) {
+          pointType = 'LIGHT';
+        } else if (app.name.toLowerCase().contains('switch')) {
+          pointType = 'SWITCH_1G';
+        }
+
+        _points.add(CanvasPoint(
+          id: id,
+          type: pointType,
+          label: '${app.name} #${i + 1}',
+          x: curX,
+          y: curY,
+          circuitNumber: app.isDedicatedCircuit ? index : 1,
+        ));
+
+        // Route from Panel or previous point
+        final fromId = app.isDedicatedCircuit ? 'pt-panel' : (_points.length > 2 ? _points[_points.length - 2].id : 'pt-panel');
+        _routes.add(ConduitRoute(
+          id: 'rt-$index',
+          fromPointId: fromId,
+          toPointId: id,
+          measuredLengthMeters: app.isDedicatedCircuit ? 8.5 : 4.0,
+        ));
+
+        curX += 90.0;
+        if (curX > 320.0) {
+          curX = 140.0;
+          curY += 75.0;
+        }
+        index++;
+      }
+    }
+  }
 
   String _selectedTool = 'OUTLET_DUPLEX';
 
@@ -71,12 +136,28 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
             },
           ),
           IconButton(
-            icon: const Icon(Icons.picture_as_pdf, color: BanaagTheme.primaryAmber),
-            tooltip: 'Export Client Proposal PDF',
+            icon: const Icon(Icons.check_circle, color: BanaagTheme.successGreen),
+            tooltip: 'Lock Contract Amount from Takeoff',
             onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('📄 Generating Client Proposal with Takeoff BOM...')),
-              );
+              if (widget.project != null) {
+                setState(() {
+                  widget.project!.contractAmount = takeoff.grandTotalEstimatedCost;
+                  widget.project!.canvasPoints = _points;
+                  widget.project!.conduitRoutes = _routes;
+                  // Advance to Permitting (Stage 2)
+                  if (widget.project!.currentPhaseNumber < 2) {
+                    widget.project!.currentPhaseNumber = 2;
+                  }
+                  ProjectRepository.instance.updateProject(widget.project!);
+                });
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('⚡ Contract Amount officially locked at ₱${takeoff.grandTotalEstimatedCost.toStringAsFixed(0)}!')),
+                );
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('⚡ Takeoff Total: ₱${takeoff.grandTotalEstimatedCost.toStringAsFixed(0)}')),
+                );
+              }
             },
           ),
         ],

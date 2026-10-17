@@ -54,10 +54,12 @@ class Project {
   final String clientContact;
   final String siteAddress;
   final String utilityProvider; // e.g. Meralco, CANORECO
-  final double contractAmount;
+  double contractAmount;
   final double retentionPercent; // default 10%
   int currentPhaseNumber;
   List<ApplianceItem> applianceLoads;
+  List<CanvasPoint> canvasPoints;
+  List<ConduitRoute> conduitRoutes;
   final List<ProjectPhase> phases;
   final DateTime createdAt;
 
@@ -72,9 +74,13 @@ class Project {
     this.retentionPercent = 10.0,
     this.currentPhaseNumber = 1,
     List<ApplianceItem>? applianceLoads,
+    List<CanvasPoint>? canvasPoints,
+    List<ConduitRoute>? conduitRoutes,
     required this.phases,
     required this.createdAt,
-  }) : applianceLoads = applianceLoads ?? [];
+  })  : applianceLoads = applianceLoads ?? [],
+        canvasPoints = canvasPoints ?? [],
+        conduitRoutes = conduitRoutes ?? [];
 
   double get retentionAmount => contractAmount * (retentionPercent / 100.0);
   double get billableAmount => contractAmount - retentionAmount;
