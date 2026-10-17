@@ -1,7 +1,5 @@
-// BANAAG PRO Membership & Settings Screen
-// Free functionality for all users, with optional PRO upgrades for customization, cloud sync, and custom proposal branding.
-
 import 'package:flutter/material.dart';
+import '../../domain/security_engine.dart';
 import '../theme/banaag_theme.dart';
 
 class BanaagProScreen extends StatefulWidget {
@@ -12,10 +10,25 @@ class BanaagProScreen extends StatefulWidget {
 }
 
 class _BanaagProScreenState extends State<BanaagProScreen> {
-  bool _isProActive = true; // Preview mode for contractor
+  final SecurityEngine _securityEngine = SecurityEngine.instance;
+  late bool _isProActive;
   String _selectedTheme = 'Industrial Amber (Default)';
   final TextEditingController _companyNameController = TextEditingController(text: 'LANITON Electrical & Engineering Services');
   final TextEditingController _prcLicenseController = TextEditingController(text: 'PEE Lic. No. 0012345 / RME 0098765');
+
+  @override
+  void initState() {
+    super.initState();
+    // Initialize or restore active cryptographic lease token
+    if (_securityEngine.activeToken == null) {
+      _securityEngine.issueOfflineLease(
+        userId: 'contractor-ph-dev',
+        tier: 'PRO_CONTRACTOR',
+        validityDays: 30,
+      );
+    }
+    _isProActive = _securityEngine.isProEntitled();
+  }
 
   final List<String> _themes = [
     'Industrial Amber (Default)',
@@ -63,12 +76,15 @@ class _BanaagProScreenState extends State<BanaagProScreen> {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                         decoration: BoxDecoration(
-                          color: BanaagTheme.primaryAmber,
+                          color: _isProActive ? BanaagTheme.primaryAmber : Colors.grey,
                           borderRadius: BorderRadius.circular(20),
                         ),
-                        child: const Text('PRO ACTIVATED', style: TextStyle(color: Colors.black, fontWeight: FontWeight.w900, fontSize: 11)),
+                        child: Text(
+                          _isProActive ? 'PRO ACTIVATED (OFFLINE LEASE)' : 'FREE TIER',
+                          style: const TextStyle(color: Colors.black, fontWeight: FontWeight.w900, fontSize: 11),
+                        ),
                       ),
-                      const Icon(Icons.verified, color: BanaagTheme.primaryAmber),
+                      Icon(_isProActive ? Icons.verified_user : Icons.lock_outline, color: _isProActive ? BanaagTheme.primaryAmber : Colors.grey),
                     ],
                   ),
                   const SizedBox(height: 12),
@@ -76,6 +92,29 @@ class _BanaagProScreenState extends State<BanaagProScreen> {
                   const SizedBox(height: 4),
                   const Text('Lahat ng PEC tools at project features ay 100% LIBRE. Ang PRO subscription ay para sa cosmetic branding, specialized visual themes, at unlimited cloud storage.',
                       style: TextStyle(color: BanaagTheme.textMuted, fontSize: 12)),
+                  if (_securityEngine.activeToken != null) ...[
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.black45,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.white10),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.security, size: 14, color: BanaagTheme.successGreen),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              'Offline Lease Valid until: ${_securityEngine.activeToken!.expiresAt.toString().split(' ')[0]} (HMAC-SHA256 Signed)',
+                              style: const TextStyle(fontSize: 10, color: BanaagTheme.textMuted, fontFamily: 'monospace'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
