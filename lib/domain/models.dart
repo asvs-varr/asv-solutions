@@ -229,6 +229,7 @@ class Project {
   double contractAmount;
   final double retentionPercent; // default 10%
   int currentPhaseNumber;
+  final String intakeMode; // 'SITE_INTERVIEW', 'BLUEPRINT_PHOTO', 'AUTOCAD_DXF'
   List<ApplianceItem> applianceLoads;
   List<CanvasPoint> canvasPoints;
   List<ConduitRoute> conduitRoutes;
@@ -245,6 +246,7 @@ class Project {
     required this.contractAmount,
     this.retentionPercent = 10.0,
     this.currentPhaseNumber = 1,
+    this.intakeMode = 'SITE_INTERVIEW',
     List<ApplianceItem>? applianceLoads,
     List<CanvasPoint>? canvasPoints,
     List<ConduitRoute>? conduitRoutes,
@@ -268,6 +270,7 @@ class Project {
     'contractAmount': contractAmount,
     'retentionPercent': retentionPercent,
     'currentPhaseNumber': currentPhaseNumber,
+    'intakeMode': intakeMode,
     'applianceLoads': applianceLoads.map((a) => a.toJson()).toList(),
     'canvasPoints': canvasPoints.map((c) => c.toJson()).toList(),
     'conduitRoutes': conduitRoutes.map((r) => r.toJson()).toList(),
@@ -285,6 +288,7 @@ class Project {
     contractAmount: (json['contractAmount'] as num?)?.toDouble() ?? 0.0,
     retentionPercent: (json['retentionPercent'] as num?)?.toDouble() ?? 10.0,
     currentPhaseNumber: json['currentPhaseNumber'] ?? 1,
+    intakeMode: json['intakeMode'] ?? 'SITE_INTERVIEW',
     applianceLoads: (json['applianceLoads'] as List<dynamic>?)
             ?.map((a) => ApplianceItem.fromJson(a as Map<String, dynamic>))
             .toList() ??

@@ -180,6 +180,49 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
     );
   }
 
+  void _applyPecStandardPack(String spaceName) {
+    final lower = spaceName.toLowerCase();
+    final lighting = LightingEngine.calculate(
+      roomType: _mapSpaceToRoomType(spaceName),
+      areaSqm: _currentSpace.areaSqm,
+      ceilingHeightMeters: _currentSpace.ceilingHeight,
+    );
+
+    // 1. Add Recommended Smart Lighting
+    _addOrIncrementAppliance(
+      name: '${lighting.recommendedWattagePerFixture}W LED Downlight ($spaceName)',
+      ratingVA: 15.0 * lighting.fixtureCount,
+      isDedicated: false,
+    );
+
+    // 2. Add Standard Convenience Outlets & Heavy Loads based on PEC
+    if (lower.contains('kitchen')) {
+      _addOrIncrementAppliance(name: 'Kitchen Counter Duplex Receptacles', ratingVA: 360.0, isDedicated: false);
+      _addOrIncrementAppliance(name: 'Dedicated Inverter Refrigerator Outlet', ratingVA: 800.0, isDedicated: true);
+      _addOrIncrementAppliance(name: 'Induction / Range Hood Circuit Line', ratingVA: 3500.0, isDedicated: true);
+    } else if (lower.contains('bed')) {
+      _addOrIncrementAppliance(name: 'Bedside & Desk Convenience Outlets (Duplex)', ratingVA: 360.0, isDedicated: false);
+      _addOrIncrementAppliance(name: 'Dedicated 1.5HP Inverter ACU Outlet', ratingVA: 1650.0, isDedicated: true);
+    } else if (lower.contains('bath') || lower.contains('laundry')) {
+      _addOrIncrementAppliance(name: 'GFCI Protected Shaver/Utility Outlet', ratingVA: 180.0, isDedicated: false);
+      _addOrIncrementAppliance(name: 'Dedicated Single-point Shower Heater (3.5kW)', ratingVA: 3500.0, isDedicated: true);
+      _addOrIncrementAppliance(name: 'Front-load Washing Machine Outlet', ratingVA: 1800.0, isDedicated: true);
+    } else if (lower.contains('garage') || lower.contains('outdoor')) {
+      _addOrIncrementAppliance(name: 'Weatherproof Heavy-Duty Outlets (WR/GFCI)', ratingVA: 360.0, isDedicated: false);
+      _addOrIncrementAppliance(name: 'Perimeter Security Floodlight Line', ratingVA: 200.0, isDedicated: false);
+      _addOrIncrementAppliance(name: 'Dedicated Water Pressure Pump Line', ratingVA: 1200.0, isDedicated: true);
+    } else {
+      // Living & Dining default
+      _addOrIncrementAppliance(name: 'Living Room TV & Entertainment Outlet Pack', ratingVA: 360.0, isDedicated: false);
+      _addOrIncrementAppliance(name: 'Dining Table & General Receptacles', ratingVA: 360.0, isDedicated: false);
+      _addOrIncrementAppliance(name: 'Dedicated 2.5HP Inverter Split ACU', ratingVA: 2600.0, isDedicated: true);
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('⚡ PEC Standard Package successfully applied to $spaceName!')),
+    );
+  }
+
   void _promptAddCustomSpace() {
     final nameController = TextEditingController();
     final areaController = TextEditingController(text: '16.0');
@@ -478,15 +521,29 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             ElevatedButton.icon(
-                              icon: const Icon(Icons.flash_on, size: 16),
-                              label: const Text('Quick Preset'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: BanaagTheme.primaryAmber,
+                                foregroundColor: Colors.black,
+                              ),
+                              icon: const Icon(Icons.bolt, size: 16),
+                              label: const Text('Apply PEC Standard Pack', style: TextStyle(fontWeight: FontWeight.bold)),
+                              onPressed: () => _applyPecStandardPack(_activeSpaceName),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            TextButton.icon(
+                              icon: const Icon(Icons.flash_on, size: 14, color: Colors.white70),
+                              label: const Text('Quick Preset', style: TextStyle(color: Colors.white70, fontSize: 12)),
                               onPressed: _showQuickPresetPicker,
                             ),
-                            const SizedBox(width: 10),
-                            OutlinedButton.icon(
-                              style: OutlinedButton.styleFrom(foregroundColor: BanaagTheme.primaryAmber),
-                              icon: const Icon(Icons.add, size: 16),
-                              label: const Text('Custom Appliance'),
+                            const SizedBox(width: 8),
+                            TextButton.icon(
+                              icon: const Icon(Icons.add, size: 14, color: BanaagTheme.primaryAmber),
+                              label: const Text('Custom Item', style: TextStyle(color: BanaagTheme.primaryAmber, fontSize: 12)),
                               onPressed: _promptAddCustomAppliance,
                             ),
                           ],

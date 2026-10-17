@@ -296,6 +296,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final addressController = TextEditingController();
     final amountController = TextEditingController();
     String utility = 'Meralco';
+    String intakeMode = 'SITE_INTERVIEW';
 
     showDialog(
       context: context,
@@ -372,6 +373,38 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     }
                   },
                 ),
+                const SizedBox(height: 16),
+                const Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Pumili ng Project Intake Mode (Batay sa sitwasyon sa Site):',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: BanaagTheme.primaryAmber),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                _buildIntakeModeCard(
+                  title: '🗣️ Fast Site Interview Mode',
+                  subtitle: 'Walang plano / Maliit na bahay. Mabilisang interview sa may-ari; kusa nang magsu-suggest ang PEC package.',
+                  modeKey: 'SITE_INTERVIEW',
+                  currentMode: intakeMode,
+                  onSelect: (m) => setDialogState(() => intakeMode = m),
+                ),
+                const SizedBox(height: 6),
+                _buildIntakeModeCard(
+                  title: '📸 Blueprint Picture Calibration',
+                  subtitle: 'May dalang papel na plano. Kunan ng camera sa site at i-tag ang kwarto gamit ang Type Box.',
+                  modeKey: 'BLUEPRINT_PHOTO',
+                  currentMode: intakeMode,
+                  onSelect: (m) => setDialogState(() => intakeMode = m),
+                ),
+                const SizedBox(height: 6),
+                _buildIntakeModeCard(
+                  title: '📐 AutoCAD .DXF Direct Import',
+                  subtitle: 'May CAD file mula sa arkitekto. 1-click auto-detect ng pader, text, at electrical layout.',
+                  modeKey: 'AUTOCAD_DXF',
+                  currentMode: intakeMode,
+                  onSelect: (m) => setDialogState(() => intakeMode = m),
+                ),
               ],
             ),
           ),
@@ -399,6 +432,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   contractAmount: contractAmt,
                   retentionPercent: 10.0,
                   currentPhaseNumber: 1, // Starts at Consultation
+                  intakeMode: intakeMode,
                   phases: repo.createDefaultPhases(),
                   createdAt: DateTime.now(),
                 );
@@ -406,9 +440,64 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 repo.addProject(newProject);
                 Navigator.pop(ctx);
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('⚡ New project "${newProject.title}" successfully created!')),
+                  SnackBar(content: Text('⚡ New project "${newProject.title}" successfully created (${newProject.intakeMode})!')),
                 );
               },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildIntakeModeCard({
+    required String title,
+    required String subtitle,
+    required String modeKey,
+    required String currentMode,
+    required ValueChanged<String> onSelect,
+  }) {
+    final bool isSelected = currentMode == modeKey;
+    return InkWell(
+      onTap: () => onSelect(modeKey),
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFF2B220C) : const Color(0xFF161A22),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: isSelected ? BanaagTheme.primaryAmber : Colors.white12,
+            width: isSelected ? 1.5 : 1.0,
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              isSelected ? Icons.radio_button_checked : Icons.radio_button_off,
+              color: isSelected ? BanaagTheme.primaryAmber : Colors.white38,
+              size: 18,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                      color: isSelected ? BanaagTheme.primaryAmber : Colors.white,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(color: BanaagTheme.textMuted, fontSize: 10),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
