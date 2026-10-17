@@ -50,15 +50,18 @@
 ---
 
 ### [HRZ-003] Multi-Device Cloud Sync & Realtime Team Collaboration
-- **Status**: 🧊 DEFERRED
+- **Status**: ⏳ ARCHITECTURE READY / UNBLOCKING IN PROGRESS
 - **Blocker Category**: `[INFRA-BLOCKED]`
 - **Strategic / Business Impact**: 🏆 Game-Changer (Multi-electrician project sync)
 - **Technical Effort**: High
-- **Why It's Blocked Today**: Wala pa tayong naka-deploy na live backend (e.g. Supabase instance, Firebase Blaze, o custom PostgreSQL backend). Kasalukuyang local-first at stream-based cache pa lang ang repository.
-- **Actionable Unblocking Steps**:
-  1. Mag-deploy ng Supabase Project (PostgreSQL + PostGIS para sa project coordinates + Auth).
-  2. Gumawa ng row-level security (RLS) tables para sa `projects`, `takeoffs`, `variation_orders`, at `photos`.
-  3. I-integrate ang `supabase_flutter` na may offline-first local queue (PowerSync / WatermelonDB pattern).
+- **Current Progress**:
+  - ✅ Naisulat na ang kumpletong `supabase_schema.sql` na may PostgreSQL Row-Level Security (RLS) para sa multi-tenant contractor isolation.
+  - ✅ Binuo ang `CloudSyncService` (`lib/data/cloud_sync_service.dart`) na may seamless offline-first fallback.
+  - ✅ Naidagdag ang Supabase Project Credentials modal configuration sa `banaag_pro_screen.dart`.
+- **Remaining Step to Full Graduation**:
+  1. Gumawa ng Libreng Project sa Supabase Dashboard (https://supabase.com).
+  2. I-paste at i-run ang `supabase_schema.sql` sa SQL Editor.
+  3. Ilagay ang Project URL at Anon Key sa BANAAG PRO screen!
 - **Detailed Architectural Notes**:
   - Pag-aralan ang Conflict-Free Replicated Data Types (CRDTs) para sa sabay-sabay na pag-audit ng dalawang electrician sa parehong gusali nang walang overwrite.
 
