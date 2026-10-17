@@ -440,13 +440,8 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
       },
     ];
 
-    // Extract unique categories
-    final List<String> categories = applianceCatalog.map((e) => e['category'] as String).toSet().toList();
-
-    String selectedCategory = categories.first;
-    List<Map<String, dynamic>> filteredAppliances = applianceCatalog.where((e) => e['category'] == selectedCategory).toList();
-    String selectedApplianceName = filteredAppliances.first['name'];
-    Map<String, dynamic> selectedCatalogItem = filteredAppliances.first;
+    String selectedApplianceKey = '${applianceCatalog.first['category']}::${applianceCatalog.first['name']}';
+    Map<String, dynamic> selectedCatalogItem = applianceCatalog.first;
     List<Map<String, dynamic>> currentWattagePresets = List<Map<String, dynamic>>.from(selectedCatalogItem['wattagePresets']);
     String selectedPresetLabel = currentWattagePresets.first['label'];
 
@@ -499,7 +494,7 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
             if (w != null && powerFactor > 0) {
               final double calculatedVA = w / powerFactor;
               vaController.text = calculatedVA.toStringAsFixed(0);
-              updateDedicatedStatus(calculatedVA, selectedApplianceName);
+              updateDedicatedStatus(calculatedVA, selectedCatalogItem['name']);
             }
             isUpdatingFromWatts = false;
             setDialogState(() {});
@@ -512,7 +507,7 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
             if (v != null) {
               final double calculatedW = v * powerFactor;
               wattsController.text = calculatedW.toStringAsFixed(0);
-              updateDedicatedStatus(v, selectedApplianceName);
+              updateDedicatedStatus(v, selectedCatalogItem['name']);
             }
             isUpdatingFromVA = false;
             setDialogState(() {});
@@ -524,7 +519,7 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
             if (w != null && powerFactor > 0) {
               final double calculatedVA = w / powerFactor;
               vaController.text = calculatedVA.toStringAsFixed(0);
-              updateDedicatedStatus(calculatedVA, selectedApplianceName);
+              updateDedicatedStatus(calculatedVA, selectedCatalogItem['name']);
             }
             setDialogState(() {});
           }
@@ -555,85 +550,53 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // STEP 1: CATEGORY DROPDOWN
+                    // SINGLE UNIFIED CATEGORY-GROUPED APPLIANCE DROPDOWN
                     DropdownButtonFormField<String>(
-                      initialValue: selectedCategory,
-                      dropdownColor: BanaagTheme.surfaceCard,
+                      initialValue: selectedApplianceKey,
+                      dropdownColor: const Color(0xFF1B2028),
                       isExpanded: true,
                       decoration: const InputDecoration(
-                        labelText: 'Step 1: Category',
+                        labelText: 'Select Appliance',
                         labelStyle: TextStyle(color: BanaagTheme.primaryAmber, fontWeight: FontWeight.bold),
-                        prefixIcon: Icon(Icons.grid_view_rounded, color: BanaagTheme.primaryAmber, size: 20),
-                        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        prefixIcon: Icon(Icons.electrical_services, color: BanaagTheme.primaryAmber, size: 20),
+                        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                       ),
-                      items: categories.map((cat) {
+                      items: applianceCatalog.map((item) {
+                        final key = '${item['category']}::${item['name']}';
                         return DropdownMenuItem<String>(
-                          value: cat,
-                          child: Text(cat, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
-                        );
-                      }).toList(),
-                      onChanged: (newCat) {
-                        if (newCat != null && newCat != selectedCategory) {
-                          setDialogState(() {
-                            selectedCategory = newCat;
-                            filteredAppliances = applianceCatalog.where((e) => e['category'] == selectedCategory).toList();
-                            selectedApplianceName = filteredAppliances.first['name'];
-                            selectedCatalogItem = filteredAppliances.first;
-                            currentWattagePresets = List<Map<String, dynamic>>.from(selectedCatalogItem['wattagePresets']);
-                            selectedPresetLabel = currentWattagePresets.first['label'];
-                            isLighting = selectedCatalogItem['isLighting'] ?? false;
-
-                            if (selectedCategory != '⚙️ Custom / Manual Input') {
-                              nameController.text = selectedApplianceName;
-                            }
-
-                            final preset = currentWattagePresets.first;
-                            powerFactor = (preset['pf'] as num).toDouble();
-                            wattsController.text = preset['watts'].toString();
-                            final double calcVA = (preset['watts'] as num) / powerFactor;
-                            vaController.text = calcVA.toStringAsFixed(0);
-                            updateDedicatedStatus(calcVA, selectedApplianceName);
-                          });
-                        }
-                      },
-                    ),
-                    const SizedBox(height: 10),
-
-                    // STEP 2: APPLIANCE TYPE DROPDOWN
-                    DropdownButtonFormField<String>(
-                      key: ValueKey('app-dropdown-$selectedCategory'),
-                      initialValue: filteredAppliances.any((a) => a['name'] == selectedApplianceName)
-                          ? selectedApplianceName
-                          : filteredAppliances.first['name'],
-                      dropdownColor: BanaagTheme.surfaceCard,
-                      isExpanded: true,
-                      decoration: const InputDecoration(
-                        labelText: 'Step 2: Appliance Type',
-                        labelStyle: TextStyle(color: Colors.white70),
-                        prefixIcon: Icon(Icons.devices_other_outlined, color: BanaagTheme.primaryAmber, size: 20),
-                        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                      ),
-                      items: filteredAppliances.map((item) {
-                        return DropdownMenuItem<String>(
-                          value: item['name'] as String,
-                          child: Text(
-                            item['name'] as String,
-                            style: const TextStyle(fontSize: 13),
+                          value: key,
+                          child: RichText(
                             overflow: TextOverflow.ellipsis,
+                            text: TextSpan(
+                              children: [
+                                TextSpan(
+                                  text: '${item['category'].toString().split(' ').first} ',
+                                  style: const TextStyle(fontSize: 13),
+                                ),
+                                TextSpan(
+                                  text: '${item['name']} ',
+                                  style: const TextStyle(fontSize: 13, color: Colors.white, fontWeight: FontWeight.w600),
+                                ),
+                                TextSpan(
+                                  text: '(${item['category'].toString().replaceFirst(RegExp(r'^[^\s]+\s*'), '')})',
+                                  style: const TextStyle(fontSize: 10, color: BanaagTheme.textMuted),
+                                ),
+                              ],
+                            ),
                           ),
                         );
                       }).toList(),
                       onChanged: (val) {
                         if (val != null) {
                           setDialogState(() {
-                            selectedApplianceName = val;
-                            selectedCatalogItem = filteredAppliances.firstWhere((i) => i['name'] == val);
+                            selectedApplianceKey = val;
+                            selectedCatalogItem = applianceCatalog.firstWhere((i) => '${i['category']}::${i['name']}' == val);
                             currentWattagePresets = List<Map<String, dynamic>>.from(selectedCatalogItem['wattagePresets']);
                             selectedPresetLabel = currentWattagePresets.first['label'];
                             isLighting = selectedCatalogItem['isLighting'] ?? false;
 
-                            if (selectedCategory != '⚙️ Custom / Manual Input') {
-                              nameController.text = val;
+                            if (!val.contains('Custom')) {
+                              nameController.text = selectedCatalogItem['name'];
                             }
 
                             final preset = currentWattagePresets.first;
@@ -641,7 +604,7 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
                             wattsController.text = preset['watts'].toString();
                             final double calcVA = (preset['watts'] as num) / powerFactor;
                             vaController.text = calcVA.toStringAsFixed(0);
-                            updateDedicatedStatus(calcVA, val);
+                            updateDedicatedStatus(calcVA, selectedCatalogItem['name']);
                           });
                         }
                       },
@@ -661,13 +624,13 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
                     ),
                     const SizedBox(height: 10),
 
-                    // STEP 3: WATTAGE & VARIANT PRESETS DROPDOWN
+                    // WATTAGE & VARIANT PRESETS DROPDOWN
                     DropdownButtonFormField<String>(
-                      key: ValueKey('preset-dropdown-$selectedApplianceName'),
+                      key: ValueKey('preset-dropdown-$selectedApplianceKey'),
                       initialValue: currentWattagePresets.any((p) => p['label'] == selectedPresetLabel)
                           ? selectedPresetLabel
                           : currentWattagePresets.first['label'] as String,
-                      dropdownColor: BanaagTheme.surfaceCard,
+                      dropdownColor: const Color(0xFF1B2028),
                       isExpanded: true,
                       decoration: const InputDecoration(
                         labelText: 'Wattage Variant Preset',
@@ -694,49 +657,57 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
                             wattsController.text = match['watts'].toString();
                             final double calcVA = (match['watts'] as num) / powerFactor;
                             vaController.text = calcVA.toStringAsFixed(0);
-                            updateDedicatedStatus(calcVA, selectedApplianceName);
+                            updateDedicatedStatus(calcVA, selectedCatalogItem['name']);
                           });
                         }
                       },
                     ),
                     const SizedBox(height: 12),
 
-                    // STREAMLINED HIGH-CONTRAST POWER SUMMARY PILL
+                    // STREAMLINED HIGH-CONTRAST POWER SUMMARY PILL (Overflow Safe)
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                       decoration: BoxDecoration(
                         color: Colors.black.withValues(alpha: 0.35),
                         borderRadius: BorderRadius.circular(10),
                         border: Border.all(color: BanaagTheme.primaryAmber.withValues(alpha: 0.3)),
                       ),
                       child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text('REAL POWER', style: TextStyle(color: BanaagTheme.textMuted, fontSize: 9, letterSpacing: 0.5)),
-                              Text('${currentWatts.toStringAsFixed(0)} W',
-                                  style: const TextStyle(color: Colors.cyanAccent, fontWeight: FontWeight.bold, fontSize: 15)),
-                            ],
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text('REAL POWER', style: TextStyle(color: BanaagTheme.textMuted, fontSize: 8, letterSpacing: 0.5)),
+                                const SizedBox(height: 2),
+                                Text('${currentWatts.toStringAsFixed(0)} W',
+                                    style: const TextStyle(color: Colors.cyanAccent, fontWeight: FontWeight.bold, fontSize: 14)),
+                              ],
+                            ),
                           ),
-                          Container(width: 1, height: 28, color: Colors.white12),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.center,
-                            children: [
-                              const Text('APPARENT LOAD', style: TextStyle(color: BanaagTheme.textMuted, fontSize: 9, letterSpacing: 0.5)),
-                              Text('${currentVA.toStringAsFixed(0)} VA',
-                                  style: const TextStyle(color: BanaagTheme.primaryAmber, fontWeight: FontWeight.bold, fontSize: 15)),
-                            ],
+                          Container(width: 1, height: 26, color: Colors.white12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                const Text('APPARENT LOAD', style: TextStyle(color: BanaagTheme.textMuted, fontSize: 8, letterSpacing: 0.5)),
+                                const SizedBox(height: 2),
+                                Text('${currentVA.toStringAsFixed(0)} VA',
+                                    style: const TextStyle(color: BanaagTheme.primaryAmber, fontWeight: FontWeight.bold, fontSize: 14)),
+                              ],
+                            ),
                           ),
-                          Container(width: 1, height: 28, color: Colors.white12),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              const Text('AMP RATING (230V)', style: TextStyle(color: BanaagTheme.textMuted, fontSize: 9, letterSpacing: 0.5)),
-                              Text('${currentAmps.toStringAsFixed(1)} A',
-                                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
-                            ],
+                          Container(width: 1, height: 26, color: Colors.white12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                const Text('CURRENT (230V)', style: TextStyle(color: BanaagTheme.textMuted, fontSize: 8, letterSpacing: 0.5)),
+                                const SizedBox(height: 2),
+                                Text('${currentAmps.toStringAsFixed(1)} A',
+                                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
+                              ],
+                            ),
                           ),
                         ],
                       ),
@@ -779,7 +750,7 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
                     ),
                     const SizedBox(height: 8),
 
-                    // COLLAPSIBLE ADVANCED POWER FACTOR (PF) ACCORDION
+                    // COLLAPSIBLE ADVANCED POWER FACTOR (PF) ACCORDION (Overflow Safe)
                     InkWell(
                       borderRadius: BorderRadius.circular(8),
                       onTap: () {
@@ -788,38 +759,31 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
                         });
                       },
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                         decoration: BoxDecoration(
                           color: Colors.white.withValues(alpha: 0.04),
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(color: Colors.white12),
                         ),
                         child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Row(
-                              children: [
-                                const Icon(Icons.tune, size: 14, color: BanaagTheme.primaryAmber),
-                                const SizedBox(width: 6),
-                                const Text('Power Factor (PF): ', style: TextStyle(fontSize: 11, color: Colors.white70)),
-                                Text(
-                                  powerFactor.toStringAsFixed(2),
-                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: BanaagTheme.primaryAmber),
-                                ),
-                              ],
+                            const Icon(Icons.tune, size: 14, color: BanaagTheme.primaryAmber),
+                            const SizedBox(width: 6),
+                            const Text('Power Factor: ', style: TextStyle(fontSize: 11, color: Colors.white70)),
+                            Text(
+                              powerFactor.toStringAsFixed(2),
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: BanaagTheme.primaryAmber),
                             ),
-                            Row(
-                              children: [
-                                Text(
-                                  isAdvancedPfExpanded ? 'Hide Options' : 'Fine-tune PF',
-                                  style: const TextStyle(fontSize: 11, color: BanaagTheme.textMuted),
-                                ),
-                                Icon(
-                                  isAdvancedPfExpanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
-                                  size: 16,
-                                  color: BanaagTheme.textMuted,
-                                ),
-                              ],
+                            const Spacer(),
+                            Text(
+                              isAdvancedPfExpanded ? 'Hide' : 'Fine-tune PF',
+                              style: const TextStyle(fontSize: 11, color: BanaagTheme.textMuted),
+                            ),
+                            const SizedBox(width: 4),
+                            Icon(
+                              isAdvancedPfExpanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+                              size: 16,
+                              color: BanaagTheme.textMuted,
                             ),
                           ],
                         ),
@@ -1569,62 +1533,92 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
                   ),
           ),
 
-          // Bottom Quick Actions Bar
+          // Bottom Action Hub: Room Load Controls & Stage 2 Navigation
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            color: const Color(0xFF14171E),
-            child: Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(foregroundColor: BanaagTheme.primaryAmber),
-                    icon: const Icon(Icons.library_add_outlined, size: 16),
-                    label: const Text('Quick Presets'),
-                    onPressed: _showQuickPresetPicker,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    icon: const Icon(Icons.add, size: 16),
-                    label: const Text('Add Appliance'),
-                    onPressed: _promptAddCustomAppliance,
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          // Complete & Proceed to Stage 2 Plan Canvas Bridge
-          Container(
-            padding: const EdgeInsets.all(14),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: const BoxDecoration(
-              color: BanaagTheme.surfaceCard,
+              color: Color(0xFF161922),
               border: Border(top: BorderSide(color: BanaagTheme.surfaceCardBorder)),
             ),
-            child: ElevatedButton.icon(
-              icon: const Icon(Icons.arrow_forward_rounded),
-              label: const Text('Complete & Proceed to Stage 2 Plan Canvas'),
-              onPressed: () {
-                final consultationPhase = widget.project.phases[0];
-                final needsItem = consultationPhase.checklist.firstWhere(
-                  (c) => c.id == 'c1',
-                  orElse: () => consultationPhase.checklist.first,
-                );
-                needsItem.isCompleted = true;
-                ProjectRepository.instance.updateProject(widget.project);
-
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('✅ Client Needs Analysis complete! Generating auto-layout on Plan Canvas...')),
-                );
-
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => PlanCanvasScreen(project: widget.project),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Primary Action: Add Appliance Button (Full Width, Spacious)
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: BanaagTheme.primaryAmber,
+                    foregroundColor: Colors.black,
+                    minimumSize: const Size(double.infinity, 48),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    elevation: 2,
                   ),
-                );
-              },
+                  icon: const Icon(Icons.add_circle, size: 20),
+                  label: const Text(
+                    'Add Appliance to Room',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, letterSpacing: 0.3),
+                  ),
+                  onPressed: _promptAddCustomAppliance,
+                ),
+                const SizedBox(height: 10),
+
+                // Secondary Row: Quick Presets & Proceed to Canvas
+                Row(
+                  children: [
+                    Expanded(
+                      flex: 4,
+                      child: OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: BanaagTheme.primaryAmber,
+                          side: const BorderSide(color: BanaagTheme.surfaceCardBorder, width: 1.2),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                        icon: const Icon(Icons.flash_on, size: 16),
+                        label: const Text('Presets', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                        onPressed: _showQuickPresetPicker,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      flex: 6,
+                      child: OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.white,
+                          side: const BorderSide(color: Colors.white24, width: 1.2),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                        icon: const Icon(Icons.arrow_forward_rounded, size: 16, color: BanaagTheme.primaryAmber),
+                        label: const Text(
+                          'Proceed to Canvas',
+                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        onPressed: () {
+                          final consultationPhase = widget.project.phases[0];
+                          final needsItem = consultationPhase.checklist.firstWhere(
+                            (c) => c.id == 'c1',
+                            orElse: () => consultationPhase.checklist.first,
+                          );
+                          needsItem.isCompleted = true;
+                          ProjectRepository.instance.updateProject(widget.project);
+
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('✅ Client Needs Analysis complete! Generating auto-layout on Plan Canvas...')),
+                          );
+
+                          Navigator.pushReplacement(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => PlanCanvasScreen(project: widget.project),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
         ],
