@@ -13,7 +13,7 @@ class BanaagApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'BANAAG - Electrical Project OS',
+      title: 'BANAAG - Electrical Project Director',
       debugShowCheckedModeBanner: false,
       theme: BanaagTheme.darkTheme,
       home: const DashboardScreen(),
