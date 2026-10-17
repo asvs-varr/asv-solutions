@@ -132,116 +132,321 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
   }
 
   void _promptAddCustomAppliance() {
-    // Smart Appliance Catalog with standard wattage variants & system-decided default PF
+    // Comprehensive Philippine Electrical Load Catalog categorized cleanly
     final List<Map<String, dynamic>> applianceCatalog = [
+      // 1. HVAC & COOLING
       {
-        'category': 'HVAC & Cooling',
-        'name': 'Split-Type Air Conditioner (ACU)',
-        'defaultPF': 0.85, // Inverter standard
+        'category': '❄️ HVAC & Cooling',
+        'name': 'Split-Type Aircon (Inverter)',
+        'defaultPF': 0.85,
         'isLighting': false,
         'wattagePresets': [
           {'label': '1.0 HP Inverter (850W)', 'watts': 850, 'pf': 0.85},
           {'label': '1.5 HP Inverter (1200W)', 'watts': 1200, 'pf': 0.85},
           {'label': '2.0 HP Inverter (1600W)', 'watts': 1600, 'pf': 0.85},
           {'label': '2.5 HP Inverter (2000W)', 'watts': 2000, 'pf': 0.85},
-          {'label': '1.5 HP Non-Inverter / Conventional (1400W)', 'watts': 1400, 'pf': 0.78},
+          {'label': '3.0 HP Inverter (2500W)', 'watts': 2500, 'pf': 0.85},
         ],
       },
       {
-        'category': 'HVAC & Cooling',
-        'name': 'Window-Type Aircon',
-        'defaultPF': 0.80,
+        'category': '❄️ HVAC & Cooling',
+        'name': 'Split-Type Aircon (Conventional / Non-Inverter)',
+        'defaultPF': 0.78,
         'isLighting': false,
         'wattagePresets': [
-          {'label': '0.5 HP Window (450W)', 'watts': 450, 'pf': 0.80},
-          {'label': '0.75 HP Window (650W)', 'watts': 650, 'pf': 0.80},
-          {'label': '1.0 HP Window (900W)', 'watts': 900, 'pf': 0.80},
+          {'label': '1.0 HP Conventional (1000W)', 'watts': 1000, 'pf': 0.78},
+          {'label': '1.5 HP Conventional (1450W)', 'watts': 1450, 'pf': 0.78},
+          {'label': '2.0 HP Conventional (1950W)', 'watts': 1950, 'pf': 0.78},
+          {'label': '2.5 HP Conventional (2500W)', 'watts': 2500, 'pf': 0.78},
+        ],
+      },
+      {
+        'category': '❄️ HVAC & Cooling',
+        'name': 'Window-Type Aircon (Inverter)',
+        'defaultPF': 0.85,
+        'isLighting': false,
+        'wattagePresets': [
+          {'label': '0.75 HP Inverter Window (650W)', 'watts': 650, 'pf': 0.85},
+          {'label': '1.0 HP Inverter Window (900W)', 'watts': 900, 'pf': 0.85},
           {'label': '1.5 HP Inverter Window (1250W)', 'watts': 1250, 'pf': 0.85},
         ],
       },
       {
-        'category': 'Kitchen & Heating',
+        'category': '❄️ HVAC & Cooling',
+        'name': 'Window-Type Aircon (Conventional)',
+        'defaultPF': 0.80,
+        'isLighting': false,
+        'wattagePresets': [
+          {'label': '0.5 HP Compact Window (450W)', 'watts': 450, 'pf': 0.80},
+          {'label': '0.75 HP Window (720W)', 'watts': 720, 'pf': 0.80},
+          {'label': '1.0 HP Window (1050W)', 'watts': 1050, 'pf': 0.80},
+          {'label': '1.5 HP Window (1500W)', 'watts': 1500, 'pf': 0.80},
+        ],
+      },
+      {
+        'category': '❄️ HVAC & Cooling',
+        'name': 'Floor Mounted / Cassette Commercial ACU',
+        'defaultPF': 0.85,
+        'isLighting': false,
+        'wattagePresets': [
+          {'label': '3.0 Ton / 4.0 HP Commercial (3500W)', 'watts': 3500, 'pf': 0.85},
+          {'label': '5.0 Ton / 6.0 HP Heavy Commercial (5200W)', 'watts': 5200, 'pf': 0.88},
+        ],
+      },
+      {
+        'category': '❄️ HVAC & Cooling',
+        'name': 'Ventilation / Exhaust Fan',
+        'defaultPF': 0.80,
+        'isLighting': false,
+        'wattagePresets': [
+          {'label': 'Ceiling Exhaust 8-inch (35W)', 'watts': 35, 'pf': 0.80},
+          {'label': 'Wall Mounted Shutter Exhaust (50W)', 'watts': 50, 'pf': 0.80},
+          {'label': 'Heavy Kitchen Inline Blower (150W)', 'watts': 150, 'pf': 0.78},
+        ],
+      },
+
+      // 2. KITCHEN & COOKING
+      {
+        'category': '🍳 Kitchen & Cooking',
         'name': 'Induction Cooktop',
         'defaultPF': 0.95,
         'isLighting': false,
         'wattagePresets': [
           {'label': 'Single Burner Portable (1800W)', 'watts': 1800, 'pf': 0.95},
+          {'label': 'Single Burner Turbo (2100W)', 'watts': 2100, 'pf': 0.95},
           {'label': 'Double Burner Built-in (3500W)', 'watts': 3500, 'pf': 0.95},
-          {'label': 'Heavy 3-Zone Cooktop (5500W)', 'watts': 5500, 'pf': 0.98},
+          {'label': '4-Zone Induction Range (7000W)', 'watts': 7000, 'pf': 0.98},
         ],
       },
       {
-        'category': 'Kitchen & Heating',
-        'name': 'Refrigerator / Freezer',
-        'defaultPF': 0.85,
+        'category': '🍳 Kitchen & Cooking',
+        'name': 'Electric Range / Built-in Oven',
+        'defaultPF': 1.0,
         'isLighting': false,
         'wattagePresets': [
-          {'label': 'Personal / Compact 1-Door (90W)', 'watts': 90, 'pf': 0.80},
-          {'label': '2-Door Inverter (150W)', 'watts': 150, 'pf': 0.88},
-          {'label': 'French Door / Side-by-Side Inverter (250W)', 'watts': 250, 'pf': 0.90},
+          {'label': 'Standard Built-in Oven (2500W)', 'watts': 2500, 'pf': 1.0},
+          {'label': 'Electric Free-Standing Range & Oven (4500W)', 'watts': 4500, 'pf': 1.0},
+          {'label': 'Commercial Convection Oven (6000W)', 'watts': 6000, 'pf': 1.0},
+        ],
+      },
+      {
+        'category': '🍳 Kitchen & Cooking',
+        'name': 'Microwave & Oven Toaster',
+        'defaultPF': 0.92,
+        'isLighting': false,
+        'wattagePresets': [
+          {'label': 'Standard Microwave 20L (800W)', 'watts': 800, 'pf': 0.92},
+          {'label': 'Medium Inverter Microwave (1200W)', 'watts': 1200, 'pf': 0.95},
+          {'label': 'Convection Microwave Grill (1500W)', 'watts': 1500, 'pf': 0.95},
+          {'label': 'Pop-up Toaster / Sandwich Press (900W)', 'watts': 900, 'pf': 1.0},
+        ],
+      },
+      {
+        'category': '🍳 Kitchen & Cooking',
+        'name': 'Air Fryer / Instant Pot',
+        'defaultPF': 1.0,
+        'isLighting': false,
+        'wattagePresets': [
+          {'label': 'Compact Air Fryer (1400W)', 'watts': 1400, 'pf': 1.0},
+          {'label': 'XL Dual-Basket Air Fryer (1800W)', 'watts': 1800, 'pf': 1.0},
+          {'label': 'Electric Pressure Cooker / Instant Pot (1000W)', 'watts': 1000, 'pf': 1.0},
+        ],
+      },
+      {
+        'category': '🍳 Kitchen & Cooking',
+        'name': 'Refrigerator / Freezer',
+        'defaultPF': 0.88,
+        'isLighting': false,
+        'wattagePresets': [
+          {'label': 'Personal / Compact 1-Door (80W)', 'watts': 80, 'pf': 0.80},
+          {'label': 'Two-Door Inverter (150W)', 'watts': 150, 'pf': 0.88},
+          {'label': 'Two-Door Non-Inverter (220W)', 'watts': 220, 'pf': 0.78},
+          {'label': 'Side-by-Side / French Door Inverter (280W)', 'watts': 280, 'pf': 0.90},
           {'label': 'Chest Freezer Commercial (350W)', 'watts': 350, 'pf': 0.78},
         ],
       },
       {
-        'category': 'Water & Bath',
-        'name': 'Shower Water Heater',
-        'defaultPF': 1.0, // Pure resistive heating
+        'category': '🍳 Kitchen & Cooking',
+        'name': 'Rice Cooker & Water Kettle',
+        'defaultPF': 1.0,
         'isLighting': false,
         'wattagePresets': [
-          {'label': 'Single-Point Instant Heater (3500W)', 'watts': 3500, 'pf': 1.0},
-          {'label': 'Single-Point Compact (2500W)', 'watts': 2500, 'pf': 1.0},
-          {'label': 'Multipoint Storage Heater (4500W)', 'watts': 4500, 'pf': 1.0},
+          {'label': 'Electric Rice Cooker 1.8L (700W)', 'watts': 700, 'pf': 1.0},
+          {'label': 'Commercial Rice Cooker 5L (1500W)', 'watts': 1500, 'pf': 1.0},
+          {'label': 'Electric Fast-Boil Kettle (1500W)', 'watts': 1500, 'pf': 1.0},
+          {'label': 'Hot & Cold Water Dispenser (550W)', 'watts': 550, 'pf': 0.95},
         ],
       },
       {
-        'category': 'Laundry & Utility',
-        'name': 'Washing Machine & Dryer',
-        'defaultPF': 0.80,
+        'category': '🍳 Kitchen & Cooking',
+        'name': 'Range Hood & Dishwasher',
+        'defaultPF': 0.85,
+        'isLighting': false,
+        'wattagePresets': [
+          {'label': 'Kitchen Range Hood Telescopic (180W)', 'watts': 180, 'pf': 0.85},
+          {'label': 'Commercial Island Chimney Hood (320W)', 'watts': 320, 'pf': 0.85},
+          {'label': 'Built-in Dishwasher w/ Water Heater (1800W)', 'watts': 1800, 'pf': 0.95},
+        ],
+      },
+
+      // 3. BATHROOM & WATER HEATING
+      {
+        'category': '🚿 Bathroom & Water Heating',
+        'name': 'Shower Water Heater (Instant / Multipoint)',
+        'defaultPF': 1.0,
+        'isLighting': false,
+        'wattagePresets': [
+          {'label': 'Single-Point Instant Shower (3500W)', 'watts': 3500, 'pf': 1.0},
+          {'label': 'Single-Point Eco (2500W)', 'watts': 2500, 'pf': 1.0},
+          {'label': 'Multipoint Fast Heater (4500W)', 'watts': 4500, 'pf': 1.0},
+          {'label': 'Multipoint Heavy Storage Tank (6000W)', 'watts': 6000, 'pf': 1.0},
+        ],
+      },
+      {
+        'category': '🚿 Bathroom & Water Heating',
+        'name': 'Bathroom Convenience & Shaver Receptacle',
+        'defaultPF': 1.0,
+        'isLighting': false,
+        'wattagePresets': [
+          {'label': 'GFCI Protected Vanity Outlet (180VA)', 'watts': 180, 'pf': 1.0},
+          {'label': 'Hair Dryer / Hair Iron Load (1600W)', 'watts': 1600, 'pf': 1.0},
+          {'label': 'Bidet Seat Heater (450W)', 'watts': 450, 'pf': 1.0},
+        ],
+      },
+
+      // 4. LAUNDRY & UTILITY
+      {
+        'category': '🧺 Laundry & Utility',
+        'name': 'Washing Machine',
+        'defaultPF': 0.85,
         'isLighting': false,
         'wattagePresets': [
           {'label': 'Top-Load Inverter Washer (400W)', 'watts': 400, 'pf': 0.85},
-          {'label': 'Front-Load Washer (1800W with heater)', 'watts': 1800, 'pf': 0.90},
-          {'label': 'Electric Heat Pump Clothes Dryer (1200W)', 'watts': 1200, 'pf': 0.88},
-          {'label': 'Booster / Pressure Water Pump (750W)', 'watts': 750, 'pf': 0.75},
+          {'label': 'Twin-Tub Semi-Auto Washer (450W)', 'watts': 450, 'pf': 0.75},
+          {'label': 'Front-Load Washer with Water Heater (1800W)', 'watts': 1800, 'pf': 0.92},
         ],
       },
       {
-        'category': 'Lighting & Ambience',
+        'category': '🧺 Laundry & Utility',
+        'name': 'Clothes Dryer & Press',
+        'defaultPF': 0.95,
+        'isLighting': false,
+        'wattagePresets': [
+          {'label': 'Heat Pump Dryer Inverter (1200W)', 'watts': 1200, 'pf': 0.88},
+          {'label': 'Electric Tumble Dryer Resistive (2400W)', 'watts': 2400, 'pf': 1.0},
+          {'label': 'Heavy Steam Ironing Station (1800W)', 'watts': 1800, 'pf': 1.0},
+        ],
+      },
+
+      // 5. LIGHTING & FIXTURES
+      {
+        'category': '💡 Lighting & Fixtures',
         'name': 'Luminaires & LED Fixtures',
-        'defaultPF': 0.85,
+        'defaultPF': 0.88,
         'isLighting': true,
         'wattagePresets': [
           {'label': 'LED Downlight / Slim Panel (12W)', 'watts': 12, 'pf': 0.85},
           {'label': 'High-Output LED Downlight (18W)', 'watts': 18, 'pf': 0.88},
           {'label': 'Ceiling Fan with Integrated Light (75W)', 'watts': 75, 'pf': 0.80},
           {'label': 'Outdoor Security Floodlight (50W)', 'watts': 50, 'pf': 0.90},
+          {'label': 'LED Strip / Accent Cove Lighting (60W)', 'watts': 60, 'pf': 0.90},
+          {'label': 'Chandelier / Pendant Fixture (100W)', 'watts': 100, 'pf': 0.95},
+        ],
+      },
+
+      // 6. PUMPS, MOTORS & HEAVY TOOLS
+      {
+        'category': '⚡ Pumps, Motors & Heavy Tools',
+        'name': 'Water Pumps & Pressure Systems',
+        'defaultPF': 0.75,
+        'isLighting': false,
+        'wattagePresets': [
+          {'label': 'Automatic Constant Pressure Booster Pump (550W / 0.75HP)', 'watts': 550, 'pf': 0.75},
+          {'label': 'Deep Well Jet Pump (750W / 1.0HP)', 'watts': 750, 'pf': 0.75},
+          {'label': 'Submersible Deep Well Motor (1100W / 1.5HP)', 'watts': 1100, 'pf': 0.75},
+          {'label': 'Swimming Pool Filtration Pump (1500W / 2.0HP)', 'watts': 1500, 'pf': 0.78},
         ],
       },
       {
-        'category': 'General & Entertainment',
-        'name': 'General Convenience Outlets / TV',
+        'category': '⚡ Pumps, Motors & Heavy Tools',
+        'name': 'Gate Motors & Workshop Tools',
+        'defaultPF': 0.78,
+        'isLighting': false,
+        'wattagePresets': [
+          {'label': 'Automated Sliding Gate Motor (370W / 0.5HP)', 'watts': 370, 'pf': 0.78},
+          {'label': 'Air Compressor Portable (1500W / 2.0HP)', 'watts': 1500, 'pf': 0.75},
+          {'label': 'Workshop Table Saw / Cut-off (2000W)', 'watts': 2000, 'pf': 0.85},
+          {'label': 'Inverter Arc Welder Outlet (3500W)', 'watts': 3500, 'pf': 0.88},
+        ],
+      },
+
+      // 7. EV & RENEWABLE TECH
+      {
+        'category': '🚗 EV & Renewable Tech',
+        'name': 'Electric Vehicle (EV) Charger',
+        'defaultPF': 0.98,
+        'isLighting': false,
+        'wattagePresets': [
+          {'label': 'Level 1 Portable Emergency Charger (16A / 3680W)', 'watts': 3680, 'pf': 0.98},
+          {'label': 'Level 2 Fast Home Wallbox (32A / 7400W)', 'watts': 7400, 'pf': 0.99},
+        ],
+      },
+      {
+        'category': '🚗 EV & Renewable Tech',
+        'name': 'Solar Inverter / Battery Storage Circuit',
+        'defaultPF': 0.98,
+        'isLighting': false,
+        'wattagePresets': [
+          {'label': 'Hybrid Solar Inverter Line (3.0 kW)', 'watts': 3000, 'pf': 0.98},
+          {'label': 'Hybrid Solar Inverter Line (5.0 kW)', 'watts': 5000, 'pf': 0.98},
+          {'label': 'Home UPS / Backup Battery Charger (1200W)', 'watts': 1200, 'pf': 0.95},
+        ],
+      },
+
+      // 8. ENTERTAINMENT & TECH
+      {
+        'category': '📺 Entertainment & Tech',
+        'name': 'Entertainment & Audio Hub',
         'defaultPF': 0.90,
         'isLighting': false,
         'wattagePresets': [
-          {'label': 'PEC Standard Duplex Receptacle (180VA)', 'watts': 180, 'pf': 1.0},
           {'label': 'Smart 4K TV & Soundbar Rack (250W)', 'watts': 250, 'pf': 0.90},
-          {'label': 'Gaming PC / Workstation (500W)', 'watts': 500, 'pf': 0.92},
-          {'label': 'Microwave & Oven Toaster (1200W)', 'watts': 1200, 'pf': 0.95},
+          {'label': 'Full Home Theater & AV Receiver (600W)', 'watts': 600, 'pf': 0.88},
+          {'label': 'Desktop PC / Gaming Workstation (500W)', 'watts': 500, 'pf': 0.92},
+          {'label': 'Server Rack / PoE Switch Hub (300W)', 'watts': 300, 'pf': 0.92},
         ],
       },
       {
-        'category': 'Custom',
-        'name': 'Custom User-Defined Appliance',
+        'category': '📺 Entertainment & Tech',
+        'name': 'General Convenience Outlets',
+        'defaultPF': 1.0,
+        'isLighting': false,
+        'wattagePresets': [
+          {'label': 'PEC Standard Duplex Receptacle (180VA)', 'watts': 180, 'pf': 1.0},
+          {'label': 'Heavy-Duty Quad Receptacle Pack (360VA)', 'watts': 360, 'pf': 1.0},
+          {'label': 'Weatherproof Outdoor WR Receptacle (180VA)', 'watts': 180, 'pf': 1.0},
+        ],
+      },
+
+      // 9. CUSTOM APPLIANCE
+      {
+        'category': '⚙️ Custom / Manual Input',
+        'name': 'Custom User-Defined Load',
         'defaultPF': 0.85,
         'isLighting': false,
         'wattagePresets': [
-          {'label': 'Manual Input / Custom', 'watts': 1000, 'pf': 0.85},
+          {'label': 'Manual Input Load (1000W)', 'watts': 1000, 'pf': 0.85},
         ],
       },
     ];
 
-    String selectedApplianceName = applianceCatalog.first['name'];
-    Map<String, dynamic> selectedCatalogItem = applianceCatalog.first;
+    // Extract unique categories
+    final List<String> categories = applianceCatalog.map((e) => e['category'] as String).toSet().toList();
+
+    String selectedCategory = categories.first;
+    List<Map<String, dynamic>> filteredAppliances = applianceCatalog.where((e) => e['category'] == selectedCategory).toList();
+    String selectedApplianceName = filteredAppliances.first['name'];
+    Map<String, dynamic> selectedCatalogItem = filteredAppliances.first;
     List<Map<String, dynamic>> currentWattagePresets = List<Map<String, dynamic>>.from(selectedCatalogItem['wattagePresets']);
     String selectedPresetLabel = currentWattagePresets.first['label'];
 
@@ -252,11 +457,11 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
     );
 
     double powerFactor = (currentWattagePresets.first['pf'] as num).toDouble();
-    String activeLoadType = 'Inverter';
     bool isDedicated = false;
     bool isLighting = selectedCatalogItem['isLighting'] ?? false;
     bool isUpdatingFromWatts = false;
     bool isUpdatingFromVA = false;
+    bool isAdvancedPfExpanded = false;
 
     // Power factor preset definitions for quick override
     final Map<String, double> pfPresets = {
@@ -271,13 +476,18 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (context, setDialogState) {
-          void updateDedicatedStatus(double calculatedVA, String loadType) {
-            if (calculatedVA >= 1500.0 ||
-                loadType.toLowerCase().contains('motor') ||
-                loadType.toLowerCase().contains('acu') ||
-                selectedApplianceName.toLowerCase().contains('heater') ||
-                selectedApplianceName.toLowerCase().contains('aircon') ||
-                selectedApplianceName.toLowerCase().contains('induction')) {
+          void updateDedicatedStatus(double calculatedVA, String loadName) {
+            final lower = loadName.toLowerCase();
+            if (calculatedVA >= 1400.0 ||
+                lower.contains('motor') ||
+                lower.contains('acu') ||
+                lower.contains('aircon') ||
+                lower.contains('heater') ||
+                lower.contains('induction') ||
+                lower.contains('pump') ||
+                lower.contains('charger') ||
+                lower.contains('welder') ||
+                lower.contains('dryer')) {
               isDedicated = true;
             }
           }
@@ -289,7 +499,7 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
             if (w != null && powerFactor > 0) {
               final double calculatedVA = w / powerFactor;
               vaController.text = calculatedVA.toStringAsFixed(0);
-              updateDedicatedStatus(calculatedVA, activeLoadType);
+              updateDedicatedStatus(calculatedVA, selectedApplianceName);
             }
             isUpdatingFromWatts = false;
             setDialogState(() {});
@@ -302,26 +512,26 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
             if (v != null) {
               final double calculatedW = v * powerFactor;
               wattsController.text = calculatedW.toStringAsFixed(0);
-              updateDedicatedStatus(v, activeLoadType);
+              updateDedicatedStatus(v, selectedApplianceName);
             }
             isUpdatingFromVA = false;
             setDialogState(() {});
           }
 
-          void applyPF(double newPF, String label) {
+          void applyPF(double newPF) {
             powerFactor = newPF;
-            activeLoadType = label;
             final double? w = double.tryParse(wattsController.text);
             if (w != null && powerFactor > 0) {
               final double calculatedVA = w / powerFactor;
               vaController.text = calculatedVA.toStringAsFixed(0);
-              updateDedicatedStatus(calculatedVA, activeLoadType);
+              updateDedicatedStatus(calculatedVA, selectedApplianceName);
             }
             setDialogState(() {});
           }
 
           final double currentVA = double.tryParse(vaController.text) ?? 0.0;
           final double currentAmps = currentVA / 230.0;
+          final double currentWatts = double.tryParse(wattsController.text) ?? (currentVA * powerFactor);
 
           return AlertDialog(
             backgroundColor: BanaagTheme.surfaceCard,
@@ -338,268 +548,373 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
                 ),
               ],
             ),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // 1. SMART APPLIANCE NAME DROPDOWN
-                  DropdownButtonFormField<String>(
-                    initialValue: selectedApplianceName,
-                    dropdownColor: BanaagTheme.surfaceCard,
-                    isExpanded: true,
-                    decoration: const InputDecoration(
-                      labelText: 'Select Appliance Type',
-                      labelStyle: TextStyle(color: BanaagTheme.primaryAmber),
-                      prefixIcon: Icon(Icons.category_outlined, color: BanaagTheme.primaryAmber, size: 20),
-                    ),
-                    items: applianceCatalog.map((item) {
-                      return DropdownMenuItem<String>(
-                        value: item['name'] as String,
-                        child: Text(
-                          '${item['name']} (${item['category']})',
-                          style: const TextStyle(fontSize: 13),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      );
-                    }).toList(),
-                    onChanged: (val) {
-                      if (val != null) {
-                        setDialogState(() {
-                          selectedApplianceName = val;
-                          selectedCatalogItem = applianceCatalog.firstWhere((i) => i['name'] == val);
-                          currentWattagePresets = List<Map<String, dynamic>>.from(selectedCatalogItem['wattagePresets']);
-                          selectedPresetLabel = currentWattagePresets.first['label'];
-                          isLighting = selectedCatalogItem['isLighting'] ?? false;
-
-                          if (val != 'Custom User-Defined Appliance') {
-                            nameController.text = val;
-                          }
-
-                          // Auto-apply system decided default PF & Wattage
-                          final preset = currentWattagePresets.first;
-                          powerFactor = (preset['pf'] as num).toDouble();
-                          wattsController.text = preset['watts'].toString();
-                          final double calcVA = (preset['watts'] as num) / powerFactor;
-                          vaController.text = calcVA.toStringAsFixed(0);
-                          updateDedicatedStatus(calcVA, val);
-                        });
-                      }
-                    },
-                  ),
-                  const SizedBox(height: 10),
-
-                  // Editable Name Field (Auto-filled, but free to modify like brand or model)
-                  TextField(
-                    controller: nameController,
-                    decoration: const InputDecoration(
-                      labelText: 'Specific Appliance Name / Label',
-                      hintText: 'e.g. Carrier 1.5HP Inverter ACU (Living)',
-                      labelStyle: TextStyle(color: BanaagTheme.textMuted),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-
-                  // 2. WATTAGE & VARIANT PRESETS DROPDOWN
-                  DropdownButtonFormField<String>(
-                    initialValue: currentWattagePresets.any((p) => p['label'] == selectedPresetLabel) ? selectedPresetLabel : null,
-                    dropdownColor: BanaagTheme.surfaceCard,
-                    isExpanded: true,
-                    decoration: const InputDecoration(
-                      labelText: '1-Tap Wattage & Variant Preset',
-                      labelStyle: TextStyle(color: Colors.white70),
-                      prefixIcon: Icon(Icons.flash_on, color: BanaagTheme.primaryAmber, size: 20),
-                    ),
-                    items: currentWattagePresets.map((preset) {
-                      return DropdownMenuItem<String>(
-                        value: preset['label'] as String,
-                        child: Text(
-                          '${preset['label']} • [System PF: ${(preset['pf'] as num).toStringAsFixed(2)}]',
-                          style: const TextStyle(fontSize: 12),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      );
-                    }).toList(),
-                    onChanged: (val) {
-                      if (val != null) {
-                        setDialogState(() {
-                          selectedPresetLabel = val;
-                          final match = currentWattagePresets.firstWhere((p) => p['label'] == val);
-                          powerFactor = (match['pf'] as num).toDouble();
-                          wattsController.text = match['watts'].toString();
-                          final double calcVA = (match['watts'] as num) / powerFactor;
-                          vaController.text = calcVA.toStringAsFixed(0);
-                          updateDedicatedStatus(calcVA, selectedApplianceName);
-                        });
-                      }
-                    },
-                  ),
-                  const SizedBox(height: 12),
-
-                  // Dual Input: Watts & VA
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: wattsController,
-                          keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(
-                            labelText: 'Real Power (Watts)',
-                            suffixText: 'W',
-                            labelStyle: TextStyle(color: BanaagTheme.textMuted),
-                          ),
-                          onChanged: syncFromWatts,
-                        ),
+            content: SizedBox(
+              width: double.maxFinite,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // STEP 1: CATEGORY DROPDOWN
+                    DropdownButtonFormField<String>(
+                      initialValue: selectedCategory,
+                      dropdownColor: BanaagTheme.surfaceCard,
+                      isExpanded: true,
+                      decoration: const InputDecoration(
+                        labelText: 'Step 1: Category',
+                        labelStyle: TextStyle(color: BanaagTheme.primaryAmber, fontWeight: FontWeight.bold),
+                        prefixIcon: Icon(Icons.grid_view_rounded, color: BanaagTheme.primaryAmber, size: 20),
+                        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                       ),
-                      const SizedBox(width: 8),
-                      const Icon(Icons.arrow_forward, size: 16, color: BanaagTheme.textMuted),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: TextField(
-                          controller: vaController,
-                          keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(
-                            labelText: 'Apparent (VA)',
-                            suffixText: 'VA',
-                            labelStyle: TextStyle(color: BanaagTheme.primaryAmber),
-                          ),
-                          onChanged: syncFromVA,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 14),
+                      items: categories.map((cat) {
+                        return DropdownMenuItem<String>(
+                          value: cat,
+                          child: Text(cat, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                        );
+                      }).toList(),
+                      onChanged: (newCat) {
+                        if (newCat != null && newCat != selectedCategory) {
+                          setDialogState(() {
+                            selectedCategory = newCat;
+                            filteredAppliances = applianceCatalog.where((e) => e['category'] == selectedCategory).toList();
+                            selectedApplianceName = filteredAppliances.first['name'];
+                            selectedCatalogItem = filteredAppliances.first;
+                            currentWattagePresets = List<Map<String, dynamic>>.from(selectedCatalogItem['wattagePresets']);
+                            selectedPresetLabel = currentWattagePresets.first['label'];
+                            isLighting = selectedCatalogItem['isLighting'] ?? false;
 
-                  // Power Factor (PF) Presets
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'Power Factor (PF):',
-                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: BanaagTheme.primaryAmber.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          'PF: ${powerFactor.toStringAsFixed(2)}',
-                          style: const TextStyle(
-                            color: BanaagTheme.primaryAmber,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 4,
-                    children: pfPresets.entries.map((entry) {
-                      final bool isSelected = (powerFactor - entry.value).abs() < 0.02;
-                      return ChoiceChip(
-                        label: Text(entry.key, style: const TextStyle(fontSize: 10)),
-                        selected: isSelected,
-                        selectedColor: BanaagTheme.primaryAmber,
-                        backgroundColor: BanaagTheme.surfaceCard,
-                        labelStyle: TextStyle(
-                          color: isSelected ? Colors.black : Colors.white70,
-                          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                        ),
-                        onSelected: (val) {
-                          if (val) applyPF(entry.value, entry.key);
-                        },
-                      );
-                    }).toList(),
-                  ),
-                  const SizedBox(height: 8),
+                            if (selectedCategory != '⚙️ Custom / Manual Input') {
+                              nameController.text = selectedApplianceName;
+                            }
 
-                  // Power Factor Fine-Tune Slider
-                  SliderTheme(
-                    data: SliderTheme.of(context).copyWith(
-                      thumbColor: BanaagTheme.primaryAmber,
-                      activeTrackColor: BanaagTheme.primaryAmber,
-                      inactiveTrackColor: Colors.white24,
-                      trackHeight: 3,
-                    ),
-                    child: Slider(
-                      value: powerFactor,
-                      min: 0.50,
-                      max: 1.0,
-                      divisions: 50,
-                      label: powerFactor.toStringAsFixed(2),
-                      onChanged: (val) {
-                        applyPF(val, 'Custom');
+                            final preset = currentWattagePresets.first;
+                            powerFactor = (preset['pf'] as num).toDouble();
+                            wattsController.text = preset['watts'].toString();
+                            final double calcVA = (preset['watts'] as num) / powerFactor;
+                            vaController.text = calcVA.toStringAsFixed(0);
+                            updateDedicatedStatus(calcVA, selectedApplianceName);
+                          });
+                        }
                       },
                     ),
-                  ),
+                    const SizedBox(height: 10),
 
-                  // Live Electrical Conversion Summary Ribbon
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: Colors.black26,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.white12),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text('Formula: VA = Watts ÷ PF', style: TextStyle(fontSize: 10, color: BanaagTheme.textMuted)),
-                            Text('${wattsController.text}W ÷ ${powerFactor.toStringAsFixed(2)} = ${currentVA.toStringAsFixed(0)} VA',
-                                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white)),
-                          ],
-                        ),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            const Text('Current (230V)', style: TextStyle(fontSize: 10, color: BanaagTheme.textMuted)),
-                            Text('${currentAmps.toStringAsFixed(2)} A',
-                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: BanaagTheme.primaryAmber)),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 12),
+                    // STEP 2: APPLIANCE TYPE DROPDOWN
+                    DropdownButtonFormField<String>(
+                      key: ValueKey('app-dropdown-$selectedCategory'),
+                      initialValue: filteredAppliances.any((a) => a['name'] == selectedApplianceName)
+                          ? selectedApplianceName
+                          : filteredAppliances.first['name'],
+                      dropdownColor: BanaagTheme.surfaceCard,
+                      isExpanded: true,
+                      decoration: const InputDecoration(
+                        labelText: 'Step 2: Appliance Type',
+                        labelStyle: TextStyle(color: Colors.white70),
+                        prefixIcon: Icon(Icons.devices_other_outlined, color: BanaagTheme.primaryAmber, size: 20),
+                        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      ),
+                      items: filteredAppliances.map((item) {
+                        return DropdownMenuItem<String>(
+                          value: item['name'] as String,
+                          child: Text(
+                            item['name'] as String,
+                            style: const TextStyle(fontSize: 13),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        );
+                      }).toList(),
+                      onChanged: (val) {
+                        if (val != null) {
+                          setDialogState(() {
+                            selectedApplianceName = val;
+                            selectedCatalogItem = filteredAppliances.firstWhere((i) => i['name'] == val);
+                            currentWattagePresets = List<Map<String, dynamic>>.from(selectedCatalogItem['wattagePresets']);
+                            selectedPresetLabel = currentWattagePresets.first['label'];
+                            isLighting = selectedCatalogItem['isLighting'] ?? false;
 
-                  // Dedicated Circuit Checkbox
-                  CheckboxListTile(
-                    contentPadding: EdgeInsets.zero,
-                    activeColor: BanaagTheme.primaryAmber,
-                    title: Row(
-                      children: [
-                        const Text('Dedicated Circuit Line', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
-                        if (isDedicated) ...[
-                          const SizedBox(width: 6),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                            decoration: BoxDecoration(
-                              color: Colors.redAccent.withValues(alpha: 0.2),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: const Text('PEC SUGGESTED', style: TextStyle(color: Colors.redAccent, fontSize: 8, fontWeight: FontWeight.bold)),
+                            if (selectedCategory != '⚙️ Custom / Manual Input') {
+                              nameController.text = val;
+                            }
+
+                            final preset = currentWattagePresets.first;
+                            powerFactor = (preset['pf'] as num).toDouble();
+                            wattsController.text = preset['watts'].toString();
+                            final double calcVA = (preset['watts'] as num) / powerFactor;
+                            vaController.text = calcVA.toStringAsFixed(0);
+                            updateDedicatedStatus(calcVA, val);
+                          });
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 10),
+
+                    // Specific Label / Model Override (Optional)
+                    TextField(
+                      controller: nameController,
+                      style: const TextStyle(fontSize: 13),
+                      decoration: const InputDecoration(
+                        labelText: 'Appliance Label / Specific Brand (Optional)',
+                        hintText: 'e.g. Carrier 1.5HP Inverter or Panasonic Ref',
+                        labelStyle: TextStyle(color: BanaagTheme.textMuted, fontSize: 12),
+                        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+
+                    // STEP 3: WATTAGE & VARIANT PRESETS DROPDOWN
+                    DropdownButtonFormField<String>(
+                      key: ValueKey('preset-dropdown-$selectedApplianceName'),
+                      initialValue: currentWattagePresets.any((p) => p['label'] == selectedPresetLabel)
+                          ? selectedPresetLabel
+                          : currentWattagePresets.first['label'] as String,
+                      dropdownColor: BanaagTheme.surfaceCard,
+                      isExpanded: true,
+                      decoration: const InputDecoration(
+                        labelText: 'Wattage Variant Preset',
+                        labelStyle: TextStyle(color: Colors.white70, fontSize: 12),
+                        prefixIcon: Icon(Icons.flash_on, color: BanaagTheme.primaryAmber, size: 20),
+                        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      ),
+                      items: currentWattagePresets.map((preset) {
+                        return DropdownMenuItem<String>(
+                          value: preset['label'] as String,
+                          child: Text(
+                            preset['label'] as String,
+                            style: const TextStyle(fontSize: 12),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        );
+                      }).toList(),
+                      onChanged: (val) {
+                        if (val != null) {
+                          setDialogState(() {
+                            selectedPresetLabel = val;
+                            final match = currentWattagePresets.firstWhere((p) => p['label'] == val);
+                            powerFactor = (match['pf'] as num).toDouble();
+                            wattsController.text = match['watts'].toString();
+                            final double calcVA = (match['watts'] as num) / powerFactor;
+                            vaController.text = calcVA.toStringAsFixed(0);
+                            updateDedicatedStatus(calcVA, selectedApplianceName);
+                          });
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 12),
+
+                    // STREAMLINED HIGH-CONTRAST POWER SUMMARY PILL
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.35),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: BanaagTheme.primaryAmber.withValues(alpha: 0.3)),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('REAL POWER', style: TextStyle(color: BanaagTheme.textMuted, fontSize: 9, letterSpacing: 0.5)),
+                              Text('${currentWatts.toStringAsFixed(0)} W',
+                                  style: const TextStyle(color: Colors.cyanAccent, fontWeight: FontWeight.bold, fontSize: 15)),
+                            ],
+                          ),
+                          Container(width: 1, height: 28, color: Colors.white12),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              const Text('APPARENT LOAD', style: TextStyle(color: BanaagTheme.textMuted, fontSize: 9, letterSpacing: 0.5)),
+                              Text('${currentVA.toStringAsFixed(0)} VA',
+                                  style: const TextStyle(color: BanaagTheme.primaryAmber, fontWeight: FontWeight.bold, fontSize: 15)),
+                            ],
+                          ),
+                          Container(width: 1, height: 28, color: Colors.white12),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              const Text('AMP RATING (230V)', style: TextStyle(color: BanaagTheme.textMuted, fontSize: 9, letterSpacing: 0.5)),
+                              Text('${currentAmps.toStringAsFixed(1)} A',
+                                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
+                            ],
                           ),
                         ],
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+
+                    // MANUAL WATTS & VA EDITABLE FIELDS (Side-by-Side)
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: wattsController,
+                            keyboardType: TextInputType.number,
+                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                            decoration: const InputDecoration(
+                              labelText: 'Watts (P)',
+                              suffixText: 'W',
+                              labelStyle: TextStyle(color: Colors.cyanAccent, fontSize: 11),
+                              contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                            ),
+                            onChanged: syncFromWatts,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: TextField(
+                            controller: vaController,
+                            keyboardType: TextInputType.number,
+                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                            decoration: const InputDecoration(
+                              labelText: 'Apparent (VA)',
+                              suffixText: 'VA',
+                              labelStyle: TextStyle(color: BanaagTheme.primaryAmber, fontSize: 11),
+                              contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                            ),
+                            onChanged: syncFromVA,
+                          ),
+                        ),
                       ],
                     ),
-                    subtitle: Text(
-                      isDedicated
-                          ? 'Automatic flagged: >1.5kVA o Motor load. Nangangailangan ng sariling homerun wire at breaker.'
-                          : 'I-check kung kailangan ng sariling homerun wire at breaker sa panelboard.',
-                      style: TextStyle(fontSize: 10, color: isDedicated ? Colors.redAccent.shade100 : BanaagTheme.textMuted),
+                    const SizedBox(height: 8),
+
+                    // COLLAPSIBLE ADVANCED POWER FACTOR (PF) ACCORDION
+                    InkWell(
+                      borderRadius: BorderRadius.circular(8),
+                      onTap: () {
+                        setDialogState(() {
+                          isAdvancedPfExpanded = !isAdvancedPfExpanded;
+                        });
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.04),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.white12),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Row(
+                              children: [
+                                const Icon(Icons.tune, size: 14, color: BanaagTheme.primaryAmber),
+                                const SizedBox(width: 6),
+                                const Text('Power Factor (PF): ', style: TextStyle(fontSize: 11, color: Colors.white70)),
+                                Text(
+                                  powerFactor.toStringAsFixed(2),
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: BanaagTheme.primaryAmber),
+                                ),
+                              ],
+                            ),
+                            Row(
+                              children: [
+                                Text(
+                                  isAdvancedPfExpanded ? 'Hide Options' : 'Fine-tune PF',
+                                  style: const TextStyle(fontSize: 11, color: BanaagTheme.textMuted),
+                                ),
+                                Icon(
+                                  isAdvancedPfExpanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+                                  size: 16,
+                                  color: BanaagTheme.textMuted,
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
-                    value: isDedicated,
-                    onChanged: (val) => setDialogState(() => isDedicated = val ?? false),
-                  ),
-                ],
+
+                    // EXPANDABLE PF CONTROLS (Only visible when toggled)
+                    if (isAdvancedPfExpanded) ...[
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Colors.black26,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.white12),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('Quick PF Presets (PEC Standards):', style: TextStyle(color: BanaagTheme.textMuted, fontSize: 10)),
+                            const SizedBox(height: 6),
+                            Wrap(
+                              spacing: 6,
+                              runSpacing: 4,
+                              children: pfPresets.entries.map((entry) {
+                                final bool isSelected = (powerFactor - entry.value).abs() < 0.02;
+                                return ChoiceChip(
+                                  label: Text(entry.key, style: const TextStyle(fontSize: 10)),
+                                  selected: isSelected,
+                                  selectedColor: BanaagTheme.primaryAmber,
+                                  backgroundColor: BanaagTheme.surfaceCard,
+                                  labelStyle: TextStyle(
+                                    color: isSelected ? Colors.black : Colors.white70,
+                                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                  ),
+                                  onSelected: (val) {
+                                    if (val) applyPF(entry.value);
+                                  },
+                                );
+                              }).toList(),
+                            ),
+                            const SizedBox(height: 6),
+                            SliderTheme(
+                              data: SliderTheme.of(context).copyWith(
+                                thumbColor: BanaagTheme.primaryAmber,
+                                activeTrackColor: BanaagTheme.primaryAmber,
+                                inactiveTrackColor: Colors.white24,
+                                trackHeight: 2,
+                              ),
+                              child: Slider(
+                                value: powerFactor,
+                                min: 0.50,
+                                max: 1.0,
+                                divisions: 50,
+                                label: powerFactor.toStringAsFixed(2),
+                                onChanged: (val) => applyPF(val),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 10),
+
+                    // Dedicated Circuit Checkbox
+                    CheckboxListTile(
+                      contentPadding: EdgeInsets.zero,
+                      activeColor: BanaagTheme.primaryAmber,
+                      title: Row(
+                        children: [
+                          const Text('Dedicated Circuit Line', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                          if (isDedicated) ...[
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                              decoration: BoxDecoration(
+                                color: Colors.redAccent.withValues(alpha: 0.2),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: const Text('PEC SUGGESTED', style: TextStyle(color: Colors.redAccent, fontSize: 8, fontWeight: FontWeight.bold)),
+                            ),
+                          ],
+                        ],
+                      ),
+                      subtitle: Text(
+                        isDedicated
+                            ? 'Automatic flagged: >1.4kVA o Heavy Motor/Heater load. Nangangailangan ng sariling homerun wire at breaker.'
+                            : 'I-check kung kailangan ng sariling homerun wire at breaker sa panelboard.',
+                        style: TextStyle(fontSize: 10, color: isDedicated ? Colors.redAccent.shade100 : BanaagTheme.textMuted),
+                      ),
+                      value: isDedicated,
+                      onChanged: (val) => setDialogState(() => isDedicated = val ?? false),
+                    ),
+                  ],
+                ),
               ),
             ),
             actions: [
