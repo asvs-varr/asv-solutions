@@ -5,6 +5,7 @@ import '../../domain/models.dart';
 import '../../domain/takeoff_engine.dart';
 import '../../data/project_repository.dart';
 import '../theme/banaag_theme.dart';
+import '../widgets/dxf_export_guide_dialog.dart';
 
 class PlanCanvasScreen extends StatefulWidget {
   final Project? project;
@@ -126,6 +127,11 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
       appBar: AppBar(
         title: const Text('📐 Plan Canvas & Auto-Takeoff'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.help_outline, color: BanaagTheme.primaryAmber),
+            tooltip: 'AutoCAD .DXF 100% Export Guide',
+            onPressed: () => DxfExportGuideDialog.show(context),
+          ),
           IconButton(
             icon: const Icon(Icons.file_upload_outlined, color: BanaagTheme.primaryAmber),
             tooltip: 'Import AutoCAD .DXF / Blueprint Image',

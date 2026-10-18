@@ -6,6 +6,7 @@ import '../../data/project_repository.dart';
 import '../theme/banaag_theme.dart';
 import 'client_needs_analysis_screen.dart';
 import '../widgets/project_management_dialogs.dart';
+import '../widgets/dxf_export_guide_dialog.dart';
 
 class WorkflowScreen extends StatefulWidget {
   final Project project;
@@ -76,7 +77,9 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
             tooltip: 'More Options',
             color: BanaagTheme.surfaceCard,
             onSelected: (val) {
-              if (val == 'archive') {
+              if (val == 'dxf_guide') {
+                DxfExportGuideDialog.show(context);
+              } else if (val == 'archive') {
                 ProjectManagementDialogs.toggleArchiveProject(
                   context,
                   _project,
@@ -95,6 +98,16 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
               }
             },
             itemBuilder: (ctx) => [
+              const PopupMenuItem(
+                value: 'dxf_guide',
+                child: Row(
+                  children: [
+                    Icon(Icons.architecture, color: BanaagTheme.primaryAmber, size: 20),
+                    SizedBox(width: 8),
+                    Text('AutoCAD .DXF Guide'),
+                  ],
+                ),
+              ),
               PopupMenuItem(
                 value: 'archive',
                 child: Row(
@@ -120,28 +133,29 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
           ),
         ],
       ),
-      body: ListView.builder(
+      body: ListView(
         padding: const EdgeInsets.all(16.0),
-        itemCount: _project.phases.length,
-        itemBuilder: (context, index) {
-          final phase = _project.phases[index];
-          final bool isCurrent = phase.type.phaseNumber == _project.currentPhaseNumber;
-          final bool isLocked = phase.type.phaseNumber > _project.currentPhaseNumber;
+        children: [
+          if (_project.intakeMode == 'AUTOCAD_DXF')
+            _buildDxfGuideBanner(),
+          ..._project.phases.map((phase) {
+            final bool isCurrent = phase.type.phaseNumber == _project.currentPhaseNumber;
+            final bool isLocked = phase.type.phaseNumber > _project.currentPhaseNumber;
 
-          return Card(
-            margin: const EdgeInsets.only(bottom: 16.0),
-            color: isCurrent ? const Color(0xFF222834) : BanaagTheme.surfaceCard,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-              side: BorderSide(
-                color: isCurrent
-                    ? BanaagTheme.primaryAmber
-                    : (phase.isCompleted ? BanaagTheme.successGreen : BanaagTheme.surfaceCardBorder),
-                width: isCurrent ? 2.0 : 1.0,
+            return Card(
+              margin: const EdgeInsets.only(bottom: 16.0),
+              color: isCurrent ? const Color(0xFF222834) : BanaagTheme.surfaceCard,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+                side: BorderSide(
+                  color: isCurrent
+                      ? BanaagTheme.primaryAmber
+                      : (phase.isCompleted ? BanaagTheme.successGreen : BanaagTheme.surfaceCardBorder),
+                  width: isCurrent ? 2.0 : 1.0,
+                ),
               ),
-            ),
-            child: ExpansionTile(
-              initiallyExpanded: isCurrent,
+              child: ExpansionTile(
+                initiallyExpanded: isCurrent,
               leading: CircleAvatar(
                 backgroundColor: phase.isCompleted
                     ? BanaagTheme.successGreen
@@ -168,7 +182,80 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
               ],
             ),
           );
-        },
+        }),
+      ],
+    ),
+  );
+}
+
+  Widget _buildDxfGuideBanner() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16.0),
+      padding: const EdgeInsets.all(14.0),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E232D),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: BanaagTheme.primaryAmber.withValues(alpha: 0.8), width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: BanaagTheme.primaryAmber.withValues(alpha: 0.1),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: BanaagTheme.primaryAmber.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: const Icon(Icons.architecture, color: BanaagTheme.primaryAmber, size: 20),
+              ),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'AutoCAD .DXF Project Mode Active',
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.white),
+                    ),
+                    Text(
+                      '100% Guaranteed Analyzer Protocol',
+                      style: TextStyle(color: BanaagTheme.primaryAmber, fontSize: 11, fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          const Text(
+            'Bago mag-upload ng plano sa Stage 2 (Plan Takeoff), siguraduhing sumunod ang CAD file sa EXPLODE, AUDIT, at standard layer naming conventions.',
+            style: TextStyle(fontSize: 11, color: BanaagTheme.textMuted, height: 1.3),
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                foregroundColor: BanaagTheme.primaryAmber,
+                side: const BorderSide(color: BanaagTheme.primaryAmber),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                padding: const EdgeInsets.symmetric(vertical: 8),
+              ),
+              icon: const Icon(Icons.menu_book, size: 16),
+              label: const Text('Buksan ang AutoCAD .DXF Export Guide', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+              onPressed: () => DxfExportGuideDialog.show(context),
+            ),
+          ),
+        ],
       ),
     );
   }
