@@ -24,3 +24,8 @@
 -keepclasseswithmembernames class * {
     native <methods>;
 }
+
+# Flutter Deferred Components & Google Play Core R8 Workaround
+-dontwarn com.google.android.play.core.**
+-dontwarn io.flutter.embedding.engine.deferredcomponents.**
+
