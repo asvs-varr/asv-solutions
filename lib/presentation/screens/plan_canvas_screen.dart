@@ -230,6 +230,7 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                   _symbolButton('LIGHT', Icons.lightbulb, 'Light'),
                   _symbolButton('OUTLET_DUPLEX', Icons.power, 'Duplex CO'),
                   _symbolButton('ACU', Icons.ac_unit, 'Aircon'),
+                  _symbolButton('FAN', Icons.toys_outlined, 'Electric Fan'),
                 ],
               ),
             ),
@@ -336,6 +337,8 @@ class CanvasPainter extends CustomPainter {
         return Colors.lightBlueAccent;
       case 'ACU':
         return Colors.purpleAccent;
+      case 'FAN':
+        return Colors.tealAccent;
       default:
         return Colors.white;
     }

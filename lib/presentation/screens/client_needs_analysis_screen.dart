@@ -33,6 +33,8 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
     {'name': '65" Smart 4K TV & Audio Rack', 'va': 350.0, 'dedicated': false, 'lighting': false, 'icon': Icons.tv},
     {'name': 'General Convenience Outlet (Duplex)', 'va': 180.0, 'dedicated': false, 'lighting': false, 'icon': Icons.power},
     {'name': 'Workstation PC / Desktop', 'va': 450.0, 'dedicated': false, 'lighting': false, 'icon': Icons.computer},
+    {'name': 'Electric Stand Fan (16")', 'va': 75.0, 'dedicated': false, 'lighting': false, 'icon': Icons.toys_outlined},
+    {'name': 'Wall-Mounted Orbit Fan', 'va': 90.0, 'dedicated': false, 'lighting': false, 'icon': Icons.rotate_right},
     {'name': 'Ceiling Fan with Drop Light', 'va': 120.0, 'dedicated': false, 'lighting': true, 'icon': Icons.mode_fan_off_outlined},
   ];
 
@@ -191,6 +193,20 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
         'wattagePresets': [
           {'label': '3.0 Ton / 4.0 HP Commercial (3500W)', 'watts': 3500, 'pf': 0.85},
           {'label': '5.0 Ton / 6.0 HP Heavy Commercial (5200W)', 'watts': 5200, 'pf': 0.88},
+        ],
+      },
+      {
+        'category': '❄️ HVAC & Cooling',
+        'name': 'Electric Fans & Air Circulators',
+        'defaultPF': 0.85,
+        'isLighting': false,
+        'wattagePresets': [
+          {'label': '12" Desk / Table Fan (45W)', 'watts': 45, 'pf': 0.85},
+          {'label': '16" Standard Stand Fan (65W)', 'watts': 65, 'pf': 0.85},
+          {'label': '18" Heavy-Duty Stand Fan (90W)', 'watts': 90, 'pf': 0.85},
+          {'label': '16" Wall-Mounted Orbit Fan (75W)', 'watts': 75, 'pf': 0.85},
+          {'label': '20" High-Velocity Floor Blower (150W)', 'watts': 150, 'pf': 0.80},
+          {'label': '24" Industrial Drum / Warehouse Fan (220W)', 'watts': 220, 'pf': 0.80},
         ],
       },
       {
