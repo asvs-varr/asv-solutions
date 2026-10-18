@@ -985,377 +985,508 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
   }
 
   void _promptPecStandardPackPreview(String spaceName) {
-    final lower = spaceName.toLowerCase();
-    final lighting = LightingEngine.calculate(
-      roomType: _mapSpaceToRoomType(spaceName),
-      areaSqm: _currentSpace.areaSqm,
-      ceilingHeightMeters: _currentSpace.ceilingHeight,
-    );
+    LightingTier selectedTier = LightingTier.standard;
 
-    // Prepare Pack Items with their respective PEC Articles & Justifications
-    final List<Map<String, dynamic>> previewItems = [];
-
-    // 1. Lighting rule
-    previewItems.add({
-      'name': '${lighting.recommendedWattagePerFixture}W LED Downlights (${lighting.fixtureCount} pcs)',
-      'va': 15.0 * lighting.fixtureCount,
-      'isLighting': true,
-      'isDedicated': false,
-      'citation': 'PEC 2017 Art 2.10.3.2',
-      'rule': 'Lighting Load Minimum Standard (${lighting.roomType.recommendedLux} Lux for $spaceName)',
-      'icon': Icons.lightbulb_outline,
-    });
-
-    if (lower.contains('kitchen')) {
-      previewItems.addAll([
-        {
-          'name': 'Kitchen Counter Duplex Receptacles (Small Appliance)',
-          'va': 360.0,
-          'isLighting': false,
-          'isDedicated': false,
-          'citation': 'PEC 2017 Art 2.10.1.11(C)(1) & Art 2.10.3.3',
-          'rule': 'Minimum dalawang 20A Small Appliance Branch Circuits sa kusina',
-          'icon': Icons.power,
-        },
-        {
-          'name': 'GFCI Protected Countertop Receptacles',
-          'va': 180.0,
-          'isLighting': false,
-          'isDedicated': false,
-          'citation': 'PEC 2017 Art 2.10.1.8(A)(6)',
-          'rule': 'Mandatory GFCI protection sa lahat ng receptacles sa loob ng 1.8m mula sa lababo/sink',
-          'icon': Icons.security,
-        },
-        {
-          'name': 'Dedicated Inverter Refrigerator Outlet',
-          'va': 800.0,
-          'isLighting': false,
-          'isDedicated': true,
-          'citation': 'PEC 2017 Art 2.10.2.5',
-          'rule': 'Dedicated branch circuit para sa continuous refrigeration load',
-          'icon': Icons.kitchen,
-        },
-        {
-          'name': 'Induction / Range Hood Circuit Line',
-          'va': 3500.0,
-          'isLighting': false,
-          'isDedicated': true,
-          'citation': 'PEC 2017 Art 4.22.2.1',
-          'rule': 'Individual branch circuit para sa cooking appliances na lumalagpas sa 20A',
-          'icon': Icons.soup_kitchen,
-        },
-      ]);
-    } else if (lower.contains('bed')) {
-      previewItems.addAll([
-        {
-          'name': 'Bedside & Desk Convenience Outlets (Duplex)',
-          'va': 360.0,
-          'isLighting': false,
-          'isDedicated': false,
-          'citation': 'PEC 2017 Art 2.10.3.3',
-          'rule': 'Receptacle spacing rule (walang punto sa pader na higit 1.8m mula sa saksakan)',
-          'icon': Icons.power,
-        },
-        {
-          'name': 'Standard Ceiling Fan (52" 3-Blade, 75W)',
-          'va': 85.0,
-          'isLighting': false,
-          'isDedicated': false,
-          'citation': 'PEC 2017 Art 3.14.2.13(B) & Art 4.22.2.9',
-          'rule': 'Mandatory Fan-Rated Heavy Duty Octagonal Box (suporta hanggang 16-32 kg vibration load)',
-          'icon': Icons.mode_fan_off_outlined,
-        },
-        {
-          'name': 'Dedicated 1.5HP Inverter ACU Outlet',
-          'va': 1650.0,
-          'isLighting': false,
-          'isDedicated': true,
-          'citation': 'PEC 2017 Art 4.40.4.2',
-          'rule': 'Dedicated Hermetic Refrigerant Motor-Compressor branch circuit protection',
-          'icon': Icons.ac_unit,
-        },
-      ]);
-    } else if (lower.contains('bath') || lower.contains('laundry')) {
-      previewItems.addAll([
-        {
-          'name': 'GFCI Protected Shaver & Mirror Vanity Outlet',
-          'va': 180.0,
-          'isLighting': false,
-          'isDedicated': false,
-          'citation': 'PEC 2017 Art 2.10.1.8(A)(1)',
-          'rule': 'Mandatory Class A GFCI (4-6mA trip threshold) sa banyo upang maiwasan ang electric shock',
-          'icon': Icons.security,
-        },
-        {
-          'name': 'Dedicated Single-point Shower Heater (3.5kW)',
-          'va': 3500.0,
-          'isLighting': false,
-          'isDedicated': true,
-          'citation': 'PEC 2017 Art 4.22.2.3 & Art 2.10.2.1',
-          'rule': 'Direct dedicated circuit na may kasamang 30A 2P breaker at ELCB/GFCI protection',
-          'icon': Icons.shower,
-        },
-        {
-          'name': 'Front-load Washing Machine Dedicated Line',
-          'va': 1800.0,
-          'isLighting': false,
-          'isDedicated': true,
-          'citation': 'PEC 2017 Art 2.10.1.11(C)(2)',
-          'rule': 'Minimum 20A individual branch circuit para sa laundry area',
-          'icon': Icons.local_laundry_service,
-        },
-      ]);
-    } else if (lower.contains('garage') || lower.contains('outdoor')) {
-      previewItems.addAll([
-        {
-          'name': 'Weatherproof Heavy-Duty Outlets (WR/GFCI)',
-          'va': 360.0,
-          'isLighting': false,
-          'isDedicated': false,
-          'citation': 'PEC 2017 Art 4.6.1.9 & Art 2.10.1.8(A)(2)',
-          'rule': 'Weather-Resistant (WR) enclosure na may extra-duty while-in-use cover at GFCI',
-          'icon': Icons.power,
-        },
-        {
-          'name': 'Perimeter Security Floodlight Line',
-          'va': 200.0,
-          'isLighting': false,
-          'isDedicated': false,
-          'citation': 'PEC 2017 Art 2.25.1.1',
-          'rule': 'Outside branch circuits and feeders para sa architectural lighting',
-          'icon': Icons.flash_on,
-        },
-        {
-          'name': 'Dedicated Water Pressure Pump Line',
-          'va': 1200.0,
-          'isLighting': false,
-          'isDedicated': true,
-          'citation': 'PEC 2017 Art 4.30.2.2',
-          'rule': 'Motor branch circuit conductor sized at 125% of motor full-load current (FLC)',
-          'icon': Icons.water_drop,
-        },
-      ]);
-    } else {
-      // Living & Dining default
-      previewItems.addAll([
-        {
-          'name': 'Living Room TV & Entertainment Outlet Pack',
-          'va': 360.0,
-          'isLighting': false,
-          'isDedicated': false,
-          'citation': 'PEC 2017 Art 2.10.3.3',
-          'rule': 'General Purpose Receptacle spacing sa living space',
-          'icon': Icons.tv,
-        },
-        {
-          'name': 'Standard 52" Ceiling Fan / DC Inverter Fan',
-          'va': 85.0,
-          'isLighting': false,
-          'isDedicated': false,
-          'citation': 'PEC 2017 Art 3.14.2.13(B)',
-          'rule': 'Fan-rated ceiling box with direct joist/beam anchoring',
-          'icon': Icons.mode_fan_off_outlined,
-        },
-        {
-          'name': 'Dining Table & General Receptacles',
-          'va': 360.0,
-          'isLighting': false,
-          'isDedicated': false,
-          'citation': 'PEC 2017 Art 2.10.3.3',
-          'rule': 'Convenience outlets para sa dining and buffet warmers',
-          'icon': Icons.power,
-        },
-        {
-          'name': 'Dedicated 2.5HP Inverter Split ACU',
-          'va': 2600.0,
-          'isLighting': false,
-          'isDedicated': true,
-          'citation': 'PEC 2017 Art 4.40.4.2',
-          'rule': 'Dedicated Hermetic ACU branch circuit (Minimum 20A / 30A 2P)',
-          'icon': Icons.ac_unit,
-        },
-      ]);
-    }
-
-    // Show BottomSheet Preview
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) {
-        return Container(
-          height: MediaQuery.of(context).size.height * 0.82,
-          padding: const EdgeInsets.fromLTRB(16, 14, 16, 20),
-          decoration: const BoxDecoration(
-            color: Color(0xFF13171F),
-            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-            border: Border(
-              top: BorderSide(color: BanaagTheme.primaryAmber, width: 2.0),
-              left: BorderSide(color: Colors.white12),
-              right: BorderSide(color: Colors.white12),
-            ),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: Colors.white24,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
+        return StatefulBuilder(
+          builder: (modalContext, setModalState) {
+            final lower = spaceName.toLowerCase();
+            final area = _currentSpace.areaSqm;
+
+            // 1. Dynamic Lighting Calculation with Selected Tier
+            final lighting = LightingEngine.calculate(
+              roomType: _mapSpaceToRoomType(spaceName),
+              areaSqm: area,
+              ceilingHeightMeters: _currentSpace.ceilingHeight,
+              tier: selectedTier,
+            );
+
+            // 2. Dynamic ACU Horsepower Sizing based on room floor area
+            final Map<String, dynamic> acuSpec;
+            if (area <= 10.0) {
+              acuSpec = {
+                'hp': '0.75 HP Inverter ACU (Compact)',
+                'va': 750.0,
+                'note': 'Swak para sa maliit na kwarto (≤10 m²) para hindi over-specs o mag-short cycle',
+              };
+            } else if (area <= 16.0) {
+              acuSpec = {
+                'hp': '1.0 HP Inverter ACU',
+                'va': 950.0,
+                'note': 'Standard sizing para sa 11-16 m² na silid alinsunod sa cooling load',
+              };
+            } else if (area <= 23.0) {
+              acuSpec = {
+                'hp': '1.5 HP Inverter ACU',
+                'va': 1650.0,
+                'note': 'Inirerekomenda para sa 17-23 m² Master Bedroom o malaking kwarto',
+              };
+            } else if (area <= 32.0) {
+              acuSpec = {
+                'hp': '2.0 HP Inverter Split ACU',
+                'va': 1950.0,
+                'note': 'Sapat para sa 24-32 m² Living & Dining area',
+              };
+            } else {
+              acuSpec = {
+                'hp': '2.5 HP Inverter Heavy Split ACU',
+                'va': 2600.0,
+                'note': 'High-capacity cooling para sa open-concept o malalaking espasyo (≥33 m²)',
+              };
+            }
+
+            // Prepare Pack Items with their respective PEC Articles & Justifications
+            final List<Map<String, dynamic>> previewItems = [];
+
+            // Primary Lighting
+            previewItems.add({
+              'name': '${lighting.recommendedWattagePerFixture}W LED Downlights (${lighting.fixtureCount} pcs)',
+              'va': 15.0 * lighting.fixtureCount,
+              'isLighting': true,
+              'isDedicated': false,
+              'citation': 'PEC 2017 Art 2.10.3.2',
+              'rule': '${selectedTier.label}: ${lighting.roomType.recommendedLux} Lux target (${(lighting.targetLumens).toStringAsFixed(0)} lumens para sa ${area.toStringAsFixed(0)} m²)',
+              'icon': Icons.lightbulb_outline,
+            });
+
+            // Extra Tier Architectural Lighting (Premium / Luxury)
+            for (final extra in lighting.extraFixtures) {
+              previewItems.add({
+                'name': extra['name'] as String,
+                'va': (extra['va'] as num).toDouble(),
+                'isLighting': true,
+                'isDedicated': false,
+                'citation': extra['citation'] as String,
+                'rule': 'Architectural Layer: Nagbibigay ng warm ambient glow at luxury aesthetic',
+                'icon': Icons.auto_awesome,
+              });
+            }
+
+            if (lower.contains('kitchen')) {
+              previewItems.addAll([
+                {
+                  'name': 'Kitchen Counter Duplex Receptacles (Small Appliance)',
+                  'va': 360.0,
+                  'isLighting': false,
+                  'isDedicated': false,
+                  'citation': 'PEC 2017 Art 2.10.1.11(C)(1) & Art 2.10.3.3',
+                  'rule': 'Minimum dalawang 20A Small Appliance Branch Circuits sa kusina',
+                  'icon': Icons.power,
+                },
+                {
+                  'name': 'GFCI Protected Countertop Receptacles',
+                  'va': 180.0,
+                  'isLighting': false,
+                  'isDedicated': false,
+                  'citation': 'PEC 2017 Art 2.10.1.8(A)(6)',
+                  'rule': 'Mandatory GFCI protection sa lahat ng receptacles sa loob ng 1.8m mula sa lababo/sink',
+                  'icon': Icons.security,
+                },
+                {
+                  'name': 'Dedicated Inverter Refrigerator Outlet',
+                  'va': 800.0,
+                  'isLighting': false,
+                  'isDedicated': true,
+                  'citation': 'PEC 2017 Art 2.10.2.5',
+                  'rule': 'Dedicated branch circuit para sa continuous refrigeration load',
+                  'icon': Icons.kitchen,
+                },
+                {
+                  'name': 'Induction / Range Hood Circuit Line',
+                  'va': 3500.0,
+                  'isLighting': false,
+                  'isDedicated': true,
+                  'citation': 'PEC 2017 Art 4.22.2.1',
+                  'rule': 'Individual branch circuit para sa cooking appliances na lumalagpas sa 20A',
+                  'icon': Icons.soup_kitchen,
+                },
+              ]);
+            } else if (lower.contains('bed')) {
+              previewItems.addAll([
+                {
+                  'name': 'Bedside & Desk Convenience Outlets (Duplex)',
+                  'va': 360.0,
+                  'isLighting': false,
+                  'isDedicated': false,
+                  'citation': 'PEC 2017 Art 2.10.3.3',
+                  'rule': 'Receptacle spacing rule (walang punto sa pader na higit 1.8m mula sa saksakan)',
+                  'icon': Icons.power,
+                },
+                {
+                  'name': selectedTier == LightingTier.luxury
+                      ? 'DC Inverter Smart Ceiling Fan with Tri-Color Light'
+                      : 'Standard Ceiling Fan (52" 3-Blade, 75W)',
+                  'va': selectedTier == LightingTier.luxury ? 60.0 : 85.0,
+                  'isLighting': false,
+                  'isDedicated': false,
+                  'citation': 'PEC 2017 Art 3.14.2.13(B) & Art 4.22.2.9',
+                  'rule': 'Mandatory Fan-Rated Heavy Duty Octagonal Box (suporta hanggang 16-32 kg vibration load)',
+                  'icon': Icons.mode_fan_off_outlined,
+                },
+                {
+                  'name': 'Dedicated ${acuSpec['hp']} Outlet',
+                  'va': (acuSpec['va'] as num).toDouble(),
+                  'isLighting': false,
+                  'isDedicated': true,
+                  'citation': 'PEC 2017 Art 4.40.4.2 & ASHRAE Sizing',
+                  'rule': '${acuSpec['note']} (${area.toStringAsFixed(0)} m² room)',
+                  'icon': Icons.ac_unit,
+                },
+              ]);
+            } else if (lower.contains('bath') || lower.contains('laundry')) {
+              previewItems.addAll([
+                {
+                  'name': 'GFCI Protected Shaver & Mirror Vanity Outlet',
+                  'va': 180.0,
+                  'isLighting': false,
+                  'isDedicated': false,
+                  'citation': 'PEC 2017 Art 2.10.1.8(A)(1)',
+                  'rule': 'Mandatory Class A GFCI (4-6mA trip threshold) sa banyo upang maiwasan ang electric shock',
+                  'icon': Icons.security,
+                },
+                {
+                  'name': 'Dedicated Single-point Shower Heater (3.5kW)',
+                  'va': 3500.0,
+                  'isLighting': false,
+                  'isDedicated': true,
+                  'citation': 'PEC 2017 Art 4.22.2.3 & Art 2.10.2.1',
+                  'rule': 'Direct dedicated circuit na may kasamang 30A 2P breaker at ELCB/GFCI protection',
+                  'icon': Icons.shower,
+                },
+                {
+                  'name': 'Front-load Washing Machine Dedicated Line',
+                  'va': 1800.0,
+                  'isLighting': false,
+                  'isDedicated': true,
+                  'citation': 'PEC 2017 Art 2.10.1.11(C)(2)',
+                  'rule': 'Minimum 20A individual branch circuit para sa laundry area',
+                  'icon': Icons.local_laundry_service,
+                },
+              ]);
+            } else if (lower.contains('garage') || lower.contains('outdoor')) {
+              previewItems.addAll([
+                {
+                  'name': 'Weatherproof Heavy-Duty Outlets (WR/GFCI)',
+                  'va': 360.0,
+                  'isLighting': false,
+                  'isDedicated': false,
+                  'citation': 'PEC 2017 Art 4.6.1.9 & Art 2.10.1.8(A)(2)',
+                  'rule': 'Weather-Resistant (WR) enclosure na may extra-duty while-in-use cover at GFCI',
+                  'icon': Icons.power,
+                },
+                {
+                  'name': 'Perimeter Security Floodlight Line',
+                  'va': 200.0,
+                  'isLighting': false,
+                  'isDedicated': false,
+                  'citation': 'PEC 2017 Art 2.25.1.1',
+                  'rule': 'Outside branch circuits and feeders para sa architectural lighting',
+                  'icon': Icons.flash_on,
+                },
+                {
+                  'name': 'Dedicated Water Pressure Pump Line',
+                  'va': 1200.0,
+                  'isLighting': false,
+                  'isDedicated': true,
+                  'citation': 'PEC 2017 Art 4.30.2.2',
+                  'rule': 'Motor branch circuit conductor sized at 125% of motor full-load current (FLC)',
+                  'icon': Icons.water_drop,
+                },
+              ]);
+            } else {
+              // Living & Dining default
+              previewItems.addAll([
+                {
+                  'name': 'Living Room TV & Entertainment Outlet Pack',
+                  'va': 360.0,
+                  'isLighting': false,
+                  'isDedicated': false,
+                  'citation': 'PEC 2017 Art 2.10.3.3',
+                  'rule': 'General Purpose Receptacle spacing sa living space',
+                  'icon': Icons.tv,
+                },
+                {
+                  'name': selectedTier == LightingTier.luxury
+                      ? 'Luxury DC Inverter Smart Ceiling Fan (Whisper Quiet)'
+                      : 'Standard 52" Ceiling Fan (75W)',
+                  'va': selectedTier == LightingTier.luxury ? 50.0 : 85.0,
+                  'isLighting': false,
+                  'isDedicated': false,
+                  'citation': 'PEC 2017 Art 3.14.2.13(B)',
+                  'rule': 'Fan-rated ceiling box with direct joist/beam anchoring',
+                  'icon': Icons.mode_fan_off_outlined,
+                },
+                {
+                  'name': 'Dining Table & General Receptacles',
+                  'va': 360.0,
+                  'isLighting': false,
+                  'isDedicated': false,
+                  'citation': 'PEC 2017 Art 2.10.3.3',
+                  'rule': 'Convenience outlets para sa dining and buffet warmers',
+                  'icon': Icons.power,
+                },
+                {
+                  'name': 'Dedicated ${acuSpec['hp']} Outlet',
+                  'va': (acuSpec['va'] as num).toDouble(),
+                  'isLighting': false,
+                  'isDedicated': true,
+                  'citation': 'PEC 2017 Art 4.40.4.2 & ASHRAE Sizing',
+                  'rule': '${acuSpec['note']} (${area.toStringAsFixed(0)} m² room)',
+                  'icon': Icons.ac_unit,
+                },
+              ]);
+            }
+
+            return Container(
+              height: MediaQuery.of(context).size.height * 0.86,
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
+              decoration: const BoxDecoration(
+                color: Color(0xFF13171F),
+                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                border: Border(
+                  top: BorderSide(color: BanaagTheme.primaryAmber, width: 2.0),
+                  left: BorderSide(color: Colors.white12),
+                  right: BorderSide(color: Colors.white12),
                 ),
               ),
-              const SizedBox(height: 12),
-              Row(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: BanaagTheme.primaryAmber.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(8),
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Colors.white24,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
                     ),
-                    child: const Icon(Icons.verified_user, color: BanaagTheme.primaryAmber, size: 22),
                   ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'PEC Standard Pack para sa $spaceName',
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.white),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: BanaagTheme.primaryAmber.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(8),
                         ),
-                        const Text(
-                          'Opisyal na Batayan mula sa Philippine Electrical Code Book',
-                          style: TextStyle(fontSize: 10, color: BanaagTheme.primaryAmber),
+                        child: const Icon(Icons.verified_user, color: BanaagTheme.primaryAmber, size: 22),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'PEC Standard Pack: $spaceName (${area.toStringAsFixed(0)} m²)',
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.white),
+                            ),
+                            const Text(
+                              'Code Compliance & Client Budget Tier Sizing',
+                              style: TextStyle(fontSize: 10, color: BanaagTheme.primaryAmber),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+
+                  // 3-TIER SPECIFICATION SWITCHER (Standard / Premium / Luxury)
+                  Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: Colors.black45,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.white12),
+                    ),
+                    child: Row(
+                      children: LightingTier.values.map((tier) {
+                        final bool isSelected = tier == selectedTier;
+                        Color activeColor = BanaagTheme.primaryAmber;
+                        if (tier == LightingTier.premium) activeColor = Colors.cyanAccent;
+                        if (tier == LightingTier.luxury) activeColor = Colors.purpleAccent;
+
+                        return Expanded(
+                          child: InkWell(
+                            onTap: () {
+                              setModalState(() {
+                                selectedTier = tier;
+                              });
+                            },
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 200),
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                              decoration: BoxDecoration(
+                                color: isSelected ? activeColor.withValues(alpha: 0.2) : Colors.transparent,
+                                borderRadius: BorderRadius.circular(8),
+                                border: isSelected ? Border.all(color: activeColor, width: 1.2) : null,
+                              ),
+                              child: Column(
+                                children: [
+                                  Text(
+                                    tier == LightingTier.standard
+                                        ? 'STANDARD'
+                                        : (tier == LightingTier.premium ? 'PREMIUM ✨' : 'LUXURY 💎'),
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 11,
+                                      color: isSelected ? activeColor : BanaagTheme.textMuted,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    tier == LightingTier.standard
+                                        ? 'Bare Code'
+                                        : (tier == LightingTier.premium ? '+Cove Light' : '+Tracks & Smart'),
+                                    style: TextStyle(
+                                      fontSize: 9,
+                                      color: isSelected ? Colors.white70 : Colors.white24,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+
+                  // Dynamic Banner for active tier & ACU note
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.black26,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.white10),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.info_outline, size: 16, color: BanaagTheme.primaryAmber),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Area: ${area.toStringAsFixed(0)} m² ➔ ACU: ${acuSpec['hp']} • Ilaw: ${selectedTier.description}',
+                            style: const TextStyle(fontSize: 10, color: Colors.white70, height: 1.25),
+                          ),
                         ),
                       ],
                     ),
                   ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: Colors.black26,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.white10),
-                ),
-                child: const Row(
-                  children: [
-                    Icon(Icons.info_outline, size: 16, color: BanaagTheme.primaryAmber),
-                    SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Ang mga kargang ito ay awtomatikong ia-apply alinsunod sa minimum electrical code safety regulations.',
-                        style: TextStyle(fontSize: 11, color: Colors.white70, height: 1.3),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 12),
-              const Text('MGA ILALAGAY NA APPLIANCES & BATAYAN:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: BanaagTheme.textMuted)),
-              const SizedBox(height: 6),
-              Expanded(
-                child: ListView.builder(
-                  itemCount: previewItems.length,
-                  itemBuilder: (c, idx) {
-                    final item = previewItems[idx];
-                    return Container(
-                      margin: const EdgeInsets.only(bottom: 8),
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: BanaagTheme.surfaceCard,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: BanaagTheme.surfaceCardBorder),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
+                  const SizedBox(height: 10),
+                  const Text('MGA ILALAGAY NA APPLIANCES & BATAYAN:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: BanaagTheme.textMuted)),
+                  const SizedBox(height: 6),
+                  Expanded(
+                    child: ListView.builder(
+                      itemCount: previewItems.length,
+                      itemBuilder: (c, idx) {
+                        final item = previewItems[idx];
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: BanaagTheme.surfaceCard,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: BanaagTheme.surfaceCardBorder),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Icon(item['icon'] as IconData, size: 16, color: BanaagTheme.primaryAmber),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  item['name'] as String,
-                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.white),
-                                ),
+                              Row(
+                                children: [
+                                  Icon(item['icon'] as IconData, size: 16, color: BanaagTheme.primaryAmber),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      item['name'] as String,
+                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.white),
+                                    ),
+                                  ),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: (item['isDedicated'] as bool)
+                                          ? Colors.purple.withValues(alpha: 0.2)
+                                          : BanaagTheme.primaryAmber.withValues(alpha: 0.2),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Text(
+                                      (item['isDedicated'] as bool) ? 'DEDICATED' : '${(item['va'] as double).toStringAsFixed(0)} VA',
+                                      style: TextStyle(
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.bold,
+                                        color: (item['isDedicated'] as bool) ? Colors.purpleAccent : BanaagTheme.primaryAmber,
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
+                              const SizedBox(height: 4),
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                                 decoration: BoxDecoration(
-                                  color: (item['isDedicated'] as bool)
-                                      ? Colors.purple.withValues(alpha: 0.2)
-                                      : BanaagTheme.primaryAmber.withValues(alpha: 0.2),
+                                  color: Colors.black38,
                                   borderRadius: BorderRadius.circular(4),
                                 ),
-                                child: Text(
-                                  (item['isDedicated'] as bool) ? 'DEDICATED' : '${(item['va'] as double).toStringAsFixed(0)} VA',
-                                  style: TextStyle(
-                                    fontSize: 9,
-                                    fontWeight: FontWeight.bold,
-                                    color: (item['isDedicated'] as bool) ? Colors.purpleAccent : BanaagTheme.primaryAmber,
-                                  ),
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.bookmark_border, size: 11, color: BanaagTheme.primaryAmber),
+                                    const SizedBox(width: 4),
+                                    Expanded(
+                                      child: Text(
+                                        item['citation'] as String,
+                                        style: const TextStyle(fontSize: 10, color: BanaagTheme.primaryAmber, fontWeight: FontWeight.bold),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
                                 ),
+                              ),
+                              const SizedBox(height: 3),
+                              Text(
+                                item['rule'] as String,
+                                style: const TextStyle(fontSize: 10, color: BanaagTheme.textMuted, height: 1.25),
                               ),
                             ],
                           ),
-                          const SizedBox(height: 4),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                            decoration: BoxDecoration(
-                              color: Colors.black38,
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Row(
-                              children: [
-                                const Icon(Icons.bookmark_border, size: 11, color: BanaagTheme.primaryAmber),
-                                const SizedBox(width: 4),
-                                Text(
-                                  item['citation'] as String,
-                                  style: const TextStyle(fontSize: 10, color: BanaagTheme.primaryAmber, fontWeight: FontWeight.bold),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 3),
-                          Text(
-                            item['rule'] as String,
-                            style: const TextStyle(fontSize: 10, color: BanaagTheme.textMuted, height: 1.25),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                ),
+                        );
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: BanaagTheme.primaryAmber,
+                      foregroundColor: Colors.black,
+                      minimumSize: const Size(double.infinity, 48),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                    icon: const Icon(Icons.check_circle_outline, size: 20),
+                    label: Text(
+                      'I-apply ang ${selectedTier.label} (${previewItems.length} Items)',
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                    ),
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      _executeApplyPecStandardPack(spaceName, previewItems);
+                    },
+                  ),
+                ],
               ),
-              const SizedBox(height: 10),
-              ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: BanaagTheme.primaryAmber,
-                  foregroundColor: Colors.black,
-                  minimumSize: const Size(double.infinity, 48),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                ),
-                icon: const Icon(Icons.check_circle_outline, size: 20),
-                label: const Text('Kumpirmahin at I-apply sa Kwarto', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                onPressed: () {
-                  Navigator.pop(ctx);
-                  _executeApplyPecStandardPack(spaceName, previewItems);
-                },
-              ),
-            ],
-          ),
+            );
+          },
         );
       },
     );
   }
+
 
   void _executeApplyPecStandardPack(String spaceName, List<Map<String, dynamic>> items) {
     for (final item in items) {
