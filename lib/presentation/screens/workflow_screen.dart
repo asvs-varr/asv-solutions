@@ -5,6 +5,7 @@ import '../../domain/models.dart';
 import '../../data/project_repository.dart';
 import '../theme/banaag_theme.dart';
 import 'client_needs_analysis_screen.dart';
+import 'single_line_diagram_screen.dart';
 import '../widgets/project_management_dialogs.dart';
 import '../widgets/dxf_export_guide_dialog.dart';
 
@@ -325,6 +326,19 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
                 setState(() {});
               } else if (item.id == 'c_dxf') {
                 _handleDxfUpload(phase, item);
+              } else if (item.id == 'p1') {
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => SingleLineDiagramScreen(project: _project),
+                  ),
+                );
+                setState(() {
+                  _project = ProjectRepository.instance.allProjects.firstWhere(
+                    (p) => p.id == _project.id,
+                    orElse: () => _project,
+                  );
+                });
               }
             }
           : null,
@@ -379,36 +393,80 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
               ),
               child: const Text('PARSED ✅', style: TextStyle(color: BanaagTheme.successGreen, fontSize: 10, fontWeight: FontWeight.bold)),
             ),
+          if (item.id == 'p1' && !isLocked && !item.isCompleted)
+            Container(
+              margin: const EdgeInsets.only(left: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: BanaagTheme.primaryAmber.withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: const Text('GENERATE SLD ➔', style: TextStyle(color: BanaagTheme.primaryAmber, fontSize: 10, fontWeight: FontWeight.bold)),
+            ),
+          if (item.id == 'p1' && item.isCompleted)
+            Container(
+              margin: const EdgeInsets.only(left: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: BanaagTheme.successGreen.withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: const Text('SLD READY ✅', style: TextStyle(color: BanaagTheme.successGreen, fontSize: 10, fontWeight: FontWeight.bold)),
+            ),
         ],
       ),
-      trailing: item.id == 'c_dxf'
+      trailing: item.id == 'p1'
           ? IconButton(
               icon: Icon(
-                item.isCompleted ? Icons.check_circle : Icons.upload_file,
+                item.isCompleted ? Icons.verified : Icons.account_tree_outlined,
                 color: item.isCompleted ? BanaagTheme.successGreen : BanaagTheme.primaryAmber,
               ),
-              tooltip: item.isCompleted ? 'AutoCAD .DXF Parsed & Verified' : 'Upload AutoCAD .DXF File',
-              onPressed: isLocked ? null : () => _handleDxfUpload(phase, item),
+              tooltip: item.isCompleted ? 'SLD & Load Schedule Ready' : 'Generate Single-Line Diagram',
+              onPressed: isLocked
+                  ? null
+                  : () async {
+                      await Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => SingleLineDiagramScreen(project: _project),
+                        ),
+                      );
+                      setState(() {
+                        _project = ProjectRepository.instance.allProjects.firstWhere(
+                          (p) => p.id == _project.id,
+                          orElse: () => _project,
+                        );
+                      });
+                    },
             )
-          : (item.id == 'r3' // Rough-in mandatory photo proof
+          : (item.id == 'c_dxf'
               ? IconButton(
                   icon: Icon(
-                    item.photoProofUri != null ? Icons.photo_library : Icons.camera_alt,
-                    color: item.photoProofUri != null ? BanaagTheme.successGreen : BanaagTheme.primaryAmber,
+                    item.isCompleted ? Icons.check_circle : Icons.upload_file,
+                    color: item.isCompleted ? BanaagTheme.successGreen : BanaagTheme.primaryAmber,
                   ),
-                  tooltip: 'Attach Pre-Cover Photo Proof',
-                  onPressed: () {
-                    setState(() {
-                      item.photoProofUri = 'proof_photo_roughin.jpg';
-                      item.isCompleted = true;
-                      _toggleCheckItem(phase, item);
-                    });
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('📸 Pre-cover rough-in photo proof saved & verified!')),
-                    );
-                  },
+                  tooltip: item.isCompleted ? 'AutoCAD .DXF Parsed & Verified' : 'Upload AutoCAD .DXF File',
+                  onPressed: isLocked ? null : () => _handleDxfUpload(phase, item),
                 )
-              : null),
+              : (item.id == 'r3' // Rough-in mandatory photo proof
+                  ? IconButton(
+                      icon: Icon(
+                        item.photoProofUri != null ? Icons.photo_library : Icons.camera_alt,
+                        color: item.photoProofUri != null ? BanaagTheme.successGreen : BanaagTheme.primaryAmber,
+                      ),
+                      tooltip: 'Attach Pre-Cover Photo Proof',
+                      onPressed: () {
+                        setState(() {
+                          item.photoProofUri = 'proof_photo_roughin.jpg';
+                          item.isCompleted = true;
+                          _toggleCheckItem(phase, item);
+                        });
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('📸 Pre-cover rough-in photo proof saved & verified!')),
+                        );
+                      },
+                    )
+                  : null)),
     );
   }
 
