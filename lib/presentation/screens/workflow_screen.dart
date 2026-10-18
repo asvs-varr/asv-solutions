@@ -8,6 +8,7 @@ import 'client_needs_analysis_screen.dart';
 import 'single_line_diagram_screen.dart';
 import '../widgets/project_management_dialogs.dart';
 import '../widgets/dxf_export_guide_dialog.dart';
+import '../widgets/site_inspection_dialog.dart';
 
 class WorkflowScreen extends StatefulWidget {
   final Project project;
@@ -324,6 +325,20 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
                   ),
                 );
                 setState(() {});
+              } else if (item.id == 'c2') {
+                SiteInspectionAssessmentDialog.show(
+                  context,
+                  project: _project,
+                  checkItem: item,
+                  onSaved: () {
+                    setState(() {
+                      _project = ProjectRepository.instance.allProjects.firstWhere(
+                        (p) => p.id == _project.id,
+                        orElse: () => _project,
+                      );
+                    });
+                  },
+                );
               } else if (item.id == 'c_dxf') {
                 _handleDxfUpload(phase, item);
               } else if (item.id == 'p1') {
@@ -351,16 +366,29 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
       title: Row(
         children: [
           Expanded(
-            child: Text(
-              item.title,
-              style: TextStyle(
-                fontSize: 13,
-                decoration: item.isCompleted ? TextDecoration.lineThrough : null,
-                color: item.isCompleted
-                    ? BanaagTheme.textMuted
-                    : (item.id == 'c1' || item.id == 'c_dxf' ? BanaagTheme.primaryAmber : BanaagTheme.textHighEmphasis),
-                fontWeight: (item.id == 'c1' || item.id == 'c_dxf') ? FontWeight.bold : FontWeight.normal,
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  item.title,
+                  style: TextStyle(
+                    fontSize: 13,
+                    decoration: item.isCompleted ? TextDecoration.lineThrough : null,
+                    color: item.isCompleted
+                        ? BanaagTheme.textMuted
+                        : (item.id == 'c1' || item.id == 'c2' || item.id == 'c_dxf' ? BanaagTheme.primaryAmber : BanaagTheme.textHighEmphasis),
+                    fontWeight: (item.id == 'c1' || item.id == 'c2' || item.id == 'c_dxf') ? FontWeight.bold : FontWeight.normal,
+                  ),
+                ),
+                if (item.id == 'c2' && _project.siteStructure != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2.0),
+                    child: Text(
+                      'Materials: ${_project.siteStructure!.racewayRecommendation}',
+                      style: const TextStyle(color: BanaagTheme.successGreen, fontSize: 11, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+              ],
             ),
           ),
           if (item.id == 'c1' && !isLocked)
@@ -372,6 +400,26 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
                 borderRadius: BorderRadius.circular(4),
               ),
               child: const Text('OPEN TALLY ➔', style: TextStyle(color: BanaagTheme.primaryAmber, fontSize: 10, fontWeight: FontWeight.bold)),
+            ),
+          if (item.id == 'c2' && !isLocked && !item.isCompleted)
+            Container(
+              margin: const EdgeInsets.only(left: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: BanaagTheme.primaryAmber.withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: const Text('ASSESS SITE ➔', style: TextStyle(color: BanaagTheme.primaryAmber, fontSize: 10, fontWeight: FontWeight.bold)),
+            ),
+          if (item.id == 'c2' && item.isCompleted)
+            Container(
+              margin: const EdgeInsets.only(left: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: BanaagTheme.successGreen.withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: const Text('ASSESSED ✅', style: TextStyle(color: BanaagTheme.successGreen, fontSize: 10, fontWeight: FontWeight.bold)),
             ),
           if (item.id == 'c_dxf' && !isLocked && !item.isCompleted)
             Container(
@@ -415,58 +463,83 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
             ),
         ],
       ),
-      trailing: item.id == 'p1'
+      trailing: item.id == 'c2'
           ? IconButton(
               icon: Icon(
-                item.isCompleted ? Icons.verified : Icons.account_tree_outlined,
+                item.isCompleted ? Icons.check_circle : Icons.rule_sharp,
                 color: item.isCompleted ? BanaagTheme.successGreen : BanaagTheme.primaryAmber,
               ),
-              tooltip: item.isCompleted ? 'SLD & Load Schedule Ready' : 'Generate Single-Line Diagram',
+              tooltip: 'Assess Site Structure & Materials',
               onPressed: isLocked
                   ? null
-                  : () async {
-                      await Navigator.push(
+                  : () {
+                      SiteInspectionAssessmentDialog.show(
                         context,
-                        MaterialPageRoute(
-                          builder: (_) => SingleLineDiagramScreen(project: _project),
-                        ),
+                        project: _project,
+                        checkItem: item,
+                        onSaved: () {
+                          setState(() {
+                            _project = ProjectRepository.instance.allProjects.firstWhere(
+                              (p) => p.id == _project.id,
+                              orElse: () => _project,
+                            );
+                          });
+                        },
                       );
-                      setState(() {
-                        _project = ProjectRepository.instance.allProjects.firstWhere(
-                          (p) => p.id == _project.id,
-                          orElse: () => _project,
-                        );
-                      });
                     },
             )
-          : (item.id == 'c_dxf'
+          : (item.id == 'p1'
               ? IconButton(
                   icon: Icon(
-                    item.isCompleted ? Icons.check_circle : Icons.upload_file,
+                    item.isCompleted ? Icons.verified : Icons.account_tree_outlined,
                     color: item.isCompleted ? BanaagTheme.successGreen : BanaagTheme.primaryAmber,
                   ),
-                  tooltip: item.isCompleted ? 'AutoCAD .DXF Parsed & Verified' : 'Upload AutoCAD .DXF File',
-                  onPressed: isLocked ? null : () => _handleDxfUpload(phase, item),
+                  tooltip: item.isCompleted ? 'SLD & Load Schedule Ready' : 'Generate Single-Line Diagram',
+                  onPressed: isLocked
+                      ? null
+                      : () async {
+                          await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => SingleLineDiagramScreen(project: _project),
+                            ),
+                          );
+                          setState(() {
+                            _project = ProjectRepository.instance.allProjects.firstWhere(
+                              (p) => p.id == _project.id,
+                              orElse: () => _project,
+                            );
+                          });
+                        },
                 )
-              : (item.id == 'r3' // Rough-in mandatory photo proof
+              : (item.id == 'c_dxf'
                   ? IconButton(
                       icon: Icon(
-                        item.photoProofUri != null ? Icons.photo_library : Icons.camera_alt,
-                        color: item.photoProofUri != null ? BanaagTheme.successGreen : BanaagTheme.primaryAmber,
+                        item.isCompleted ? Icons.check_circle : Icons.upload_file,
+                        color: item.isCompleted ? BanaagTheme.successGreen : BanaagTheme.primaryAmber,
                       ),
-                      tooltip: 'Attach Pre-Cover Photo Proof',
-                      onPressed: () {
-                        setState(() {
-                          item.photoProofUri = 'proof_photo_roughin.jpg';
-                          item.isCompleted = true;
-                          _toggleCheckItem(phase, item);
-                        });
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('📸 Pre-cover rough-in photo proof saved & verified!')),
-                        );
-                      },
+                      tooltip: item.isCompleted ? 'AutoCAD .DXF Parsed & Verified' : 'Upload AutoCAD .DXF File',
+                      onPressed: isLocked ? null : () => _handleDxfUpload(phase, item),
                     )
-                  : null)),
+                  : (item.id == 'r3' // Rough-in mandatory photo proof
+                      ? IconButton(
+                          icon: Icon(
+                            item.photoProofUri != null ? Icons.photo_library : Icons.camera_alt,
+                            color: item.photoProofUri != null ? BanaagTheme.successGreen : BanaagTheme.primaryAmber,
+                          ),
+                          tooltip: 'Attach Pre-Cover Photo Proof',
+                          onPressed: () {
+                            setState(() {
+                              item.photoProofUri = 'proof_photo_roughin.jpg';
+                              item.isCompleted = true;
+                              _toggleCheckItem(phase, item);
+                            });
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('📸 Pre-cover rough-in photo proof saved & verified!')),
+                            );
+                          },
+                        )
+                      : null))),
     );
   }
 

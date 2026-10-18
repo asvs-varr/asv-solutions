@@ -227,6 +227,38 @@ class ConduitRoute {
   );
 }
 
+class SiteStructureAssessment {
+  final List<String> structureTypes; // e.g., 'Concrete / CHB', 'Timber / Wood Frame', etc.
+  final String racewayRecommendation; // e.g., 'Schedule 40 uPVC Pipe (Thick Wall Embedment)'
+  final String boxRecommendation; // e.g., 'Deep PVC Utility Box with mounting tabs'
+  final String fastenerRecommendation; // e.g., 'Masonry Tox #6 with Stainless Screws'
+  final String notes;
+
+  const SiteStructureAssessment({
+    required this.structureTypes,
+    required this.racewayRecommendation,
+    required this.boxRecommendation,
+    required this.fastenerRecommendation,
+    this.notes = '',
+  });
+
+  Map<String, dynamic> toJson() => {
+    'structureTypes': structureTypes,
+    'racewayRecommendation': racewayRecommendation,
+    'boxRecommendation': boxRecommendation,
+    'fastenerRecommendation': fastenerRecommendation,
+    'notes': notes,
+  };
+
+  factory SiteStructureAssessment.fromJson(Map<String, dynamic> json) => SiteStructureAssessment(
+    structureTypes: (json['structureTypes'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? ['Concrete / CHB'],
+    racewayRecommendation: json['racewayRecommendation'] ?? 'Schedule 40 Thick Wall uPVC',
+    boxRecommendation: json['boxRecommendation'] ?? 'Deep PVC Utility Box',
+    fastenerRecommendation: json['fastenerRecommendation'] ?? 'Masonry Tox & Screws',
+    notes: json['notes'] ?? '',
+  );
+}
+
 class Project {
   final String id;
   final String title;
@@ -239,6 +271,7 @@ class Project {
   int currentPhaseNumber;
   final String intakeMode; // 'SITE_INTERVIEW', 'BLUEPRINT_PHOTO', 'AUTOCAD_DXF'
   bool isArchived;
+  SiteStructureAssessment? siteStructure;
   List<RoomSpace> spaces;
   List<ApplianceItem> applianceLoads;
   List<CanvasPoint> canvasPoints;
@@ -258,6 +291,7 @@ class Project {
     this.currentPhaseNumber = 1,
     this.intakeMode = 'SITE_INTERVIEW',
     this.isArchived = false,
+    this.siteStructure,
     List<RoomSpace>? spaces,
     List<ApplianceItem>? applianceLoads,
     List<CanvasPoint>? canvasPoints,
@@ -290,6 +324,7 @@ class Project {
     'currentPhaseNumber': currentPhaseNumber,
     'intakeMode': intakeMode,
     'isArchived': isArchived,
+    'siteStructure': siteStructure?.toJson(),
     'spaces': spaces.map((s) => s.toJson()).toList(),
     'applianceLoads': applianceLoads.map((a) => a.toJson()).toList(),
     'canvasPoints': canvasPoints.map((c) => c.toJson()).toList(),
@@ -310,6 +345,9 @@ class Project {
     currentPhaseNumber: json['currentPhaseNumber'] ?? 1,
     intakeMode: json['intakeMode'] ?? 'SITE_INTERVIEW',
     isArchived: json['isArchived'] ?? false,
+    siteStructure: json['siteStructure'] != null
+        ? SiteStructureAssessment.fromJson(json['siteStructure'] as Map<String, dynamic>)
+        : null,
     spaces: (json['spaces'] as List<dynamic>?)
             ?.map((s) => RoomSpace.fromJson(s as Map<String, dynamic>))
             .toList() ??

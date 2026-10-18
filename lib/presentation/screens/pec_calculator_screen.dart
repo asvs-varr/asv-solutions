@@ -91,11 +91,23 @@ class _PecCalculatorScreenState extends State<PecCalculatorScreen> with SingleTi
     final bool isOverfilled = fillRatio > 40.0;
     final bool isVoltageDropHigh = vDropPercent > 3.0;
 
+    // Real-Time PEC Spec Validation
+    final validation = PecEngine.validateCircuitSpecs(
+      loadCurrentAmps: _loadCurrent,
+      wireSizeMm2: _selectedWire.sizeMm2,
+      breakerRatingAmps: breakerRating,
+      isLighting: false,
+    );
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // PEC Spec Guardian Real-Time Alert Banner
+          _buildSpecGuardianBanner(validation),
+          const SizedBox(height: 12),
+
           // Telemetry Result Card
           Card(
             color: const Color(0xFF1B2028),
@@ -185,6 +197,44 @@ class _PecCalculatorScreenState extends State<PecCalculatorScreen> with SingleTi
           ),
           const SizedBox(height: 16),
 
+          // Wire Selector (Allows testing Under-Specs & Over-Specs manually)
+          const Text('Subukan ang ibang Conductor Size (Manual Testing):',
+              style: TextStyle(color: BanaagTheme.primaryAmber, fontWeight: FontWeight.bold, fontSize: 13)),
+          const SizedBox(height: 6),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: BoxDecoration(
+              color: BanaagTheme.surfaceCard,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: BanaagTheme.surfaceCardBorder),
+            ),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<PecWireSpec>(
+                value: _selectedWire,
+                isExpanded: true,
+                dropdownColor: BanaagTheme.surfaceCard,
+                items: PecEngine.wireSpecs.map((w) {
+                  return DropdownMenuItem<PecWireSpec>(
+                    value: w,
+                    child: Text('${w.sizeMm2} mm² (${w.awgEquivalent}) - Ampacity: ${w.ampacity75C.toStringAsFixed(0)} A'),
+                  );
+                }).toList(),
+                onChanged: (val) {
+                  if (val != null) {
+                    setState(() {
+                      _selectedWire = val;
+                      _selectedConduit = PecEngine.recommendConduit(
+                        wireSpec: _selectedWire,
+                        conductorCount: _conductorCount,
+                      );
+                    });
+                  }
+                },
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
+
           // Selected Specs
           ListTile(
             tileColor: BanaagTheme.surfaceCard,
@@ -200,6 +250,163 @@ class _PecCalculatorScreenState extends State<PecCalculatorScreen> with SingleTi
             leading: const Icon(Icons.circle_outlined, color: BanaagTheme.primaryAmber),
             title: Text('Recommended Conduit: ${_selectedConduit.tradeSize}'),
             subtitle: Text('Internal Area: ${_selectedConduit.internalAreaMm2} mm²'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSpecGuardianBanner(PecValidationResult val) {
+    Color cardColor;
+    Color borderColor;
+    Color iconColor;
+    IconData icon;
+    String badgeText;
+
+    switch (val.status) {
+      case PecComplianceStatus.underSpecs:
+        cardColor = Colors.red.withValues(alpha: 0.15);
+        borderColor = BanaagTheme.alertRed;
+        iconColor = BanaagTheme.alertRed;
+        icon = Icons.dangerous_outlined;
+        badgeText = 'UNDER-SPECS ❌';
+        break;
+      case PecComplianceStatus.overSpecs:
+        cardColor = Colors.orange.withValues(alpha: 0.15);
+        borderColor = BanaagTheme.warningOrange;
+        iconColor = BanaagTheme.warningOrange;
+        icon = Icons.warning_amber_rounded;
+        badgeText = 'OVER-SPECS ⚠️';
+        break;
+      case PecComplianceStatus.compliant:
+        cardColor = Colors.green.withValues(alpha: 0.15);
+        borderColor = BanaagTheme.successGreen;
+        iconColor = BanaagTheme.successGreen;
+        icon = Icons.verified_user_outlined;
+        badgeText = 'PEC COMPLIANT ✅';
+        break;
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: cardColor,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: borderColor, width: 1.5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: iconColor, size: 20),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: borderColor.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(badgeText, style: TextStyle(color: borderColor, fontWeight: FontWeight.bold, fontSize: 11)),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  val.headline,
+                  style: TextStyle(color: iconColor, fontWeight: FontWeight.bold, fontSize: 13),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              InkWell(
+                onTap: () => _showPecCitationDialog(val),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.white12,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: Colors.white24),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.menu_book, color: BanaagTheme.primaryAmber, size: 14),
+                      SizedBox(width: 4),
+                      Text('PEC Libro ➔', style: TextStyle(color: BanaagTheme.primaryAmber, fontSize: 11, fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(val.details, style: const TextStyle(fontSize: 11, color: Colors.white, height: 1.3)),
+          if (val.status != PecComplianceStatus.compliant) ...[
+            const SizedBox(height: 6),
+            Text(
+              'Rekomendasyon: Gumamit ng ${val.recommendedWireSizeMm2} mm² wire na may ${val.recommendedBreakerAmps}A breaker.',
+              style: const TextStyle(fontSize: 11, color: BanaagTheme.primaryAmber, fontWeight: FontWeight.w600),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  void _showPecCitationDialog(PecValidationResult val) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: BanaagTheme.darkBackground,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: BanaagTheme.primaryAmber, width: 1.5),
+        ),
+        title: const Row(
+          children: [
+            Icon(Icons.menu_book, color: BanaagTheme.primaryAmber, size: 22),
+            SizedBox(width: 8),
+            Text('Philippine Electrical Code (PEC)', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Mga Opisyal na Batayan at Artikulo mula sa PEC 2017 Part 1 Edition:',
+              style: TextStyle(color: BanaagTheme.textMuted, fontSize: 12),
+            ),
+            const SizedBox(height: 12),
+            ...val.pecCitations.map(
+              (c) => Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: BanaagTheme.surfaceCard,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: BanaagTheme.surfaceCardBorder),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(Icons.check_circle_outline, color: BanaagTheme.primaryAmber, size: 16),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        c,
+                        style: const TextStyle(fontSize: 12, color: Colors.white, height: 1.3),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Naiintindihan (Close)', style: TextStyle(color: BanaagTheme.primaryAmber, fontWeight: FontWeight.bold)),
           ),
         ],
       ),

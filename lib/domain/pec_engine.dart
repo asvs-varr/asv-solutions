@@ -158,4 +158,137 @@ class PecEngine {
       'PhaseB': phaseB,
     };
   }
+
+  /// Evaluates selected wire and breaker specifications against PEC 2017 Part 1 standards.
+  /// Detects UNDER-SPECS (Hazard), OVER-SPECS (Inefficiency), and COMPLIANT states.
+  static PecValidationResult validateCircuitSpecs({
+    required double loadCurrentAmps,
+    required double wireSizeMm2,
+    required int breakerRatingAmps,
+    bool isLighting = false,
+    bool isContinuous = true,
+  }) {
+    final double designCurrent = isContinuous ? loadCurrentAmps * 1.25 : loadCurrentAmps;
+    final PecWireSpec? userWireSpec = wireSpecs.cast<PecWireSpec?>().firstWhere(
+      (w) => (w!.sizeMm2 - wireSizeMm2).abs() < 0.1,
+      orElse: () => null,
+    );
+    final double wireAmpacity = userWireSpec?.ampacity75C ?? 0.0;
+    final double minAllowedWire = isLighting ? 2.0 : 3.5;
+
+    final List<String> issues = [];
+    final List<String> pecCitations = [];
+
+    // Check 1: Minimum Wire Size Rule
+    if (wireSizeMm2 < minAllowedWire) {
+      issues.add(
+        'Wire size ($wireSizeMm2 mm²) is below the PEC mandatory minimum of $minAllowedWire mm² for ${isLighting ? "lighting" : "power/convenience outlet"} circuits.',
+      );
+      pecCitations.add('PEC 2017 Art 2.10.2.1(B)(1) & Art 2.10.2.3: Branch Circuit Minimum Conductor Sizing.');
+    }
+
+    // Check 2: Conductor Overload (Load Current vs Wire Ampacity)
+    if (wireAmpacity > 0 && designCurrent > wireAmpacity) {
+      issues.add(
+        'Design current (${designCurrent.toStringAsFixed(1)} A at 125% factor) exceeds wire ampacity (${wireAmpacity.toStringAsFixed(0)} A). Risk of cable overheating and thermal insulation breakdown.',
+      );
+      pecCitations.add('PEC 2017 Art 3.10.2.6 & Table 3.10.2.6: Allowable Ampacities of Insulated Copper Conductors.');
+    }
+
+    // Check 3: Breaker Overprotection (Breaker Rating vs Wire Ampacity)
+    if (wireAmpacity > 0 && breakerRatingAmps > wireAmpacity) {
+      issues.add(
+        'Breaker trip rating ($breakerRatingAmps A) is larger than wire ampacity (${wireAmpacity.toStringAsFixed(0)} A). Wire can burn out before the breaker trips.',
+      );
+      pecCitations.add('PEC 2017 Art 2.40.1.4(A) & Art 2.40.1.4(D): Protection of Conductors against Overcurrent.');
+    }
+
+    // Check 4: Small Conductor Overcurrent Rules (PEC 240.4(D))
+    if ((wireSizeMm2 - 2.0).abs() < 0.1 && breakerRatingAmps > 15) {
+      issues.add('2.0 mm² (#14 AWG) copper conductor maximum overcurrent protection is 15 A.');
+      pecCitations.add('PEC 2017 Art 2.40.1.4(D)(3): 2.0 mm² Copper Maximum 15A Circuit Breaker.');
+    } else if ((wireSizeMm2 - 3.5).abs() < 0.1 && breakerRatingAmps > 20) {
+      issues.add('3.5 mm² (#12 AWG) copper conductor maximum overcurrent protection is 20 A.');
+      pecCitations.add('PEC 2017 Art 2.40.1.4(D)(5): 3.5 mm² Copper Maximum 20A Circuit Breaker.');
+    } else if ((wireSizeMm2 - 5.5).abs() < 0.1 && breakerRatingAmps > 30) {
+      issues.add('5.5 mm² (#10 AWG) copper conductor maximum overcurrent protection is 30 A.');
+      pecCitations.add('PEC 2017 Art 2.40.1.4(D)(7): 5.5 mm² Copper Maximum 30A Circuit Breaker.');
+    }
+
+    // Check 5: Breaker Too Small for Load
+    if (breakerRatingAmps < designCurrent) {
+      issues.add(
+        'Breaker rating ($breakerRatingAmps A) is lower than continuous design load (${designCurrent.toStringAsFixed(1)} A). Nuisance tripping will occur.',
+      );
+      pecCitations.add('PEC 2017 Art 2.10.2.2: Continuous and Noncontinuous Loads Overcurrent Device Rating.');
+    }
+
+    // If any safety violations exist -> UNDER-SPECS
+    if (issues.isNotEmpty) {
+      return PecValidationResult(
+        status: PecComplianceStatus.underSpecs,
+        headline: 'UNDER-SPECS: Violates Safety Threshold',
+        details: issues.join('\n• '),
+        pecCitations: pecCitations.toSet().toList(),
+        recommendedWireSizeMm2: sizeWireForCurrent(loadCurrentAmps, isContinuous: isContinuous, isLighting: isLighting).sizeMm2,
+        recommendedBreakerAmps: selectBreaker(loadCurrentAmps, wireAmpacity > 0 ? wireAmpacity : 20.0),
+      );
+    }
+
+    // Check Over-Specs: Wire is 2 or more standard steps larger than necessary
+    final PecWireSpec optimalWire = sizeWireForCurrent(loadCurrentAmps, isContinuous: isContinuous, isLighting: isLighting);
+    final int userWireIdx = wireSpecs.indexWhere((w) => (w.sizeMm2 - wireSizeMm2).abs() < 0.1);
+    final int optimalWireIdx = wireSpecs.indexWhere((w) => (w.sizeMm2 - optimalWire.sizeMm2).abs() < 0.1);
+
+    if (userWireIdx >= 0 && optimalWireIdx >= 0 && userWireIdx >= optimalWireIdx + 2) {
+      return PecValidationResult(
+        status: PecComplianceStatus.overSpecs,
+        headline: 'OVER-SPECS: Safe but Cost Inefficient',
+        details: 'Selected wire ($wireSizeMm2 mm²) is significantly larger than the required ${optimalWire.sizeMm2} mm² (${optimalWire.ampacity75C.toStringAsFixed(0)} A ampacity). May cause difficult conduit bends, raceway fill congestion, and terminal block fitting issues.',
+        pecCitations: [
+          'PEC 2017 Art 3.10.2.6: Optimal Economic Conductor Sizing.',
+          'PEC 2017 Chapter 9 Table 1: Raceways and Box Terminal Limitations.'
+        ],
+        recommendedWireSizeMm2: optimalWire.sizeMm2,
+        recommendedBreakerAmps: selectBreaker(loadCurrentAmps, optimalWire.ampacity75C),
+      );
+    }
+
+    // Fully Compliant
+    return PecValidationResult(
+      status: PecComplianceStatus.compliant,
+      headline: 'PEC COMPLIANT: 100% Code Verified',
+      details: 'Wire ampacity (${wireAmpacity.toStringAsFixed(0)} A) and breaker rating ($breakerRatingAmps A) perfectly satisfy the ${designCurrent.toStringAsFixed(1)} A design load with required 125% safety margin.',
+      pecCitations: [
+        'PEC 2017 Table 3.10.2.6 (Conductor Ampacities)',
+        'PEC 2017 Art 2.10.2.1 / Art 2.40.1.4 (Branch Overcurrent Protection)'
+      ],
+      recommendedWireSizeMm2: wireSizeMm2,
+      recommendedBreakerAmps: breakerRatingAmps,
+    );
+  }
+}
+
+enum PecComplianceStatus {
+  compliant,
+  underSpecs,
+  overSpecs,
+}
+
+class PecValidationResult {
+  final PecComplianceStatus status;
+  final String headline;
+  final String details;
+  final List<String> pecCitations;
+  final double recommendedWireSizeMm2;
+  final int recommendedBreakerAmps;
+
+  const PecValidationResult({
+    required this.status,
+    required this.headline,
+    required this.details,
+    required this.pecCitations,
+    required this.recommendedWireSizeMm2,
+    required this.recommendedBreakerAmps,
+  });
 }

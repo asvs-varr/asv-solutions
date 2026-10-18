@@ -4,6 +4,7 @@
 import 'package:flutter/material.dart';
 import '../../domain/models.dart';
 import '../../domain/sld_engine.dart';
+import '../../domain/pec_engine.dart';
 import '../../data/project_repository.dart';
 import '../theme/banaag_theme.dart';
 
@@ -68,6 +69,19 @@ class _SingleLineDiagramScreenState extends State<SingleLineDiagramScreen> with 
     String wire = circuit.wireSizeDescription;
     String conduit = circuit.conduitDescription;
 
+    double selectedWireMm2 = 3.5;
+    if (wire.contains('2.0 mm²')) {
+      selectedWireMm2 = 2.0;
+    } else if (wire.contains('3.5 mm²')) {
+      selectedWireMm2 = 3.5;
+    } else if (wire.contains('5.5 mm²')) {
+      selectedWireMm2 = 5.5;
+    } else if (wire.contains('8.0 mm²')) {
+      selectedWireMm2 = 8.0;
+    } else if (wire.contains('14.0 mm²')) {
+      selectedWireMm2 = 14.0;
+    }
+
     showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
@@ -120,30 +134,123 @@ class _SingleLineDiagramScreenState extends State<SingleLineDiagramScreen> with 
                     DropdownMenuItem(value: 30, child: Text('30A 2-Pole (ACU / Water Heater)')),
                     DropdownMenuItem(value: 40, child: Text('40A 2-Pole (Cooking Range / Sub-feed)')),
                     DropdownMenuItem(value: 50, child: Text('50A 2-Pole (Heavy Feeder)')),
+                    DropdownMenuItem(value: 60, child: Text('60A 2-Pole (Main / Sub-panel)')),
                   ],
                   onChanged: (val) {
                     if (val != null) {
                       setModalState(() {
                         breaker = val;
-                        if (breaker == 15) {
-                          wire = '2 - 2.0 mm² THHN + 1 - 2.0 mm² Ground';
-                          conduit = '20 mm Ø PVC';
-                        } else if (breaker == 20) {
-                          wire = '2 - 3.5 mm² THHN + 1 - 2.0 mm² Ground';
-                          conduit = '20 mm Ø PVC';
-                        } else if (breaker == 30) {
-                          wire = '2 - 5.5 mm² THHN + 1 - 3.5 mm² Ground';
-                          conduit = '20 mm Ø PVC';
-                        } else {
-                          wire = '2 - 8.0 mm² THHN + 1 - 5.5 mm² Ground';
+                      });
+                    }
+                  },
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<double>(
+                  initialValue: selectedWireMm2,
+                  dropdownColor: BanaagTheme.surfaceCard,
+                  decoration: const InputDecoration(labelText: 'Conductor Size (Wire Spec)'),
+                  items: const [
+                    DropdownMenuItem(value: 2.0, child: Text('2.0 mm² (#14 AWG) - 20A Limit (Lighting)')),
+                    DropdownMenuItem(value: 3.5, child: Text('3.5 mm² (#12 AWG) - 25A Limit (Outlets)')),
+                    DropdownMenuItem(value: 5.5, child: Text('5.5 mm² (#10 AWG) - 35A Limit (Heavy Load)')),
+                    DropdownMenuItem(value: 8.0, child: Text('8.0 mm² (#8 AWG) - 50A Limit (Feeder)')),
+                    DropdownMenuItem(value: 14.0, child: Text('14.0 mm² (#6 AWG) - 65A Limit (Main Feeder)')),
+                  ],
+                  onChanged: (val) {
+                    if (val != null) {
+                      setModalState(() {
+                        selectedWireMm2 = val;
+                        wire = '2 - $selectedWireMm2 mm² THHN + 1 - 2.0 mm² Ground';
+                        if (selectedWireMm2 >= 8.0) {
                           conduit = '25 mm Ø PVC';
+                        } else {
+                          conduit = '20 mm Ø PVC';
                         }
                       });
                     }
                   },
                 ),
+                const SizedBox(height: 12),
+
+                // Real-time PEC Spec Validation for this Circuit
+                Builder(
+                  builder: (_) {
+                    final isLightingCircuit = circuit.description.toLowerCase().contains('light');
+                    final validation = PecEngine.validateCircuitSpecs(
+                      loadCurrentAmps: circuit.loadVA / 230.0,
+                      wireSizeMm2: selectedWireMm2,
+                      breakerRatingAmps: breaker,
+                      isLighting: isLightingCircuit,
+                    );
+
+                    Color statusColor = BanaagTheme.successGreen;
+                    IconData statusIcon = Icons.verified_user_outlined;
+                    String statusBadge = 'PEC COMPLIANT ✅';
+
+                    switch (validation.status) {
+                      case PecComplianceStatus.underSpecs:
+                        statusColor = BanaagTheme.alertRed;
+                        statusIcon = Icons.dangerous_outlined;
+                        statusBadge = 'UNDER-SPECS ❌';
+                        break;
+                      case PecComplianceStatus.overSpecs:
+                        statusColor = BanaagTheme.warningOrange;
+                        statusIcon = Icons.warning_amber_rounded;
+                        statusBadge = 'OVER-SPECS ⚠️';
+                        break;
+                      case PecComplianceStatus.compliant:
+                        statusColor = BanaagTheme.successGreen;
+                        statusIcon = Icons.verified_user_outlined;
+                        statusBadge = 'PEC COMPLIANT ✅';
+                        break;
+                    }
+
+                    return Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: statusColor.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: statusColor, width: 1.2),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(statusIcon, color: statusColor, size: 18),
+                              const SizedBox(width: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: statusColor.withValues(alpha: 0.2),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(statusBadge, style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 10)),
+                              ),
+                              const Spacer(),
+                              InkWell(
+                                onTap: () => _showPecCitationDialog(context, validation),
+                                child: const Row(
+                                  children: [
+                                    Icon(Icons.menu_book, color: BanaagTheme.primaryAmber, size: 14),
+                                    SizedBox(width: 4),
+                                    Text('PEC Ref ➔', style: TextStyle(color: BanaagTheme.primaryAmber, fontSize: 11, fontWeight: FontWeight.bold)),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            validation.details,
+                            style: const TextStyle(fontSize: 11, color: Colors.white, height: 1.3),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
                 const SizedBox(height: 10),
-                Text('Auto-Selected Conductor: $wire', style: const TextStyle(fontSize: 11, color: BanaagTheme.primaryAmber)),
                 Text('Conduit Raceway: $conduit', style: const TextStyle(fontSize: 11, color: BanaagTheme.textMuted)),
               ],
             ),
@@ -173,6 +280,69 @@ class _SingleLineDiagramScreenState extends State<SingleLineDiagramScreen> with 
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  void _showPecCitationDialog(BuildContext ctx, PecValidationResult val) {
+    showDialog(
+      context: ctx,
+      builder: (c) => AlertDialog(
+        backgroundColor: BanaagTheme.darkBackground,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: BanaagTheme.primaryAmber, width: 1.5),
+        ),
+        title: const Row(
+          children: [
+            Icon(Icons.menu_book, color: BanaagTheme.primaryAmber, size: 22),
+            SizedBox(width: 8),
+            Text('PEC 2017 Code Reference', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(val.headline, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: BanaagTheme.primaryAmber)),
+            const SizedBox(height: 8),
+            const Text(
+              'Mga Opisyal na Batayan mula sa Philippine Electrical Code Book:',
+              style: TextStyle(color: BanaagTheme.textMuted, fontSize: 11),
+            ),
+            const SizedBox(height: 12),
+            ...val.pecCitations.map(
+              (citation) => Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: BanaagTheme.surfaceCard,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: BanaagTheme.surfaceCardBorder),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(Icons.bookmark_border, color: BanaagTheme.primaryAmber, size: 16),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        citation,
+                        style: const TextStyle(fontSize: 12, color: Colors.white, height: 1.3),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(c),
+            child: const Text('Naiintindihan (Close)', style: TextStyle(color: BanaagTheme.primaryAmber, fontWeight: FontWeight.bold)),
+          ),
+        ],
       ),
     );
   }
