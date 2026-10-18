@@ -550,7 +550,7 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // SINGLE UNIFIED CATEGORY-GROUPED APPLIANCE DROPDOWN
+                    // SINGLE UNIFIED CATEGORY-GROUPED APPLIANCE DROPDOWN WITH SECTION HEADERS
                     DropdownButtonFormField<String>(
                       initialValue: selectedApplianceKey,
                       dropdownColor: const Color(0xFF1B2028),
@@ -561,33 +561,77 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
                         prefixIcon: Icon(Icons.electrical_services, color: BanaagTheme.primaryAmber, size: 20),
                         contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                       ),
-                      items: applianceCatalog.map((item) {
-                        final key = '${item['category']}::${item['name']}';
-                        return DropdownMenuItem<String>(
-                          value: key,
-                          child: RichText(
-                            overflow: TextOverflow.ellipsis,
-                            text: TextSpan(
-                              children: [
-                                TextSpan(
-                                  text: '${item['category'].toString().split(' ').first} ',
-                                  style: const TextStyle(fontSize: 13),
+                      items: () {
+                        final List<DropdownMenuItem<String>> menuItems = [];
+                        String? lastCategory;
+
+                        for (final item in applianceCatalog) {
+                          final currentCat = item['category'] as String;
+                          // If new category, insert concise, styled non-selectable section header
+                          if (currentCat != lastCategory) {
+                            lastCategory = currentCat;
+                            menuItems.add(
+                              DropdownMenuItem<String>(
+                                enabled: false,
+                                value: 'HEADER::$currentCat',
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(vertical: 4),
+                                  child: Row(
+                                    children: [
+                                      Text(
+                                        currentCat.toUpperCase(),
+                                        style: const TextStyle(
+                                          color: BanaagTheme.primaryAmber,
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold,
+                                          letterSpacing: 0.8,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      const Expanded(
+                                        child: Divider(
+                                          color: BanaagTheme.surfaceCardBorder,
+                                          thickness: 1,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                                TextSpan(
-                                  text: '${item['name']} ',
-                                  style: const TextStyle(fontSize: 13, color: Colors.white, fontWeight: FontWeight.w600),
+                              ),
+                            );
+                          }
+
+                          // Regular selectable clean item (no redundant category suffix)
+                          final key = '${item['category']}::${item['name']}';
+                          menuItems.add(
+                            DropdownMenuItem<String>(
+                              value: key,
+                              child: Padding(
+                                padding: const EdgeInsets.only(left: 8.0),
+                                child: Row(
+                                  children: [
+                                    const Text('• ', style: TextStyle(color: BanaagTheme.primaryAmber, fontSize: 14)),
+                                    Expanded(
+                                      child: Text(
+                                        item['name'] as String,
+                                        style: const TextStyle(
+                                          fontSize: 13,
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                                TextSpan(
-                                  text: '(${item['category'].toString().replaceFirst(RegExp(r'^[^\s]+\s*'), '')})',
-                                  style: const TextStyle(fontSize: 10, color: BanaagTheme.textMuted),
-                                ),
-                              ],
+                              ),
                             ),
-                          ),
-                        );
-                      }).toList(),
+                          );
+                        }
+                        return menuItems;
+                      }(),
                       onChanged: (val) {
-                        if (val != null) {
+                        if (val != null && !val.startsWith('HEADER::')) {
                           setDialogState(() {
                             selectedApplianceKey = val;
                             selectedCatalogItem = applianceCatalog.firstWhere((i) => '${i['category']}::${i['name']}' == val);
