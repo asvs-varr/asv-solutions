@@ -227,17 +227,6 @@ class _SingleLineDiagramScreenState extends State<SingleLineDiagramScreen> with 
                                 ),
                                 child: Text(statusBadge, style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 10)),
                               ),
-                              const Spacer(),
-                              InkWell(
-                                onTap: () => _showPecCitationDialog(context, validation),
-                                child: const Row(
-                                  children: [
-                                    Icon(Icons.menu_book, color: BanaagTheme.primaryAmber, size: 14),
-                                    SizedBox(width: 4),
-                                    Text('PEC Ref ➔', style: TextStyle(color: BanaagTheme.primaryAmber, fontSize: 11, fontWeight: FontWeight.bold)),
-                                  ],
-                                ),
-                              ),
                             ],
                           ),
                           const SizedBox(height: 6),
@@ -245,6 +234,30 @@ class _SingleLineDiagramScreenState extends State<SingleLineDiagramScreen> with 
                             validation.details,
                             style: const TextStyle(fontSize: 11, color: Colors.white, height: 1.3),
                           ),
+                          if (validation.pecCitations.isNotEmpty) ...[
+                            const SizedBox(height: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: Colors.black26,
+                                borderRadius: BorderRadius.circular(4),
+                                border: Border.all(color: Colors.white10),
+                              ),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Icon(Icons.menu_book, size: 11, color: BanaagTheme.primaryAmber),
+                                  const SizedBox(width: 4),
+                                  Expanded(
+                                    child: Text(
+                                      'PEC 2017: ${validation.pecCitations.join(" • ")}',
+                                      style: const TextStyle(fontSize: 10, color: BanaagTheme.textMuted, height: 1.2),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     );
@@ -284,68 +297,7 @@ class _SingleLineDiagramScreenState extends State<SingleLineDiagramScreen> with 
     );
   }
 
-  void _showPecCitationDialog(BuildContext ctx, PecValidationResult val) {
-    showDialog(
-      context: ctx,
-      builder: (c) => AlertDialog(
-        backgroundColor: BanaagTheme.darkBackground,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: const BorderSide(color: BanaagTheme.primaryAmber, width: 1.5),
-        ),
-        title: const Row(
-          children: [
-            Icon(Icons.menu_book, color: BanaagTheme.primaryAmber, size: 22),
-            SizedBox(width: 8),
-            Text('PEC 2017 Code Reference', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(val.headline, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: BanaagTheme.primaryAmber)),
-            const SizedBox(height: 8),
-            const Text(
-              'Mga Opisyal na Batayan mula sa Philippine Electrical Code Book:',
-              style: TextStyle(color: BanaagTheme.textMuted, fontSize: 11),
-            ),
-            const SizedBox(height: 12),
-            ...val.pecCitations.map(
-              (citation) => Container(
-                margin: const EdgeInsets.only(bottom: 8),
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: BanaagTheme.surfaceCard,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: BanaagTheme.surfaceCardBorder),
-                ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Icon(Icons.bookmark_border, color: BanaagTheme.primaryAmber, size: 16),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        citation,
-                        style: const TextStyle(fontSize: 12, color: Colors.white, height: 1.3),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(c),
-            child: const Text('Naiintindihan (Close)', style: TextStyle(color: BanaagTheme.primaryAmber, fontWeight: FontWeight.bold)),
-          ),
-        ],
-      ),
-    );
-  }
+
 
   void _addNewCircuit() {
     setState(() {

@@ -317,25 +317,6 @@ class _PecCalculatorScreenState extends State<PecCalculatorScreen> with SingleTi
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              InkWell(
-                onTap: () => _showPecCitationDialog(val),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.white12,
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: Colors.white24),
-                  ),
-                  child: const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.menu_book, color: BanaagTheme.primaryAmber, size: 14),
-                      SizedBox(width: 4),
-                      Text('PEC Libro ➔', style: TextStyle(color: BanaagTheme.primaryAmber, fontSize: 11, fontWeight: FontWeight.bold)),
-                    ],
-                  ),
-                ),
-              ),
             ],
           ),
           const SizedBox(height: 8),
@@ -347,71 +328,48 @@ class _PecCalculatorScreenState extends State<PecCalculatorScreen> with SingleTi
               style: const TextStyle(fontSize: 11, color: BanaagTheme.primaryAmber, fontWeight: FontWeight.w600),
             ),
           ],
+          if (val.pecCitations.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.black26,
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: Colors.white10),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Row(
+                    children: [
+                      Icon(Icons.menu_book, size: 12, color: BanaagTheme.primaryAmber),
+                      SizedBox(width: 4),
+                      Text(
+                        'Batayan sa PEC 2017 Book:',
+                        style: TextStyle(fontSize: 10, color: BanaagTheme.primaryAmber, fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  ...val.pecCitations.map(
+                    (citation) => Padding(
+                      padding: const EdgeInsets.only(bottom: 2),
+                      child: Text(
+                        '• $citation',
+                        style: const TextStyle(fontSize: 10, color: BanaagTheme.textMuted, height: 1.25),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );
   }
 
-  void _showPecCitationDialog(PecValidationResult val) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: BanaagTheme.darkBackground,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: const BorderSide(color: BanaagTheme.primaryAmber, width: 1.5),
-        ),
-        title: const Row(
-          children: [
-            Icon(Icons.menu_book, color: BanaagTheme.primaryAmber, size: 22),
-            SizedBox(width: 8),
-            Text('Philippine Electrical Code (PEC)', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Mga Opisyal na Batayan at Artikulo mula sa PEC 2017 Part 1 Edition:',
-              style: TextStyle(color: BanaagTheme.textMuted, fontSize: 12),
-            ),
-            const SizedBox(height: 12),
-            ...val.pecCitations.map(
-              (c) => Container(
-                margin: const EdgeInsets.only(bottom: 8),
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: BanaagTheme.surfaceCard,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: BanaagTheme.surfaceCardBorder),
-                ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Icon(Icons.check_circle_outline, color: BanaagTheme.primaryAmber, size: 16),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        c,
-                        style: const TextStyle(fontSize: 12, color: Colors.white, height: 1.3),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Naiintindihan (Close)', style: TextStyle(color: BanaagTheme.primaryAmber, fontWeight: FontWeight.bold)),
-          ),
-        ],
-      ),
-    );
-  }
+
 
   Widget _metricBadge(String label, String value, String sub, {Color color = BanaagTheme.primaryAmber}) {
     return Column(
