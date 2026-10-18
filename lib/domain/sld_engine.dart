@@ -103,6 +103,40 @@ class SingleLineDiagramData {
     this.panelName = 'LP-1 (Main Distribution Panel)',
     this.utilityProvider = 'Meralco',
   });
+
+  /// Official PEC 2017 Basis & Citations for this specific Schedule of Loads calculation
+  List<Map<String, String>> get pecEngineeringBasis => [
+    {
+      'topic': 'Feeder Demand Factor',
+      'citation': 'PEC 2017 Table 2.20.3.3',
+      'formula': 'Unang 3,000 VA @ 100% Demand, Natitirang karga @ 35%-40% Residential Demand Factor.',
+      'computed': 'Total Connected: ${feeder.totalConnectedVA.toStringAsFixed(0)} VA ➔ Net Demand: ${feeder.netDemandVA.toStringAsFixed(0)} VA (${feeder.netCurrentAmps.toStringAsFixed(1)} A)',
+    },
+    {
+      'topic': 'Main Feeder & Overcurrent Protection',
+      'citation': 'PEC 2017 Art 2.15.1.2 & Art 2.15.1.3',
+      'formula': 'Feeder conductors & MCB must have ampacity not less than 125% of continuous design load (I_design = I_net × 1.25).',
+      'computed': '${feeder.netCurrentAmps.toStringAsFixed(1)} A × 1.25 = ${(feeder.netCurrentAmps * 1.25).toStringAsFixed(1)} A ➔ Main Breaker: ${feeder.mainBreakerAmps} AT / 100 AF 2P',
+    },
+    {
+      'topic': 'Main Feeder Conductors & Raceway',
+      'citation': 'PEC 2017 Table 3.10.2.6 & Chapter 9 Table 1',
+      'formula': 'Copper THHN/THWN-2 allowable ampacity at 75°C terminal rating with maximum 40% conduit fill limit for >=3 wires.',
+      'computed': 'Conductors: ${feeder.feederWireDescription} sa loob ng ${feeder.conduitDescription}',
+    },
+    {
+      'topic': 'Grounding Electrode Conductor (GEC)',
+      'citation': 'PEC 2017 Table 2.50.3.17 & Art 2.50.3.8',
+      'formula': 'Minimum Grounding Electrode Conductor size based on largest ungrounded service-entrance conductor.',
+      'computed': feeder.groundingDescription,
+    },
+    {
+      'topic': 'Spare Circuit Provision',
+      'citation': 'PEC 2017 Art 4.8.1.13',
+      'formula': 'Mandatory spare overcurrent devices for panelboard future load expansion without rewiring enclosure.',
+      'computed': 'Kasama ang 2 Spare Breakers (20A at 30A 2P) sa active schedule.',
+    },
+  ];
 }
 
 class SldEngine {

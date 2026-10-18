@@ -454,6 +454,11 @@ class _SingleLineDiagramScreenState extends State<SingleLineDiagramScreen> with 
               ],
             ),
           ),
+          const SizedBox(height: 12),
+
+          // Dedicated Non-Disruptive PEC Engineering Basis Card
+          _buildPecEngineeringBasisCard(),
+
           const SizedBox(height: 16),
           const Text('SCHEDULE OF LOADS & BRANCH CIRCUITS (PEC 2017)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.white70)),
           const SizedBox(height: 8),
@@ -502,6 +507,96 @@ class _SingleLineDiagramScreenState extends State<SingleLineDiagramScreen> with 
             );
           }),
         ],
+      ),
+    );
+  }
+
+  Widget _buildPecEngineeringBasisCard() {
+    final basisList = _sldData.pecEngineeringBasis;
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF161B22),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: BanaagTheme.primaryAmber.withValues(alpha: 0.5), width: 1.2),
+      ),
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          initiallyExpanded: true,
+          tilePadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+          leading: Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: BanaagTheme.primaryAmber.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: const Icon(Icons.menu_book, color: BanaagTheme.primaryAmber, size: 18),
+          ),
+          title: const Text(
+            'Mga Opisyal na Batayan sa PEC 2017 Book',
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.white),
+          ),
+          subtitle: const Text(
+            'Load Calculations, Demand Factors & Feeder Compliance',
+            style: TextStyle(fontSize: 10, color: BanaagTheme.primaryAmber),
+          ),
+          children: [
+            Container(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+              child: Column(
+                children: basisList.map((item) {
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.black26,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.white10),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: BanaagTheme.primaryAmber.withValues(alpha: 0.2),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                item['citation'] ?? '',
+                                style: const TextStyle(color: BanaagTheme.primaryAmber, fontWeight: FontWeight.bold, fontSize: 10),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                item['topic'] ?? '',
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.white),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          item['formula'] ?? '',
+                          style: const TextStyle(fontSize: 10, color: BanaagTheme.textMuted, height: 1.25),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '⚡ Resulta: ${item['computed'] ?? ''}',
+                          style: const TextStyle(fontSize: 10, color: BanaagTheme.successGreen, fontWeight: FontWeight.w600),
+                        ),
+                      ],
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
