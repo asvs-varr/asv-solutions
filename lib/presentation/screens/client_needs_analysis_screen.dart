@@ -35,6 +35,8 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
     {'name': 'Workstation PC / Desktop', 'va': 450.0, 'dedicated': false, 'lighting': false, 'icon': Icons.computer},
     {'name': 'Electric Stand Fan (16")', 'va': 75.0, 'dedicated': false, 'lighting': false, 'icon': Icons.toys_outlined},
     {'name': 'Wall-Mounted Orbit Fan', 'va': 90.0, 'dedicated': false, 'lighting': false, 'icon': Icons.rotate_right},
+    {'name': 'Standard Ceiling Fan (52" 3-Blade)', 'va': 85.0, 'dedicated': false, 'lighting': false, 'icon': Icons.mode_fan_off_outlined},
+    {'name': 'DC Inverter Smart Ceiling Fan', 'va': 40.0, 'dedicated': false, 'lighting': false, 'icon': Icons.mode_fan_off_outlined},
     {'name': 'Ceiling Fan with Drop Light', 'va': 120.0, 'dedicated': false, 'lighting': true, 'icon': Icons.mode_fan_off_outlined},
   ];
 
@@ -205,8 +207,13 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
           {'label': '16" Standard Stand Fan (65W)', 'watts': 65, 'pf': 0.85},
           {'label': '18" Heavy-Duty Stand Fan (90W)', 'watts': 90, 'pf': 0.85},
           {'label': '16" Wall-Mounted Orbit Fan (75W)', 'watts': 75, 'pf': 0.85},
+          {'label': '48" DC Inverter Smart Ceiling Fan (35W)', 'watts': 35, 'pf': 0.90},
+          {'label': '52" Standard 3-Blade Ceiling Fan (75W)', 'watts': 75, 'pf': 0.85},
+          {'label': '56" Heavy-Duty 5-Blade Ceiling Fan (90W)', 'watts': 90, 'pf': 0.85},
+          {'label': 'Ceiling Fan with Integrated LED Light (100W)', 'watts': 100, 'pf': 0.88},
           {'label': '20" High-Velocity Floor Blower (150W)', 'watts': 150, 'pf': 0.80},
           {'label': '24" Industrial Drum / Warehouse Fan (220W)', 'watts': 220, 'pf': 0.80},
+          {'label': 'Commercial High-Volume Low-Speed (HVLS) Fan (450W)', 'watts': 450, 'pf': 0.88},
         ],
       },
       {
@@ -977,7 +984,7 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
     );
   }
 
-  void _applyPecStandardPack(String spaceName) {
+  void _promptPecStandardPackPreview(String spaceName) {
     final lower = spaceName.toLowerCase();
     final lighting = LightingEngine.calculate(
       roomType: _mapSpaceToRoomType(spaceName),
@@ -985,40 +992,397 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
       ceilingHeightMeters: _currentSpace.ceilingHeight,
     );
 
-    // 1. Add Recommended Smart Lighting (Assigned to Ckt #1)
-    _addOrIncrementAppliance(
-      name: '${lighting.recommendedWattagePerFixture}W LED Downlight ($spaceName)',
-      ratingVA: 15.0 * lighting.fixtureCount,
-      isDedicated: false,
-      isLighting: true,
-      circuitNumber: 1,
-    );
+    // Prepare Pack Items with their respective PEC Articles & Justifications
+    final List<Map<String, dynamic>> previewItems = [];
 
-    // 2. Add Standard Convenience Outlets & Heavy Loads based on PEC
+    // 1. Lighting rule
+    previewItems.add({
+      'name': '${lighting.recommendedWattagePerFixture}W LED Downlights (${lighting.fixtureCount} pcs)',
+      'va': 15.0 * lighting.fixtureCount,
+      'isLighting': true,
+      'isDedicated': false,
+      'citation': 'PEC 2017 Art 2.10.3.2',
+      'rule': 'Lighting Load Minimum Standard (${lighting.roomType.recommendedLux} Lux for $spaceName)',
+      'icon': Icons.lightbulb_outline,
+    });
+
     if (lower.contains('kitchen')) {
-      _addOrIncrementAppliance(name: 'Kitchen Counter Duplex Receptacles', ratingVA: 360.0, isDedicated: false);
-      _addOrIncrementAppliance(name: 'Dedicated Inverter Refrigerator Outlet', ratingVA: 800.0, isDedicated: true);
-      _addOrIncrementAppliance(name: 'Induction / Range Hood Circuit Line', ratingVA: 3500.0, isDedicated: true);
+      previewItems.addAll([
+        {
+          'name': 'Kitchen Counter Duplex Receptacles (Small Appliance)',
+          'va': 360.0,
+          'isLighting': false,
+          'isDedicated': false,
+          'citation': 'PEC 2017 Art 2.10.1.11(C)(1) & Art 2.10.3.3',
+          'rule': 'Minimum dalawang 20A Small Appliance Branch Circuits sa kusina',
+          'icon': Icons.power,
+        },
+        {
+          'name': 'GFCI Protected Countertop Receptacles',
+          'va': 180.0,
+          'isLighting': false,
+          'isDedicated': false,
+          'citation': 'PEC 2017 Art 2.10.1.8(A)(6)',
+          'rule': 'Mandatory GFCI protection sa lahat ng receptacles sa loob ng 1.8m mula sa lababo/sink',
+          'icon': Icons.security,
+        },
+        {
+          'name': 'Dedicated Inverter Refrigerator Outlet',
+          'va': 800.0,
+          'isLighting': false,
+          'isDedicated': true,
+          'citation': 'PEC 2017 Art 2.10.2.5',
+          'rule': 'Dedicated branch circuit para sa continuous refrigeration load',
+          'icon': Icons.kitchen,
+        },
+        {
+          'name': 'Induction / Range Hood Circuit Line',
+          'va': 3500.0,
+          'isLighting': false,
+          'isDedicated': true,
+          'citation': 'PEC 2017 Art 4.22.2.1',
+          'rule': 'Individual branch circuit para sa cooking appliances na lumalagpas sa 20A',
+          'icon': Icons.soup_kitchen,
+        },
+      ]);
     } else if (lower.contains('bed')) {
-      _addOrIncrementAppliance(name: 'Bedside & Desk Convenience Outlets (Duplex)', ratingVA: 360.0, isDedicated: false);
-      _addOrIncrementAppliance(name: 'Dedicated 1.5HP Inverter ACU Outlet', ratingVA: 1650.0, isDedicated: true);
+      previewItems.addAll([
+        {
+          'name': 'Bedside & Desk Convenience Outlets (Duplex)',
+          'va': 360.0,
+          'isLighting': false,
+          'isDedicated': false,
+          'citation': 'PEC 2017 Art 2.10.3.3',
+          'rule': 'Receptacle spacing rule (walang punto sa pader na higit 1.8m mula sa saksakan)',
+          'icon': Icons.power,
+        },
+        {
+          'name': 'Standard Ceiling Fan (52" 3-Blade, 75W)',
+          'va': 85.0,
+          'isLighting': false,
+          'isDedicated': false,
+          'citation': 'PEC 2017 Art 3.14.2.13(B) & Art 4.22.2.9',
+          'rule': 'Mandatory Fan-Rated Heavy Duty Octagonal Box (suporta hanggang 16-32 kg vibration load)',
+          'icon': Icons.mode_fan_off_outlined,
+        },
+        {
+          'name': 'Dedicated 1.5HP Inverter ACU Outlet',
+          'va': 1650.0,
+          'isLighting': false,
+          'isDedicated': true,
+          'citation': 'PEC 2017 Art 4.40.4.2',
+          'rule': 'Dedicated Hermetic Refrigerant Motor-Compressor branch circuit protection',
+          'icon': Icons.ac_unit,
+        },
+      ]);
     } else if (lower.contains('bath') || lower.contains('laundry')) {
-      _addOrIncrementAppliance(name: 'GFCI Protected Shaver/Utility Outlet', ratingVA: 180.0, isDedicated: false);
-      _addOrIncrementAppliance(name: 'Dedicated Single-point Shower Heater (3.5kW)', ratingVA: 3500.0, isDedicated: true);
-      _addOrIncrementAppliance(name: 'Front-load Washing Machine Outlet', ratingVA: 1800.0, isDedicated: true);
+      previewItems.addAll([
+        {
+          'name': 'GFCI Protected Shaver & Mirror Vanity Outlet',
+          'va': 180.0,
+          'isLighting': false,
+          'isDedicated': false,
+          'citation': 'PEC 2017 Art 2.10.1.8(A)(1)',
+          'rule': 'Mandatory Class A GFCI (4-6mA trip threshold) sa banyo upang maiwasan ang electric shock',
+          'icon': Icons.security,
+        },
+        {
+          'name': 'Dedicated Single-point Shower Heater (3.5kW)',
+          'va': 3500.0,
+          'isLighting': false,
+          'isDedicated': true,
+          'citation': 'PEC 2017 Art 4.22.2.3 & Art 2.10.2.1',
+          'rule': 'Direct dedicated circuit na may kasamang 30A 2P breaker at ELCB/GFCI protection',
+          'icon': Icons.shower,
+        },
+        {
+          'name': 'Front-load Washing Machine Dedicated Line',
+          'va': 1800.0,
+          'isLighting': false,
+          'isDedicated': true,
+          'citation': 'PEC 2017 Art 2.10.1.11(C)(2)',
+          'rule': 'Minimum 20A individual branch circuit para sa laundry area',
+          'icon': Icons.local_laundry_service,
+        },
+      ]);
     } else if (lower.contains('garage') || lower.contains('outdoor')) {
-      _addOrIncrementAppliance(name: 'Weatherproof Heavy-Duty Outlets (WR/GFCI)', ratingVA: 360.0, isDedicated: false);
-      _addOrIncrementAppliance(name: 'Perimeter Security Floodlight Line', ratingVA: 200.0, isDedicated: false);
-      _addOrIncrementAppliance(name: 'Dedicated Water Pressure Pump Line', ratingVA: 1200.0, isDedicated: true);
+      previewItems.addAll([
+        {
+          'name': 'Weatherproof Heavy-Duty Outlets (WR/GFCI)',
+          'va': 360.0,
+          'isLighting': false,
+          'isDedicated': false,
+          'citation': 'PEC 2017 Art 4.6.1.9 & Art 2.10.1.8(A)(2)',
+          'rule': 'Weather-Resistant (WR) enclosure na may extra-duty while-in-use cover at GFCI',
+          'icon': Icons.power,
+        },
+        {
+          'name': 'Perimeter Security Floodlight Line',
+          'va': 200.0,
+          'isLighting': false,
+          'isDedicated': false,
+          'citation': 'PEC 2017 Art 2.25.1.1',
+          'rule': 'Outside branch circuits and feeders para sa architectural lighting',
+          'icon': Icons.flash_on,
+        },
+        {
+          'name': 'Dedicated Water Pressure Pump Line',
+          'va': 1200.0,
+          'isLighting': false,
+          'isDedicated': true,
+          'citation': 'PEC 2017 Art 4.30.2.2',
+          'rule': 'Motor branch circuit conductor sized at 125% of motor full-load current (FLC)',
+          'icon': Icons.water_drop,
+        },
+      ]);
     } else {
       // Living & Dining default
-      _addOrIncrementAppliance(name: 'Living Room TV & Entertainment Outlet Pack', ratingVA: 360.0, isDedicated: false);
-      _addOrIncrementAppliance(name: 'Dining Table & General Receptacles', ratingVA: 360.0, isDedicated: false);
-      _addOrIncrementAppliance(name: 'Dedicated 2.5HP Inverter Split ACU', ratingVA: 2600.0, isDedicated: true);
+      previewItems.addAll([
+        {
+          'name': 'Living Room TV & Entertainment Outlet Pack',
+          'va': 360.0,
+          'isLighting': false,
+          'isDedicated': false,
+          'citation': 'PEC 2017 Art 2.10.3.3',
+          'rule': 'General Purpose Receptacle spacing sa living space',
+          'icon': Icons.tv,
+        },
+        {
+          'name': 'Standard 52" Ceiling Fan / DC Inverter Fan',
+          'va': 85.0,
+          'isLighting': false,
+          'isDedicated': false,
+          'citation': 'PEC 2017 Art 3.14.2.13(B)',
+          'rule': 'Fan-rated ceiling box with direct joist/beam anchoring',
+          'icon': Icons.mode_fan_off_outlined,
+        },
+        {
+          'name': 'Dining Table & General Receptacles',
+          'va': 360.0,
+          'isLighting': false,
+          'isDedicated': false,
+          'citation': 'PEC 2017 Art 2.10.3.3',
+          'rule': 'Convenience outlets para sa dining and buffet warmers',
+          'icon': Icons.power,
+        },
+        {
+          'name': 'Dedicated 2.5HP Inverter Split ACU',
+          'va': 2600.0,
+          'isLighting': false,
+          'isDedicated': true,
+          'citation': 'PEC 2017 Art 4.40.4.2',
+          'rule': 'Dedicated Hermetic ACU branch circuit (Minimum 20A / 30A 2P)',
+          'icon': Icons.ac_unit,
+        },
+      ]);
     }
 
+    // Show BottomSheet Preview
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return Container(
+          height: MediaQuery.of(context).size.height * 0.82,
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 20),
+          decoration: const BoxDecoration(
+            color: Color(0xFF13171F),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+            border: Border(
+              top: BorderSide(color: BanaagTheme.primaryAmber, width: 2.0),
+              left: BorderSide(color: Colors.white12),
+              right: BorderSide(color: Colors.white12),
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.white24,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: BanaagTheme.primaryAmber.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.verified_user, color: BanaagTheme.primaryAmber, size: 22),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'PEC Standard Pack para sa $spaceName',
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.white),
+                        ),
+                        const Text(
+                          'Opisyal na Batayan mula sa Philippine Electrical Code Book',
+                          style: TextStyle(fontSize: 10, color: BanaagTheme.primaryAmber),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.black26,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.white10),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.info_outline, size: 16, color: BanaagTheme.primaryAmber),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Ang mga kargang ito ay awtomatikong ia-apply alinsunod sa minimum electrical code safety regulations.',
+                        style: TextStyle(fontSize: 11, color: Colors.white70, height: 1.3),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              const Text('MGA ILALAGAY NA APPLIANCES & BATAYAN:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: BanaagTheme.textMuted)),
+              const SizedBox(height: 6),
+              Expanded(
+                child: ListView.builder(
+                  itemCount: previewItems.length,
+                  itemBuilder: (c, idx) {
+                    final item = previewItems[idx];
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: BanaagTheme.surfaceCard,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: BanaagTheme.surfaceCardBorder),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(item['icon'] as IconData, size: 16, color: BanaagTheme.primaryAmber),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  item['name'] as String,
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.white),
+                                ),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: (item['isDedicated'] as bool)
+                                      ? Colors.purple.withValues(alpha: 0.2)
+                                      : BanaagTheme.primaryAmber.withValues(alpha: 0.2),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  (item['isDedicated'] as bool) ? 'DEDICATED' : '${(item['va'] as double).toStringAsFixed(0)} VA',
+                                  style: TextStyle(
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.bold,
+                                    color: (item['isDedicated'] as bool) ? Colors.purpleAccent : BanaagTheme.primaryAmber,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: Colors.black38,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.bookmark_border, size: 11, color: BanaagTheme.primaryAmber),
+                                const SizedBox(width: 4),
+                                Text(
+                                  item['citation'] as String,
+                                  style: const TextStyle(fontSize: 10, color: BanaagTheme.primaryAmber, fontWeight: FontWeight.bold),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            item['rule'] as String,
+                            style: const TextStyle(fontSize: 10, color: BanaagTheme.textMuted, height: 1.25),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 10),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: BanaagTheme.primaryAmber,
+                  foregroundColor: Colors.black,
+                  minimumSize: const Size(double.infinity, 48),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+                icon: const Icon(Icons.check_circle_outline, size: 20),
+                label: const Text('Kumpirmahin at I-apply sa Kwarto', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  _executeApplyPecStandardPack(spaceName, previewItems);
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _executeApplyPecStandardPack(String spaceName, List<Map<String, dynamic>> items) {
+    for (final item in items) {
+      _addOrIncrementAppliance(
+        name: item['name'] as String,
+        ratingVA: item['va'] as double,
+        isDedicated: item['isDedicated'] as bool,
+        isLighting: item['isLighting'] as bool,
+        circuitNumber: (item['isLighting'] as bool) ? 1 : null,
+      );
+    }
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('⚡ PEC Standard Package successfully applied to $spaceName!')),
+      SnackBar(
+        backgroundColor: BanaagTheme.surfaceCard,
+        content: Row(
+          children: [
+            const Icon(Icons.verified, color: BanaagTheme.successGreen, size: 20),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                '⚡ Matagumpay na nailagay ang ${items.length} PEC appliances & citations sa $spaceName!',
+                style: const TextStyle(color: Colors.white, fontSize: 12),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -1485,7 +1849,7 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
                               ),
                               icon: const Icon(Icons.bolt, size: 16),
                               label: const Text('Apply PEC Standard Pack', style: TextStyle(fontWeight: FontWeight.bold)),
-                              onPressed: () => _applyPecStandardPack(_activeSpaceName),
+                              onPressed: () => _promptPecStandardPackPreview(_activeSpaceName),
                             ),
                           ],
                         ),
@@ -1625,7 +1989,7 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
                 Row(
                   children: [
                     Expanded(
-                      flex: 4,
+                      flex: 3,
                       child: OutlinedButton.icon(
                         style: OutlinedButton.styleFrom(
                           foregroundColor: BanaagTheme.primaryAmber,
@@ -1634,11 +1998,26 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                         ),
                         icon: const Icon(Icons.flash_on, size: 16),
-                        label: const Text('Presets', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                        label: const Text('Presets', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                         onPressed: _showQuickPresetPicker,
                       ),
                     ),
-                    const SizedBox(width: 10),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      flex: 4,
+                      child: OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: BanaagTheme.primaryAmber,
+                          side: BorderSide(color: BanaagTheme.primaryAmber.withValues(alpha: 0.6), width: 1.2),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                        icon: const Icon(Icons.bolt, size: 16),
+                        label: const Text('PEC Pack', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                        onPressed: () => _promptPecStandardPackPreview(_activeSpaceName),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
                     Expanded(
                       flex: 6,
                       child: OutlinedButton.icon(
