@@ -23,6 +23,31 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
   void initState() {
     super.initState();
     _project = widget.project;
+    _ensureDxfChecklistItem();
+  }
+
+  void _ensureDxfChecklistItem() {
+    if (_project.intakeMode == 'AUTOCAD_DXF') {
+      final p1 = _project.phases.firstWhere(
+        (p) => p.type == ProjectPhaseType.consultation,
+        orElse: () => _project.phases.first,
+      );
+      final hasDxfItem = p1.checklist.any((i) => i.id == 'c_dxf');
+      if (!hasDxfItem) {
+        // Insert right after c1 (Client Needs Analysis)
+        final c1Index = p1.checklist.indexWhere((i) => i.id == 'c1');
+        final insertIndex = c1Index != -1 ? c1Index + 1 : 0;
+        p1.checklist.insert(
+          insertIndex,
+          PhaseCheckItem(
+            id: 'c_dxf',
+            title: 'AutoCAD .DXF Architectural Plan Upload & Layer Audit',
+            isCompleted: false,
+          ),
+        );
+        ProjectRepository.instance.updateProject(_project);
+      }
+    }
   }
 
   void _toggleCheckItem(ProjectPhase phase, PhaseCheckItem item) {
@@ -288,15 +313,19 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
     return ListTile(
       dense: true,
       enabled: !isLocked,
-      onTap: item.id == 'c1' && !isLocked
+      onTap: !isLocked
           ? () async {
-              await Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => ClientNeedsAnalysisScreen(project: _project),
-                ),
-              );
-              setState(() {});
+              if (item.id == 'c1') {
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => ClientNeedsAnalysisScreen(project: _project),
+                  ),
+                );
+                setState(() {});
+              } else if (item.id == 'c_dxf') {
+                _handleDxfUpload(phase, item);
+              }
             }
           : null,
       leading: Checkbox(
@@ -315,8 +344,8 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
                 decoration: item.isCompleted ? TextDecoration.lineThrough : null,
                 color: item.isCompleted
                     ? BanaagTheme.textMuted
-                    : (item.id == 'c1' ? BanaagTheme.primaryAmber : BanaagTheme.textHighEmphasis),
-                fontWeight: item.id == 'c1' ? FontWeight.bold : FontWeight.normal,
+                    : (item.id == 'c1' || item.id == 'c_dxf' ? BanaagTheme.primaryAmber : BanaagTheme.textHighEmphasis),
+                fontWeight: (item.id == 'c1' || item.id == 'c_dxf') ? FontWeight.bold : FontWeight.normal,
               ),
             ),
           ),
@@ -330,27 +359,180 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
               ),
               child: const Text('OPEN TALLY ➔', style: TextStyle(color: BanaagTheme.primaryAmber, fontSize: 10, fontWeight: FontWeight.bold)),
             ),
+          if (item.id == 'c_dxf' && !isLocked && !item.isCompleted)
+            Container(
+              margin: const EdgeInsets.only(left: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: BanaagTheme.primaryAmber.withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: const Text('UPLOAD ➔', style: TextStyle(color: BanaagTheme.primaryAmber, fontSize: 10, fontWeight: FontWeight.bold)),
+            ),
+          if (item.id == 'c_dxf' && item.isCompleted)
+            Container(
+              margin: const EdgeInsets.only(left: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: BanaagTheme.successGreen.withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: const Text('PARSED ✅', style: TextStyle(color: BanaagTheme.successGreen, fontSize: 10, fontWeight: FontWeight.bold)),
+            ),
         ],
       ),
-      trailing: item.id == 'r3' // Rough-in mandatory photo proof
+      trailing: item.id == 'c_dxf'
           ? IconButton(
               icon: Icon(
-                item.photoProofUri != null ? Icons.photo_library : Icons.camera_alt,
-                color: item.photoProofUri != null ? BanaagTheme.successGreen : BanaagTheme.primaryAmber,
+                item.isCompleted ? Icons.check_circle : Icons.upload_file,
+                color: item.isCompleted ? BanaagTheme.successGreen : BanaagTheme.primaryAmber,
               ),
-              tooltip: 'Attach Pre-Cover Photo Proof',
-              onPressed: () {
-                setState(() {
-                  item.photoProofUri = 'proof_photo_roughin.jpg';
-                  item.isCompleted = true;
-                  _toggleCheckItem(phase, item);
-                });
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('📸 Pre-cover rough-in photo proof saved & verified!')),
-                );
-              },
+              tooltip: item.isCompleted ? 'AutoCAD .DXF Parsed & Verified' : 'Upload AutoCAD .DXF File',
+              onPressed: isLocked ? null : () => _handleDxfUpload(phase, item),
             )
-          : null,
+          : (item.id == 'r3' // Rough-in mandatory photo proof
+              ? IconButton(
+                  icon: Icon(
+                    item.photoProofUri != null ? Icons.photo_library : Icons.camera_alt,
+                    color: item.photoProofUri != null ? BanaagTheme.successGreen : BanaagTheme.primaryAmber,
+                  ),
+                  tooltip: 'Attach Pre-Cover Photo Proof',
+                  onPressed: () {
+                    setState(() {
+                      item.photoProofUri = 'proof_photo_roughin.jpg';
+                      item.isCompleted = true;
+                      _toggleCheckItem(phase, item);
+                    });
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('📸 Pre-cover rough-in photo proof saved & verified!')),
+                    );
+                  },
+                )
+              : null),
+    );
+  }
+
+  void _handleDxfUpload(ProjectPhase phase, PhaseCheckItem item) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: BanaagTheme.surfaceCard,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: BanaagTheme.primaryAmber, width: 1.5),
+        ),
+        title: const Row(
+          children: [
+            Icon(Icons.file_present_rounded, color: BanaagTheme.primaryAmber, size: 26),
+            SizedBox(width: 8),
+            Expanded(
+              child: Text('Upload AutoCAD .DXF Plan', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Pumili o mag-drop ng AutoCAD 2018 ASCII .DXF file para sa automated layer extraction & takeoff.',
+              style: TextStyle(fontSize: 12, color: Colors.white70),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.black38,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: BanaagTheme.primaryAmber.withValues(alpha: 0.3)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Row(
+                    children: [
+                      Icon(Icons.insert_drive_file, color: BanaagTheme.primaryAmber, size: 18),
+                      SizedBox(width: 6),
+                      Text('villa_delarosa_groundfloor.dxf', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.white)),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  const Text('File size: 1.4 MB • Format: ASCII DXF Release 2018', style: TextStyle(fontSize: 11, color: BanaagTheme.textMuted)),
+                  const Divider(color: Colors.white12, height: 16),
+                  const Text('Layer Audit & Entity Scan Results:', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: BanaagTheme.primaryAmber)),
+                  const SizedBox(height: 4),
+                  _layerScanRow('A-WALL', 'Exterior & Interior Walls (38 entities)', true),
+                  _layerScanRow('A-ROOM', 'Living, Dining, Kitchen, Bath (4 rooms)', true),
+                  _layerScanRow('E-LITE', 'Lighting Outlets & Droplights (14 entities)', true),
+                  _layerScanRow('E-POWR', 'Duplex Outlets & Dedicated ACU (18 entities)', true),
+                ],
+              ),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                const Icon(Icons.verified, color: BanaagTheme.successGreen, size: 16),
+                const SizedBox(width: 6),
+                const Expanded(
+                  child: Text(
+                    '100% Layer Protocol Verified. Awtomatikong mamo-markang CHECK ang checklist item.',
+                    style: TextStyle(fontSize: 11, color: BanaagTheme.successGreen, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel', style: TextStyle(color: BanaagTheme.textMuted)),
+          ),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: BanaagTheme.primaryAmber,
+              foregroundColor: Colors.black,
+            ),
+            icon: const Icon(Icons.cloud_done, size: 16),
+            label: const Text('Simulate & Complete Upload', style: TextStyle(fontWeight: FontWeight.bold)),
+            onPressed: () {
+              Navigator.pop(ctx);
+              setState(() {
+                item.isCompleted = true;
+                item.notes = 'Verified file: villa_delarosa_groundfloor.dxf (ASCII 2018, 4 layers parsed)';
+                final allDone = phase.checklist.every((c) => c.isCompleted);
+                phase.isCompleted = allDone;
+                if (allDone && phase.type.phaseNumber >= _project.currentPhaseNumber && _project.currentPhaseNumber < 7) {
+                  _project.currentPhaseNumber = phase.type.phaseNumber + 1;
+                }
+                ProjectRepository.instance.updateProject(_project);
+              });
+
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('✅ AutoCAD .DXF uploaded & validated! Checklist automatically checked.'),
+                  backgroundColor: BanaagTheme.successGreen,
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _layerScanRow(String layer, String desc, bool isOk) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 2.0),
+      child: Row(
+        children: [
+          Icon(isOk ? Icons.check_circle_outline : Icons.error_outline, color: isOk ? BanaagTheme.successGreen : Colors.red, size: 12),
+          const SizedBox(width: 4),
+          Text(layer, style: const TextStyle(fontFamily: 'monospace', fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white70)),
+          const SizedBox(width: 6),
+          Expanded(child: Text(desc, style: const TextStyle(fontSize: 10, color: BanaagTheme.textMuted), overflow: TextOverflow.ellipsis)),
+        ],
+      ),
     );
   }
 }

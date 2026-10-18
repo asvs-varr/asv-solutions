@@ -3,7 +3,7 @@ import '../theme/banaag_theme.dart';
 
 class DxfExportGuideDialog {
   /// Opens the modal guide for 100% Guaranteed AutoCAD DXF Parsing
-  static void show(BuildContext context) {
+  static void show(BuildContext context, {VoidCallback? onUploadPressed}) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -114,15 +114,33 @@ class DxfExportGuideDialog {
           ),
         ),
         actions: [
+          if (onUploadPressed != null) ...[
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: BanaagTheme.primaryAmber,
+                foregroundColor: Colors.black,
+                minimumSize: const Size(double.infinity, 44),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+              icon: const Icon(Icons.cloud_upload_outlined, size: 18),
+              label: const Text('I-upload ang .DXF Ngayon', style: TextStyle(fontWeight: FontWeight.bold)),
+              onPressed: () {
+                Navigator.pop(ctx);
+                onUploadPressed();
+              },
+            ),
+            const SizedBox(height: 6),
+          ],
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: BanaagTheme.primaryAmber,
-              foregroundColor: Colors.black,
-              minimumSize: const Size(double.infinity, 44),
+              backgroundColor: onUploadPressed != null ? Colors.transparent : BanaagTheme.primaryAmber,
+              foregroundColor: onUploadPressed != null ? BanaagTheme.textMuted : Colors.black,
+              elevation: onUploadPressed != null ? 0 : 2,
+              minimumSize: const Size(double.infinity, 40),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
             ),
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Naintindihan, I-close ang Guide', style: TextStyle(fontWeight: FontWeight.bold)),
+            child: Text(onUploadPressed != null ? 'I-close ang Guide' : 'Naintindihan, I-close ang Guide', style: const TextStyle(fontWeight: FontWeight.bold)),
           ),
         ],
       ),

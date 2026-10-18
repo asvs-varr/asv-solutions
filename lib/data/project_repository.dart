@@ -54,14 +54,16 @@ class ProjectRepository {
     }
   }
 
-  void _seedInitialProjects() {
-    final List<ProjectPhase> defaultPhases = ProjectPhaseType.values.map((phaseType) {
+  List<ProjectPhase> _generatePhases({String intakeMode = 'SITE_INTERVIEW'}) {
+    return ProjectPhaseType.values.map((phaseType) {
       final List<PhaseCheckItem> checklist = [];
 
       switch (phaseType) {
         case ProjectPhaseType.consultation:
           checklist.addAll([
             PhaseCheckItem(id: 'c1', title: 'Client Needs Analysis (Appliance & Connected Loads tally)'),
+            if (intakeMode == 'AUTOCAD_DXF')
+              PhaseCheckItem(id: 'c_dxf', title: 'AutoCAD .DXF Architectural Plan Upload & Layer Audit'),
             PhaseCheckItem(id: 'c2', title: 'Site Inspection (Concrete vs Timber frame structure)'),
             PhaseCheckItem(id: 'c3', title: 'Utility Service Drop Coordinates (Meralco / Coop nearest pole location)'),
           ]);
@@ -110,6 +112,10 @@ class ProjectRepository {
 
       return ProjectPhase(type: phaseType, checklist: checklist);
     }).toList();
+  }
+
+  void _seedInitialProjects() {
+    final List<ProjectPhase> defaultPhases = _generatePhases();
 
     // Project 1: Residence in Antipolo (Rough-in stage)
     final p1Phases = _clonePhases(defaultPhases);
@@ -182,21 +188,8 @@ class ProjectRepository {
     )).toList();
   }
 
-  List<ProjectPhase> createDefaultPhases() {
-    if (_projects.isEmpty) {
-      _seedInitialProjects();
-    }
-    return _clonePhases(_projects.first.phases.map((p) => ProjectPhase(
-      type: p.type,
-      isCompleted: false,
-      checklist: p.checklist.map((c) => PhaseCheckItem(
-        id: c.id,
-        title: c.title,
-        isMandatory: c.isMandatory,
-        isCompleted: false,
-        notes: c.notes,
-      )).toList(),
-    )).toList());
+  List<ProjectPhase> createDefaultPhases({String intakeMode = 'SITE_INTERVIEW'}) {
+    return _generatePhases(intakeMode: intakeMode);
   }
 
   void addProject(Project project) {

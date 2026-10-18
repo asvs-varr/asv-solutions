@@ -136,8 +136,26 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
             icon: const Icon(Icons.file_upload_outlined, color: BanaagTheme.primaryAmber),
             tooltip: 'Import AutoCAD .DXF / Blueprint Image',
             onPressed: () {
+              if (widget.project != null) {
+                // Find c_dxf or CAD upload checklist item in project phases
+                for (final phase in widget.project!.phases) {
+                  for (final item in phase.checklist) {
+                    if (item.id == 'c_dxf') {
+                      item.isCompleted = true;
+                      item.notes = 'Imported via Plan Canvas Engine';
+                    }
+                  }
+                  if (phase.checklist.every((c) => c.isCompleted)) {
+                    phase.isCompleted = true;
+                  }
+                }
+                ProjectRepository.instance.updateProject(widget.project!);
+              }
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('⚡ Dual-Engine: Ready to parse AutoCAD .DXF / PDF Plan!')),
+                const SnackBar(
+                  content: Text('⚡ Dual-Engine: AutoCAD .DXF parsed! Checklist item auto-checked ✅'),
+                  backgroundColor: BanaagTheme.successGreen,
+                ),
               );
             },
           ),

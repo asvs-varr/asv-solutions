@@ -528,7 +528,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   retentionPercent: 10.0,
                   currentPhaseNumber: 1, // Starts at Consultation
                   intakeMode: intakeMode,
-                  phases: repo.createDefaultPhases(),
+                  phases: repo.createDefaultPhases(intakeMode: intakeMode),
                   createdAt: DateTime.now(),
                 );
 
