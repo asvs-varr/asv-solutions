@@ -9,11 +9,11 @@
 | Category | Total Items | Primary Situational Constraint |
 | :--- | :---: | :--- |
 | **[STORE-BLOCKED]** | 2 | Google Play Console ($25) / Merchant Center verification |
-| **[INFRA-BLOCKED]** | 3 | Dedicated Production Backend Server / Database / Cloud Auth |
-| **[PARTNER-BLOCKED]** | 2 | Official B2B Supplier Agreements / Hardware APIs |
+| **[INFRA-BLOCKED]** | 4 | Dedicated Production Backend Server / Database / Live Market Price Feed |
+| **[PARTNER-BLOCKED]** | 3 | Official B2B Supplier Agreements / Autodesk AutoCAD APIs |
 | **[HARDWARE-BLOCKED]** | 2 | Physical Metering Instruments (Bluetooth Megger, Thermal Camera) |
 | **[LEGAL-BLOCKED]** | 1 | PRC Accredited CPE / Official Meralco Utility Portal API |
-| **[UX/ARCHITECTURAL-EXPANSION]** | 1 | Multi-Panel Interactive UI & Dynamic Riser Schematics |
+| **[UX/PRODUCT-EXPANSION]** | 3 | Multi-Brand BOM Matrix, Homeowner Mode & Glossary, Multi-Panel UI |
 | **[ELECTRICAL-EXPANSION]** | 1 | Three-Phase Commercial & Industrial Systems (400V/230V Wye & 230V Delta) |
 
 ---
@@ -176,34 +176,6 @@
   - ✅ **Custom Space Creator**: May 1-tap `+ Add Space` para gumawa ng kahit anong kwarto (Dirty Kitchen, Balcony, Home Office) na may $m^2$ area at ceiling height.
   - ✅ **Custom Appliance Dialog**: Dynamic modal na tumatanggap ng Appliance Name, VA rating, at `[x] Dedicated Circuit` flag.
   - ✅ **Smart Lighting Engine (`lighting_engine.dart`)**: Awtomatikong nagko-compute ng target lumens at nagrerekomenda ng bilang ng 12W LED Downlights ayon sa PEC/IESNA standards na may 1-tap `+ Add Light` action.
-- **Architectural Specifications & Required Features**:
-  1. **Vertical List View Architecture**:
-     - Palitan ang 2-column grid cards ng sleek, high-density vertical ListTiles.
-     - Mas mabilis mag-scroll, may malinaw na counters, at may instant visual tags para sa Dedicated vs General circuits.
-  2. **Zero-Default Initial State (Clean Canvas)**:
-     - Walang unsolicited default appliances sa simula. Magsisimula ang bawat kwarto sa 0 kVA.
-     - May collapsible "Quick Preset Library" (para sa mga nais ng mabilisang pagpili tulad ng 2.0HP Inverter, Induction Cooker, etc.).
-  3. **Custom Space / Room Creator**:
-     - Pwedeng mag-add ng custom spaces (e.g., *Dirty Kitchen, Roof Deck, Home Office, Pump Room, Master Bedroom*).
-     - Bawat kwarto ay may fields para sa **Floor Area ($m^2$)** at **Ceiling Height ($m$)**.
-  4. **Custom Appliance Dialog**:
-     - Dynamic input modal: Appliance Name, Rating in VA o Watts, Power Factor (0.85 default), at Checkbox para sa `[x] Dedicated Circuit (Direct Home Run to Panel)`.
-  5. **Smart Lighting Suggestion Engine (PEC / IESNA Standards)**:
-     - **Lighting Formula**:
-       $$\text{Target Lumens} = \text{Area } (m^2) \times \text{Lux Standard}$$
-       $$\text{Fixture Count} = \left\lceil \frac{\text{Target Lumens}}{\text{Fixture Lumens}} \right\rceil$$
-     - **Lux Standards by Room Type**:
-       - Living / Dining Room: **150 - 200 Lux**
-       - Kitchen / Food Prep: **300 Lux**
-       - Bedroom: **100 - 150 Lux**
-       - Bathroom: **200 Lux**
-       - Garage / Storage: **100 Lux**
-     - **Auto-Recommendation Output**:
-       - Halimbawa para sa $15m^2$ Kitchen: *"Recommended: 4 pcs 12W LED Downlights (900 lumens each) para sa 300 Lux total work illumination."*
-- **Actionable Implementation Steps**:
-  1. I-refactor ang `ApplianceItem` at `Project` domain models upang suportahan ang dynamic `RoomSpace` objects na may dimensions.
-  2. Gumawa ng `LightingSizerEngine` sa `lib/domain/lighting_engine.dart`.
-  3. Palitan ang GridView ng ListView sa `client_needs_analysis_screen.dart` na may custom space tabs at add modals.
 
 ---
 
@@ -217,9 +189,6 @@
   - ✅ **Dynamic UI Switcher**: Naka-mount na ang dynamic Panel Switcher Bar sa `SingleLineDiagramScreen` (`[MDP (Main)]`, `[Panel LP-1]`, `[Panel LP-2]`, `[+ Subpanel]`).
   - ✅ **Interactive Subpanel Creation**: May 1-tap dynamic modal para magdagdag ng bagong subpanels (tulad ng `LP-2`, `PP-ACU`, `Sub-1`) kung saan awtomatikong lumilikha ng sub-feeder breaker sa Main Panel alinsunod sa PEC 2017 Article 2.15 & 4.08.
   - ✅ **Persistence**: Naka-save ang dynamic `panelboards` list sa bawat `Project` record gamit ang JSON serialization.
-- **Detailed Architectural Notes**:
-  - Alinsunod sa PEC 2017 Article 2.15 (Feeders) at Article 4.08 (Switchboards & Panelboards).
-  - Titiyakin ang tamang diversity factors (85%-90%) sa pagitan ng mga subpanels bago sukatang ang kabuuang Main Feeder Breaker at Service Entrance conductors.
 
 ---
 
@@ -236,8 +205,69 @@
      - Three-phase voltage drop: $V_d = \sqrt{3} \times L \times I \times R$
   3. Palawakin ang Smart Phase Balancer mula dual-phase ($A, B$) patungong tri-phase ($A, B, C$) na may unbalance percentage checker ($<10\%$).
   4. Suportahan ang 3-pole & 4-pole main circuit breakers at 4-wire ($3\Phi + 1N + 1G$) feeder wire sizing sa Single-Line Diagram.
+
+---
+
+### [HRZ-014] Direct AutoCAD / Autodesk Cloud Companion & Native `.DWG` Sync Bridge
+- **Status**: 🧊 DEFERRED
+- **Blocker Category**: `[PARTNER-BLOCKED]`
+- **Strategic / Business Impact**: High (Seamless Desktop-to-Mobile CAD workflow; suggested by *John Omar*)
+- **Technical Effort**: High
+- **Why It's Blocked Today**: Ang native `.DWG` ay proprietary binary format ng Autodesk at ang direct AutoCAD cloud/plugin browsing ay nangangailangan ng **Autodesk Platform Services (APS / Forge) Developer API** credentials o AutoCAD desktop LISP/plugin companion.
+- **Actionable Unblocking Steps**:
+  1. Mag-register sa Autodesk Platform Services (APS) free tier para sa `.DWG` to `.DXF`/`.SVG` cloud translation API, O
+  2. Gumawa ng lightweight **BANAAG AutoCAD LISP / Desktop Sync Companion** na nag-a-auto-export ng active AutoCAD drawing diretso sa BANAAG mobile app via local Wi-Fi / QR code!
 - **Detailed Architectural Notes**:
-  - Alinsunod sa Philippine Electrical Code (PEC 2017) Article 2.20 (Branch-Circuit, Feeder, and Service Load Calculations) at Article 3.10.
+  - Sa kasalukuyan, kaya na ng BANAAG mag-import at mag-export ng open-standard `.DXF` files. Ang companion plugin o APS bridge ang mag-aalis ng manual "Save As DXF" step sa AutoCAD.
+
+---
+
+### [HRZ-015] Live Philippine Electrical Market Price Feed & Dynamic BOM Auto-Updater
+- **Status**: 🧊 DEFERRED
+- **Blocker Category**: `[INFRA-BLOCKED]`
+- **Strategic / Business Impact**: 🏆 Game-Changer (Ensures BOM estimates match volatile copper/THHN and PVC hardware prices; suggested by *John Omar*)
+- **Technical Effort**: Medium
+- **Why It's Blocked Today**: Nangangailangan ng remote cloud JSON/Supabase endpoint o periodic scraper/curator index na nag-a-update ng presyo ng THHN wires, uPVC conduits, at circuit breakers base sa kasalukuyang Philippine retail/wholesale market.
+- **Actionable Unblocking Steps**:
+  1. Mag-host ng `market_price_index.json` sa Supabase o GitHub Raw CDN na may regional multiplier (NCR, Luzon, Visayas, Mindanao) at copper price index.
+  2. Maglagay ng **"🔄 Sync Latest Market Prices"** button sa BOM screen na may offline cached fallback at "Last Updated: [Date]" badge.
+  3. Payagan din ang contractor na mag-save ng sarili nilang custom local hardware price overrides.
+
+---
+
+### [HRZ-016] Multi-Brand BOM Comparison Matrix ("Generic/Economy vs. Branded/Premium" + Brand Advantages)
+- **Status**: ⏳ READY TO UNBLOCK (100% Offline-Capable UX Upgrade!)
+- **Blocker Category**: `[UX/PRODUCT-EXPANSION]`
+- **Strategic / Business Impact**: 🏆 Game-Changer (Parang "Generic vs. Branded" sa gamot; sobrang bilis makapag-decide ni Client; suggested by *John Omar*)
+- **Technical Effort**: Low-Medium
+- **Why It's Deferred Today**: Walang external blocker! Maaari na itong i-code anumang oras sa loob ng `BomEngine` (`lib/domain/bom_engine.dart`) at Project Estimate / Proposal screen.
+- **Actionable Unblocking Steps**:
+  1. Magdagdag ng 3-Tier Brand Matrix sa `BomEngine`:
+     - **Tier 1: Budget / Code-Minimum (PS/ICC Certified Economy)** — e.g., *Columbia / Philflex Basic*, *Royu / Omni*, *Moldflex PVC*.
+     - **Tier 2: Contractor Standard (Balanced Reliability)** — e.g., *Phelps Dodge / Duraflex THHN*, *Koten / GE Breakers*, *20mm Thick-Wall Neltex/Emerald PVC*.
+     - **Tier 3: Executive / Heavy-Duty Branded** — e.g., *Phelps Dodge Lead-Free + Heat-Guard*, *Schneider Electric / Square D / Mitsubishi Breakers*, *Panasonic Wide Series Devices*.
+  2. Magpakita ng **Brand Advantage Cards** sa bawat item (hal. *"Phelps Dodge THHN: 99.99% Pure Electrolytic Copper, mas mababa ang init at voltage drop, 25+ yrs insulation lifespan vs ordinary wire"*).
+  3. Hayaang makita ni Client ang side-by-side price difference at pumili ng tier bago i-export ang PDF Contract Proposal!
+
+---
+
+### [HRZ-017] Dual-Persona Mode ("Tatay / Homeowner Renovator" vs. "Pro Engineer") & Visual Electrical Glossary
+- **Status**: ⏳ READY TO UNBLOCK (100% Offline-Capable UX Upgrade!)
+- **Blocker Category**: `[UX/PRODUCT-EXPANSION]`
+- **Strategic / Business Impact**: 🏆 Game-Changer (Opens BANAAG to millions of Filipino homeowners & DIY renovators while keeping full PEC rigor for Engineers; suggested by *John Omar*)
+- **Technical Effort**: Low-Medium
+- **Why It's Deferred Today**: Walang external blocker! Maaari itong idagdag bilang toggleable mode at interactive reference guide sa loob ng app.
+- **Actionable Unblocking Steps**:
+  1. **Homeowner / Renovation Estimator Mode**:
+     - Gumagamit ng madaling intindihin na Taglish guide (*"Ilang Aircon, Ilaw, at Saksakan ang idadagdag sa kwarto?"*) at nagbibigay agad ng **Budget Range (Materials + Labor Estimate)** at **Safety Checklist** nang hindi nakakalula ang engineering formulas.
+  2. **Interactive Electrical Terminologies & Layman's Dictionary**:
+     - Searchable Taglish glossary na may malinaw na paliwanag at larawan/halimbawa para sa:
+       - **THHN / mm²** (*Kapal at klase ng tanso sa loob ng wire*)
+       - **AT / Circuit Breaker** (*Automatic pamputol-kuryente kapag nag-overload o nag-short*)
+       - **GFCI Outlet** (*Saksakan sa banyo/kusina na kusang namamatay sa loob ng milliseconds kapag nabasa para iwas-kuryente*)
+       - **Dedicated Circuit / Home Run** (*Sariling linya ng kuryente diretso sa panelboard para sa malalakas kumain gaya ng Aircon at Water Heater*)
+       - **Voltage Drop** (*Paghina ng boltahe kapag sobrang haba o sobrang nipis ng wire*)
+       - **Conduit (PVC / EMT)** (*Tubong proteksyon ng wire sa loob ng pader o kisame*)
 
 ---
 
