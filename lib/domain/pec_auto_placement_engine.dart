@@ -37,36 +37,42 @@ class PecAutoPlacementEngine {
     required double widthMeters,
     double ceilingHeightMeters = 2.7,
     RoomType roomType = RoomType.livingDining,
-    double canvasOriginX = 60.0,
-    double canvasOriginY = 60.0,
-    double scale = 40.0,
+    double canvasOriginX = 34.0,
+    double canvasOriginY = 185.0,
+    double? scale,
     String panelId = 'pt-panel',
   }) {
     final double safeL = lengthMeters <= 0 ? 6.0 : lengthMeters;
     final double safeW = widthMeters <= 0 ? 5.0 : widthMeters;
     final double areaSqm = safeL * safeW;
 
+    // Fit cleanly inside the mobile floor plan viewport (width ~292px, height ~205px)
+    const double targetBoxWidth = 292.0;
+    const double targetBoxHeight = 205.0;
+    final double scaleX = targetBoxWidth / safeL;
+    final double scaleY = targetBoxHeight / safeW;
+
     final List<CanvasPoint> points = [];
     final List<ConduitRoute> routes = [];
 
-    // 1. Panelboard (LP-1) at main entrance corner
+    // 1. Panelboard (MDP) at main entrance corner
     final panelPt = CanvasPoint(
       id: panelId,
       type: 'PANEL',
-      label: 'Main Panel (LP-1)',
-      x: canvasOriginX + 15,
-      y: canvasOriginY + (safeW * scale) - 20,
+      label: 'MDP',
+      x: canvasOriginX + 12,
+      y: canvasOriginY + (safeW * scaleY) - 14,
       circuitNumber: 1,
     );
     points.add(panelPt);
 
-    // 2. Wall Switch (S1, S2, or S3w) beside entrance door opening
+    // 2. Wall Switch (S1 or S2) beside entrance door opening
     final switchPt = CanvasPoint(
       id: 'pt-sw-auto',
       type: 'SWITCH_1G',
-      label: areaSqm > 20 ? 'S2a,b' : 'S1a',
-      x: canvasOriginX + 45,
-      y: canvasOriginY + (safeW * scale) - 20,
+      label: areaSqm > 20 ? 'S2' : 'S1',
+      x: canvasOriginX + 36,
+      y: canvasOriginY + (safeW * scaleY) - 14,
       circuitNumber: 1,
     );
     points.add(switchPt);
@@ -97,9 +103,9 @@ class PecAutoPlacementEngine {
       points.add(CanvasPoint(
         id: lId,
         type: 'LIGHT',
-        label: f.label,
-        x: canvasOriginX + (f.xMeters * scale),
-        y: canvasOriginY + (f.yMeters * scale),
+        label: 'L-${i + 1}',
+        x: canvasOriginX + (f.xMeters * scaleX),
+        y: canvasOriginY + (f.yMeters * scaleY),
         circuitNumber: 1,
       ));
     }
@@ -126,48 +132,47 @@ class PecAutoPlacementEngine {
     }
 
     // 4. PEC Art 2.10.3.3 Convenience Receptacle Spacing
-    // Rule: No point along the floor line in any wall space may be more than 1.8m (6ft)
-    // from an outlet. Maximum spacing between outlets along a wall is 3.6m (12ft).
     final List<CanvasPoint> outletPoints = [];
+    int coIndex = 1;
 
     // Left wall outlets
-    final int leftCount = (safeW / 3.6).ceil().clamp(1, 4);
+    final int leftCount = (safeW / 3.6).ceil().clamp(1, 3);
     for (int i = 1; i <= leftCount; i++) {
       final double yPos = (safeW / (leftCount + 1)) * i;
       outletPoints.add(CanvasPoint(
         id: 'pt-co-l$i',
         type: 'OUTLET_DUPLEX',
-        label: 'CO Left-$i (PEC 1.8m Rule)',
+        label: 'CO-${coIndex++}',
         x: canvasOriginX + 10,
-        y: canvasOriginY + (yPos * scale),
+        y: canvasOriginY + (yPos * scaleY),
         circuitNumber: 2,
       ));
     }
 
     // Top wall outlets
-    final int topCount = (safeL / 3.6).ceil().clamp(1, 5);
+    final int topCount = (safeL / 3.6).ceil().clamp(1, 4);
     for (int i = 1; i <= topCount; i++) {
       final double xPos = (safeL / (topCount + 1)) * i;
       outletPoints.add(CanvasPoint(
         id: 'pt-co-t$i',
         type: 'OUTLET_DUPLEX',
-        label: 'CO Top-$i (PEC 1.8m Rule)',
-        x: canvasOriginX + (xPos * scale),
+        label: 'CO-${coIndex++}',
+        x: canvasOriginX + (xPos * scaleX),
         y: canvasOriginY + 10,
         circuitNumber: 2,
       ));
     }
 
     // Right wall outlets
-    final int rightCount = (safeW / 3.6).ceil().clamp(1, 4);
+    final int rightCount = (safeW / 3.6).ceil().clamp(1, 3);
     for (int i = 1; i <= rightCount; i++) {
       final double yPos = (safeW / (rightCount + 1)) * i;
       outletPoints.add(CanvasPoint(
         id: 'pt-co-r$i',
         type: 'OUTLET_DUPLEX',
-        label: 'CO Right-$i (PEC 1.8m Rule)',
-        x: canvasOriginX + (safeL * scale) - 10,
-        y: canvasOriginY + (yPos * scale),
+        label: 'CO-${coIndex++}',
+        x: canvasOriginX + (safeL * scaleX) - 10,
+        y: canvasOriginY + (yPos * scaleY),
         circuitNumber: 2,
       ));
     }
@@ -177,9 +182,9 @@ class PecAutoPlacementEngine {
       outletPoints.add(CanvasPoint(
         id: 'pt-co-b1',
         type: 'OUTLET_DUPLEX',
-        label: 'CO Bottom (PEC 1.8m Rule)',
-        x: canvasOriginX + ((safeL / 2) * scale),
-        y: canvasOriginY + (safeW * scale) - 10,
+        label: 'CO-${coIndex++}',
+        x: canvasOriginX + ((safeL / 2) * scaleX),
+        y: canvasOriginY + (safeW * scaleY) - 10,
         circuitNumber: 2,
       ));
     }
@@ -198,8 +203,8 @@ class PecAutoPlacementEngine {
 
       for (int i = 0; i < outletPoints.length - 1; i++) {
         final double dist = math.sqrt(
-          math.pow((outletPoints[i + 1].x - outletPoints[i].x) / scale, 2) +
-          math.pow((outletPoints[i + 1].y - outletPoints[i].y) / scale, 2),
+          math.pow((outletPoints[i + 1].x - outletPoints[i].x) / scaleX, 2) +
+          math.pow((outletPoints[i + 1].y - outletPoints[i].y) / scaleY, 2),
         );
         routes.add(ConduitRoute(
           id: 'rt-co-chain-$i',
@@ -213,13 +218,12 @@ class PecAutoPlacementEngine {
 
     // 5. Dedicated Aircon Unit (ACU) for spaces >= 12 sqm
     if (areaSqm >= 12.0) {
-      final String hpRating = areaSqm <= 18.0 ? '1.5HP' : (areaSqm <= 30.0 ? '2.0HP' : '2.5HP');
       final acuPt = CanvasPoint(
         id: 'pt-acu-auto',
         type: 'ACU',
-        label: '$hpRating Inverter ACU (Dedicated)',
-        x: canvasOriginX + (safeL * scale) - 25,
-        y: canvasOriginY + 25,
+        label: 'ACU-1',
+        x: canvasOriginX + (safeL * scaleX) - 18,
+        y: canvasOriginY + 18,
         circuitNumber: 3,
       );
       points.add(acuPt);

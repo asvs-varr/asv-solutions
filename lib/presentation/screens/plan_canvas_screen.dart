@@ -29,7 +29,7 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
   bool _isHeatmapVisible = false;
   String _selectedTool = 'SELECT';
   bool _isUnderlayVisible = true;
-  final double _underlayOpacity = 0.65;
+  final double _underlayOpacity = 0.78;
   String? _blueprintPath;
   bool _showLabels = true;
   bool _showConduits = true;
@@ -37,9 +37,17 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
   CanvasPoint? _draggedPoint;
   Offset? _dragStartOffset;
   bool _hasMovedSignificantly = false;
+  final TransformationController _zoomController = TransformationController();
+  double _currentZoom = 1.0;
 
   bool get _hasBlueprintFile =>
       _blueprintPath != null && _blueprintPath!.isNotEmpty && File(_blueprintPath!).existsSync();
+
+  @override
+  void dispose() {
+    _zoomController.dispose();
+    super.dispose();
+  }
 
   @override
   void initState() {
@@ -47,17 +55,18 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
     _roomGeometry = widget.project?.roomGeometry;
     _blueprintPath = widget.project?.blueprintImagePath;
     if (widget.project != null && widget.project!.canvasPoints.isNotEmpty) {
-      _points = widget.project!.canvasPoints;
-      _routes = widget.project!.conduitRoutes;
+      _points = List<CanvasPoint>.from(widget.project!.canvasPoints);
+      _routes = List<ConduitRoute>.from(widget.project!.conduitRoutes);
+      _sanitizeAndFitExistingPointsIfNeeded();
     } else if (widget.project != null && widget.project!.applianceLoads.isNotEmpty) {
       _autoGenerateFromAppliances(widget.project!.applianceLoads);
     } else {
       _points = [
-        CanvasPoint(id: 'pt-1', type: 'PANEL', label: 'MDP', x: 60, y: 150),
-        CanvasPoint(id: 'pt-2', type: 'SWITCH_1G', label: 'SW-1', x: 160, y: 150),
-        CanvasPoint(id: 'pt-3', type: 'LIGHT', label: 'L-1', x: 260, y: 150),
-        CanvasPoint(id: 'pt-4', type: 'OUTLET_DUPLEX', label: 'CO-1', x: 160, y: 260),
-        CanvasPoint(id: 'pt-5', type: 'ACU', label: 'ACU-1', x: 280, y: 260),
+        CanvasPoint(id: 'pt-1', type: 'PANEL', label: 'MDP', x: 42, y: 285),
+        CanvasPoint(id: 'pt-2', type: 'SWITCH_1G', label: 'S1-1', x: 110, y: 225),
+        CanvasPoint(id: 'pt-3', type: 'LIGHT', label: 'L-1', x: 190, y: 225),
+        CanvasPoint(id: 'pt-4', type: 'OUTLET_DUPLEX', label: 'CO-1', x: 140, y: 335),
+        CanvasPoint(id: 'pt-5', type: 'ACU', label: 'ACU-1', x: 285, y: 235),
       ];
       _routes = [
         ConduitRoute(id: 'rt-1', fromPointId: 'pt-1', toPointId: 'pt-2', measuredLengthMeters: 4.5),
@@ -66,6 +75,88 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
         ConduitRoute(id: 'rt-4', fromPointId: 'pt-4', toPointId: 'pt-5', measuredLengthMeters: 4.8),
       ];
     }
+  }
+
+  /// Automatically cleans up duplicate MDP panels or out-of-bounds legacy coordinates
+  /// so all items sit strictly inside the rendered floor plan bounds.
+  void _sanitizeAndFitExistingPointsIfNeeded() {
+    final panelCount = _points.where((p) => p.type == 'PANEL').length;
+    final hasOutOfBounds = _points.any((p) => p.x > 335.0 || p.y < 170.0 || p.y > 410.0);
+
+    if (panelCount > 1 || hasOutOfBounds) {
+      if (widget.project != null && widget.project!.applianceLoads.isNotEmpty) {
+        _autoGenerateFromAppliances(widget.project!.applianceLoads);
+      } else {
+        // Deduplicate extra PANEL points and clamp into floor plan safe zone
+        bool keptFirstPanel = false;
+        final List<CanvasPoint> cleaned = [];
+        for (final pt in _points) {
+          if (pt.type == 'PANEL') {
+            if (keptFirstPanel) continue;
+            keptFirstPanel = true;
+            cleaned.add(CanvasPoint(
+              id: pt.id,
+              type: pt.type,
+              label: 'MDP',
+              x: 40.0,
+              y: 285.0,
+              circuitNumber: pt.circuitNumber,
+            ));
+            continue;
+          }
+          cleaned.add(pt);
+        }
+        final nonPanels = cleaned.where((p) => p.type != 'PANEL').toList();
+        final int total = nonPanels.length;
+        final int cols = total <= 6 ? 3 : (total <= 12 ? 4 : 5);
+        final int rows = (total / cols).ceil().clamp(1, 10);
+        const double startX = 82.0, endX = 320.0;
+        const double startY = 195.0, endY = 385.0;
+        final double stepX = cols > 1 ? (endX - startX) / (cols - 1) : 0.0;
+        final double stepY = rows > 1 ? (endY - startY) / (rows - 1) : 0.0;
+
+        for (int i = 0; i < nonPanels.length; i++) {
+          final int col = i % cols;
+          final int row = i ~/ cols;
+          nonPanels[i].x = startX + (col * stepX);
+          nonPanels[i].y = startY + (row * stepY);
+        }
+        _points = cleaned;
+        final validIds = _points.map((p) => p.id).toSet();
+        _routes.removeWhere((r) => !validIds.contains(r.fromPointId) || !validIds.contains(r.toPointId));
+      }
+
+      if (widget.project != null) {
+        widget.project!.canvasPoints = _points;
+        widget.project!.conduitRoutes = _routes;
+        ProjectRepository.instance.updateProject(widget.project!);
+      }
+    }
+  }
+
+  void _cycleZoomLevel() {
+    setState(() {
+      if (_currentZoom < 1.4) {
+        _currentZoom = 1.75;
+      } else if (_currentZoom < 2.2) {
+        _currentZoom = 2.4;
+      } else {
+        _currentZoom = 1.0;
+      }
+
+      if (_currentZoom == 1.0) {
+        _zoomController.value = Matrix4.identity();
+      } else {
+        // Zoom toward the center of the floor plan (approx x: 180, y: 290)
+        const double centerX = 180.0;
+        const double centerY = 290.0;
+        final double dx = -centerX * (_currentZoom - 1.0);
+        final double dy = -centerY * (_currentZoom - 1.0);
+        _zoomController.value = Matrix4.identity()
+          ..translateByDouble(dx, dy, 0.0, 1.0)
+          ..scaleByDouble(_currentZoom, _currentZoom, 1.0, 1.0);
+      }
+    });
   }
 
   String _getShorthandLabel(String pointType, String originalName, int index) {
@@ -85,14 +176,11 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
   }
 
   void _autoGenerateFromAppliances(List<ApplianceItem> appliances) {
-    final panelPt = CanvasPoint(id: 'pt-panel', type: 'PANEL', label: 'MDP', x: 80, y: 140);
+    // Place MDP right at the left entrance wall inside the floor plan box
+    final panelPt = CanvasPoint(id: 'pt-panel', type: 'PANEL', label: 'MDP', x: 40.0, y: 285.0);
     _points = [panelPt];
     _routes = [];
 
-    // Separate into Circuit Types:
-    // 1. Lighting (Circuit 1)
-    // 2. Convenience Outlets (Circuit 2)
-    // 3. Dedicated Equipment (Circuit 3+)
     final List<Map<String, dynamic>> flatDevices = [];
     int devCounter = 1;
 
@@ -122,21 +210,38 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
       }
     }
 
-    // Grid placement parameters
-    double curX = 180.0;
-    double curY = 140.0;
+    // Dynamic grid bounded strictly inside the rendered floor plan area:
+    // Horizontal safe zone: [82.0 .. 320.0] (within 360px phone screen)
+    // Vertical safe zone: [195.0 .. 385.0] (within centered landscape floor plan)
+    final int totalDevs = flatDevices.length;
+    final int cols = totalDevs <= 6 ? 3 : (totalDevs <= 12 ? 4 : 5);
+    final int rows = (totalDevs / cols).ceil().clamp(1, 12);
+    const double startX = 82.0;
+    const double endX = 320.0;
+    const double startY = 195.0;
+    const double endY = 385.0;
+    final double stepX = cols > 1 ? (endX - startX) / (cols - 1) : 0.0;
+    final double stepY = rows > 1 ? (endY - startY) / (rows - 1) : 0.0;
 
     // Track the last point in each circuit branch for clean daisy-chaining
     String lastLightingPointId = 'pt-panel';
     String lastOutletPointId = 'pt-panel';
     int routeCounter = 1;
 
-    for (final dev in flatDevices) {
+    for (int i = 0; i < flatDevices.length; i++) {
+      final dev = flatDevices[i];
       final String pId = dev['id'];
       final String pType = dev['type'];
       final String pName = dev['name'];
       final bool isDedicated = dev['isDedicated'];
       final int idx = dev['index'];
+
+      final int col = i % cols;
+      final int row = i ~/ cols;
+      // Serpentine row ordering so daisy-chain conduits don't zig-zag across the entire plan
+      final int effectiveCol = (row.isOdd) ? (cols - 1 - col) : col;
+      final double curX = startX + (effectiveCol * stepX);
+      final double curY = startY + (row * stepY);
 
       final compactLabel = _getShorthandLabel(pType, pName, idx);
 
@@ -176,12 +281,6 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
           measuredLengthMeters: 3.8,
         ));
         lastOutletPointId = pId;
-      }
-
-      curX += 95.0;
-      if (curX > 400.0) {
-        curX = 180.0;
-        curY += 85.0;
       }
     }
   }
@@ -584,13 +683,13 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                     widget.project!.conduitRoutes = _routes;
                     ProjectRepository.instance.updateProject(widget.project!);
                   } else {
-                    // Default baseline clean layout
+                    // Default baseline clean layout strictly inside floor plan bounds
                     _points = [
-                      CanvasPoint(id: 'pt-panel', type: 'PANEL', label: 'MDP', x: 80, y: 140),
-                      CanvasPoint(id: 'pt-1', type: 'SWITCH_1G', label: 'SW-1', x: 150, y: 140),
-                      CanvasPoint(id: 'pt-2', type: 'LIGHT', label: 'L-1', x: 230, y: 140),
-                      CanvasPoint(id: 'pt-3', type: 'OUTLET_DUPLEX', label: 'CO-1', x: 150, y: 220),
-                      CanvasPoint(id: 'pt-4', type: 'ACU', label: 'ACU-1', x: 260, y: 220),
+                      CanvasPoint(id: 'pt-panel', type: 'PANEL', label: 'MDP', x: 40, y: 285),
+                      CanvasPoint(id: 'pt-1', type: 'SWITCH_1G', label: 'S1-1', x: 110, y: 225),
+                      CanvasPoint(id: 'pt-2', type: 'LIGHT', label: 'L-1', x: 190, y: 225),
+                      CanvasPoint(id: 'pt-3', type: 'OUTLET_DUPLEX', label: 'CO-1', x: 140, y: 335),
+                      CanvasPoint(id: 'pt-4', type: 'ACU', label: 'ACU-1', x: 285, y: 235),
                     ];
                     _routes = [
                       ConduitRoute(id: 'rt-1', fromPointId: 'pt-panel', toPointId: 'pt-1', measuredLengthMeters: 4.0),
@@ -603,7 +702,7 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                 });
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
-                    content: Text('⚡ Layout Cleansed! Duplicate MDPs removed & Smart Daisy-Chain applied.'),
+                    content: Text('⚡ Auto-Fitted to Floor Plan! Duplicate MDPs removed & items aligned inside rooms.'),
                     backgroundColor: BanaagTheme.successGreen,
                   ),
                 );
@@ -624,7 +723,7 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                   children: const [
                     Icon(Icons.auto_fix_high, color: BanaagTheme.primaryAmber, size: 18),
                     SizedBox(width: 10),
-                    Text('Auto-Clean & Daisy-Chain', style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
+                    Text('Auto-Clean & Fit to Plan', style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
                   ],
                 ),
               ),
@@ -756,99 +855,203 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
             ),
           ),
 
-          // Interactive 2D Grid Canvas with Blueprint Floor Plan Underlay
+          // Interactive 2D Grid Canvas with Blueprint Floor Plan Underlay + Zoom & Fit Controls
           Expanded(
-            child: GestureDetector(
-              onTapUp: _handleCanvasTap,
-              onPanStart: _handlePanStart,
-              onPanUpdate: _handlePanUpdate,
-              onPanEnd: _handlePanEnd,
-              child: Container(
-                color: const Color(0xFF16191F),
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    // 1. Blueprint Floor Plan Underlay
-                    if (_hasBlueprintFile && _isUnderlayVisible)
-                      Positioned.fill(
-                        child: Opacity(
-                          opacity: _underlayOpacity,
-                          child: _blueprintPath!.toLowerCase().endsWith('.pdf')
-                              ? _buildPdfUnderlayPlaceholder()
-                              : Image.file(
-                                  File(_blueprintPath!),
-                                  fit: BoxFit.contain,
-                                  errorBuilder: (ctx, err, stack) => const SizedBox.shrink(),
-                                ),
+            child: Container(
+              color: const Color(0xFF16191F),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  // Zoomable Interactive Canvas (Floor Plan + Electrical Vector Layer move/scale together)
+                  InteractiveViewer(
+                    transformationController: _zoomController,
+                    minScale: 1.0,
+                    maxScale: 3.2,
+                    panEnabled: false,
+                    scaleEnabled: true,
+                    onInteractionEnd: (_) {
+                      setState(() {
+                        _currentZoom = _zoomController.value.getMaxScaleOnAxis();
+                      });
+                    },
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTapUp: _handleCanvasTap,
+                      onPanStart: _handlePanStart,
+                      onPanUpdate: _handlePanUpdate,
+                      onPanEnd: _handlePanEnd,
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          // 1. Blueprint Floor Plan Underlay
+                          if (_hasBlueprintFile && _isUnderlayVisible)
+                            Positioned.fill(
+                              child: Opacity(
+                                opacity: _underlayOpacity,
+                                child: _blueprintPath!.toLowerCase().endsWith('.pdf')
+                                    ? _buildPdfUnderlayPlaceholder()
+                                    : Image.file(
+                                        File(_blueprintPath!),
+                                        fit: BoxFit.contain,
+                                        errorBuilder: (ctx, err, stack) => const SizedBox.shrink(),
+                                      ),
+                              ),
+                            ),
+
+                          // 2. Interactive Vector Electrical Layer
+                          CustomPaint(
+                            painter: CanvasPainter(
+                              points: _points,
+                              routes: _routes,
+                              roomGeometry: _roomGeometry,
+                              isHeatmap: _isHeatmapVisible,
+                              showLabels: _showLabels,
+                              showConduits: _showConduits,
+                              hasBlueprintUnderlay: _hasBlueprintFile && _isUnderlayVisible,
+                              selectedPoint: _selectedPoint,
+                            ),
+                            child: Container(),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  // 3. Floating Blueprint Layer Pill Indicator (Top-Left)
+                  if (_hasBlueprintFile)
+                    Positioned(
+                      top: 10,
+                      left: 12,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: const Color(0xDD11151E),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: BanaagTheme.primaryAmber.withValues(alpha: 0.6)),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.4),
+                              blurRadius: 4,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              _blueprintPath!.toLowerCase().endsWith('.pdf') ? Icons.picture_as_pdf : Icons.image,
+                              size: 14,
+                              color: BanaagTheme.primaryAmber,
+                            ),
+                            const SizedBox(width: 6),
+                            ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 115),
+                              child: Text(
+                                _blueprintPath!.split(Platform.pathSeparator).last,
+                                style: const TextStyle(color: Colors.white, fontSize: 10.5, fontWeight: FontWeight.bold),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            GestureDetector(
+                              onTap: () => setState(() => _isUnderlayVisible = !_isUnderlayVisible),
+                              child: Icon(
+                                _isUnderlayVisible ? Icons.visibility : Icons.visibility_off,
+                                size: 15,
+                                color: _isUnderlayVisible ? BanaagTheme.primaryAmber : Colors.white38,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-
-                    // 2. Interactive Vector Electrical Layer
-                    CustomPaint(
-                      painter: CanvasPainter(
-                        points: _points,
-                        routes: _routes,
-                        roomGeometry: _roomGeometry,
-                        isHeatmap: _isHeatmapVisible,
-                        showLabels: _showLabels,
-                        showConduits: _showConduits,
-                        hasBlueprintUnderlay: _hasBlueprintFile && _isUnderlayVisible,
-                        selectedPoint: _selectedPoint,
-                      ),
-                      child: Container(),
                     ),
 
-                    // 3. Floating Blueprint Layer Pill Indicator
-                    if (_hasBlueprintFile)
-                      Positioned(
-                        top: 10,
-                        left: 12,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                          decoration: BoxDecoration(
-                            color: const Color(0xDD11151E),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: BanaagTheme.primaryAmber.withValues(alpha: 0.6)),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.4),
-                                blurRadius: 4,
-                                offset: const Offset(0, 2),
+                  // 4. Floating Quick Zoom & Auto-Fit Controls (Top-Right)
+                  Positioned(
+                    top: 10,
+                    right: 12,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // 1-Tap Auto-Fit Items to Plan Button
+                        GestureDetector(
+                          onTap: () {
+                            setState(() {
+                              if (widget.project != null && widget.project!.applianceLoads.isNotEmpty) {
+                                _autoGenerateFromAppliances(widget.project!.applianceLoads);
+                                widget.project!.canvasPoints = _points;
+                                widget.project!.conduitRoutes = _routes;
+                                ProjectRepository.instance.updateProject(widget.project!);
+                              } else {
+                                _sanitizeAndFitExistingPointsIfNeeded();
+                              }
+                              _selectedPoint = null;
+                            });
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('🎯 Items fitted strictly inside Floor Plan bounds!'),
+                                backgroundColor: BanaagTheme.successGreen,
+                                duration: Duration(seconds: 2),
                               ),
-                            ],
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                _blueprintPath!.toLowerCase().endsWith('.pdf') ? Icons.picture_as_pdf : Icons.image,
-                                size: 14,
-                                color: BanaagTheme.primaryAmber,
-                              ),
-                              const SizedBox(width: 6),
-                              ConstrainedBox(
-                                constraints: const BoxConstraints(maxWidth: 160),
-                                child: Text(
-                                  _blueprintPath!.split(Platform.pathSeparator).last,
-                                  style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
-                                  overflow: TextOverflow.ellipsis,
+                            );
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                            decoration: BoxDecoration(
+                              color: const Color(0xDD11151E),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.cyanAccent.withValues(alpha: 0.7)),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: const [
+                                Icon(Icons.fit_screen, size: 14, color: Colors.cyanAccent),
+                                SizedBox(width: 4),
+                                Text(
+                                  'Fit Items',
+                                  style: TextStyle(color: Colors.cyanAccent, fontSize: 10.5, fontWeight: FontWeight.bold),
                                 ),
-                              ),
-                              const SizedBox(width: 8),
-                              GestureDetector(
-                                onTap: () => setState(() => _isUnderlayVisible = !_isUnderlayVisible),
-                                child: Icon(
-                                  _isUnderlayVisible ? Icons.visibility : Icons.visibility_off,
-                                  size: 16,
-                                  color: _isUnderlayVisible ? BanaagTheme.primaryAmber : Colors.white38,
-                                ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
                         ),
-                      ),
-                  ],
-                ),
+                        const SizedBox(width: 6),
+                        // 1-Tap Zoom Floor Plan Button (1.0x -> 1.8x -> 2.4x)
+                        GestureDetector(
+                          onTap: _cycleZoomLevel,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                            decoration: BoxDecoration(
+                              color: _currentZoom > 1.05 ? BanaagTheme.primaryAmber : const Color(0xDD11151E),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: BanaagTheme.primaryAmber),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.zoom_in,
+                                  size: 14,
+                                  color: _currentZoom > 1.05 ? Colors.black : BanaagTheme.primaryAmber,
+                                ),
+                                const SizedBox(width: 3),
+                                Text(
+                                  '${_currentZoom.toStringAsFixed(1)}x',
+                                  style: TextStyle(
+                                    color: _currentZoom > 1.05 ? Colors.black : Colors.white,
+                                    fontSize: 10.5,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -985,10 +1188,10 @@ class CanvasPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    // Draw Grid Lines
+    // Draw Subtle CAD Grid Lines
     final gridPaint = Paint()
-      ..color = const Color(0xFF222733)
-      ..strokeWidth = 1.0;
+      ..color = const Color(0xFF1E232E)
+      ..strokeWidth = 0.8;
 
     for (double x = 0; x < size.width; x += 30) {
       canvas.drawLine(Offset(x, 0), Offset(x, size.height), gridPaint);
@@ -1005,12 +1208,12 @@ class CanvasPainter extends CustomPainter {
     // In-Canvas Optical Lux Heatmap Layer
     if (isHeatmap) {
       for (final pt in points.where((p) => p.type == 'LIGHT')) {
-        final radius = 55.0;
+        const radius = 38.0;
         final gradPaint = Paint()
           ..shader = RadialGradient(
             colors: [
-              BanaagTheme.primaryAmber.withValues(alpha: 0.55),
-              BanaagTheme.primaryAmber.withValues(alpha: 0.18),
+              BanaagTheme.primaryAmber.withValues(alpha: 0.50),
+              BanaagTheme.primaryAmber.withValues(alpha: 0.15),
               Colors.transparent,
             ],
             stops: const [0.0, 0.45, 1.0],
@@ -1021,11 +1224,11 @@ class CanvasPainter extends CustomPainter {
       }
     }
 
-    // Draw Conduit Routes (Orthogonal 90-degree CAD Routing)
+    // Draw Conduit Routes (Sleek Orthogonal 90-degree CAD Routing)
     if (showConduits) {
       final routePaint = Paint()
-        ..color = BanaagTheme.primaryAmber.withValues(alpha: 0.85)
-        ..strokeWidth = 2.0
+        ..color = BanaagTheme.primaryAmber.withValues(alpha: 0.68)
+        ..strokeWidth = 1.3
         ..style = PaintingStyle.stroke
         ..strokeCap = StrokeCap.round
         ..strokeJoin = StrokeJoin.round;
@@ -1036,21 +1239,16 @@ class CanvasPainter extends CustomPainter {
 
         if (p1.id == p2.id) continue;
 
-        // Clean Orthogonal CAD Conduit Path (Right-Angle Manhattan routing)
         final path = Path();
         path.moveTo(p1.x, p1.y);
 
-        // Break routing through an intermediate elbow point:
-        // Horizontal-first if dx > dy, otherwise Vertical-first
         final dx = (p2.x - p1.x).abs();
         final dy = (p2.y - p1.y).abs();
 
         if (dx >= dy) {
-          // Horizontal then Vertical
           path.lineTo(p2.x, p1.y);
           path.lineTo(p2.x, p2.y);
         } else {
-          // Vertical then Horizontal
           path.lineTo(p1.x, p2.y);
           path.lineTo(p2.x, p2.y);
         }
@@ -1059,44 +1257,53 @@ class CanvasPainter extends CustomPainter {
       }
     }
 
-    // Draw Points
+    // Draw Micro-CAD Points (6.5px radius so rooms & walls remain clearly visible)
     for (final pt in points) {
       final isSel = selectedPoint?.id == pt.id;
+      final bool isPanel = pt.type == 'PANEL';
+      final double radius = isSel ? 9.0 : (isPanel ? 7.5 : 6.2);
       final pointPaint = Paint()..color = getColorForType(pt.type);
 
       // Selection halo
       if (isSel) {
         canvas.drawCircle(
           Offset(pt.x, pt.y),
-          17,
+          13.0,
           Paint()
             ..color = BanaagTheme.primaryAmber.withValues(alpha: 0.35)
             ..style = PaintingStyle.fill,
         );
       }
 
-      canvas.drawCircle(Offset(pt.x, pt.y), isSel ? 13 : 11, pointPaint);
+      canvas.drawCircle(Offset(pt.x, pt.y), radius, pointPaint);
 
-      // Border
+      // Crisp CAD Symbol Border
       canvas.drawCircle(
         Offset(pt.x, pt.y),
-        isSel ? 13 : 11,
+        radius,
         Paint()
-          ..color = isSel ? BanaagTheme.primaryAmber : Colors.white
+          ..color = isSel ? BanaagTheme.primaryAmber : const Color(0xFF11151E)
           ..style = PaintingStyle.stroke
-          ..strokeWidth = isSel ? 2.5 : 1.5,
+          ..strokeWidth = isSel ? 2.0 : 1.2,
       );
 
-      // Compact Badge Label
+      // Inner CAD center dot for precision visual anchor
+      canvas.drawCircle(
+        Offset(pt.x, pt.y),
+        1.8,
+        Paint()..color = const Color(0xFF11151E),
+      );
+
+      // Micro-Badge Label
       if (showLabels) {
-        final displayLabel = pt.label.length > 8 ? pt.label.substring(0, 8) : pt.label;
+        final displayLabel = pt.label.length > 7 ? pt.label.substring(0, 7) : pt.label;
         final textSpan = TextSpan(
           text: displayLabel,
           style: const TextStyle(
             color: Colors.white,
-            fontSize: 8.5,
+            fontSize: 6.4,
             fontWeight: FontWeight.w700,
-            letterSpacing: 0.2,
+            letterSpacing: 0.1,
           ),
         );
         final textPainter = TextPainter(text: textSpan, textDirection: TextDirection.ltr);
@@ -1104,23 +1311,23 @@ class CanvasPainter extends CustomPainter {
 
         final bgRect = RRect.fromRectAndRadius(
           Rect.fromLTWH(
-            pt.x - (textPainter.width / 2) - 4,
-            pt.y + 13,
-            textPainter.width + 8,
-            textPainter.height + 3,
+            pt.x - (textPainter.width / 2) - 2.5,
+            pt.y + radius + 1.5,
+            textPainter.width + 5.0,
+            textPainter.height + 1.8,
           ),
-          const Radius.circular(4),
+          const Radius.circular(3),
         );
 
-        final bgPaint = Paint()..color = const Color(0xEE11151E);
+        final bgPaint = Paint()..color = const Color(0xD811151E);
         final borderPaint = Paint()
           ..color = isSel ? BanaagTheme.primaryAmber : Colors.white24
           ..style = PaintingStyle.stroke
-          ..strokeWidth = 0.8;
+          ..strokeWidth = 0.6;
 
         canvas.drawRRect(bgRect, bgPaint);
         canvas.drawRRect(bgRect, borderPaint);
-        textPainter.paint(canvas, Offset(pt.x - (textPainter.width / 2), pt.y + 14.5));
+        textPainter.paint(canvas, Offset(pt.x - (textPainter.width / 2), pt.y + radius + 2.4));
       }
     }
   }
