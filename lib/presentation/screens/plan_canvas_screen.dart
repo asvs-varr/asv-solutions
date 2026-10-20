@@ -27,7 +27,7 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
   late List<ConduitRoute> _routes;
   RoomGeometry? _roomGeometry;
   bool _isHeatmapVisible = false;
-  String _selectedTool = 'PANEL';
+  String _selectedTool = 'SELECT';
   bool _isUnderlayVisible = true;
   final double _underlayOpacity = 0.65;
   String? _blueprintPath;
@@ -368,18 +368,40 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
   }
 
   void _addPointAt(TapUpDetails details) {
+    if (_selectedTool == 'SELECT') {
+      // In Select/Move mode, tapping empty space just deselects
+      setState(() => _selectedPoint = null);
+      return;
+    }
+
+    if (_selectedTool == 'PANEL') {
+      final hasPanel = _points.any((p) => p.type == 'PANEL');
+      if (hasPanel) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('⚠️ Main Distribution Panel (MDP) already placed. Only 1 main panel allowed per dwelling unit.'),
+            backgroundColor: BanaagTheme.warningOrange,
+            duration: Duration(seconds: 2),
+          ),
+        );
+        return;
+      }
+    }
+
     setState(() {
       final newId = 'pt-${_points.length + 1}';
       final compactLabel = _getShorthandLabel(_selectedTool, _selectedTool, _points.length + 1);
-      _points.add(CanvasPoint(
+      final newPt = CanvasPoint(
         id: newId,
         type: _selectedTool,
         label: compactLabel,
         x: details.localPosition.dx,
         y: details.localPosition.dy,
-      ));
+      );
+      _points.add(newPt);
+      _selectedPoint = newPt;
 
-      // Auto-route from last point
+      // Auto-route from last point of compatible type
       if (_points.length > 1) {
         _routes.add(ConduitRoute(
           id: 'rt-${_routes.length + 1}',
@@ -387,6 +409,12 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
           toPointId: newId,
           measuredLengthMeters: 3.5, // Standard estimated run
         ));
+      }
+
+      if (widget.project != null) {
+        widget.project!.canvasPoints = _points;
+        widget.project!.conduitRoutes = _routes;
+        ProjectRepository.instance.updateProject(widget.project!);
       }
     });
   }
@@ -548,6 +576,37 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                 }
               } else if (val == 'dxf_guide') {
                 DxfExportGuideDialog.show(context);
+              } else if (val == 'auto_fit_reset') {
+                setState(() {
+                  if (widget.project != null && widget.project!.applianceLoads.isNotEmpty) {
+                    _autoGenerateFromAppliances(widget.project!.applianceLoads);
+                    widget.project!.canvasPoints = _points;
+                    widget.project!.conduitRoutes = _routes;
+                    ProjectRepository.instance.updateProject(widget.project!);
+                  } else {
+                    // Default baseline clean layout
+                    _points = [
+                      CanvasPoint(id: 'pt-panel', type: 'PANEL', label: 'MDP', x: 80, y: 140),
+                      CanvasPoint(id: 'pt-1', type: 'SWITCH_1G', label: 'SW-1', x: 150, y: 140),
+                      CanvasPoint(id: 'pt-2', type: 'LIGHT', label: 'L-1', x: 230, y: 140),
+                      CanvasPoint(id: 'pt-3', type: 'OUTLET_DUPLEX', label: 'CO-1', x: 150, y: 220),
+                      CanvasPoint(id: 'pt-4', type: 'ACU', label: 'ACU-1', x: 260, y: 220),
+                    ];
+                    _routes = [
+                      ConduitRoute(id: 'rt-1', fromPointId: 'pt-panel', toPointId: 'pt-1', measuredLengthMeters: 4.0),
+                      ConduitRoute(id: 'rt-2', fromPointId: 'pt-1', toPointId: 'pt-2', measuredLengthMeters: 3.0),
+                      ConduitRoute(id: 'rt-3', fromPointId: 'pt-panel', toPointId: 'pt-3', measuredLengthMeters: 3.5),
+                      ConduitRoute(id: 'rt-4', fromPointId: 'pt-panel', toPointId: 'pt-4', measuredLengthMeters: 7.5),
+                    ];
+                  }
+                  _selectedPoint = null;
+                });
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('⚡ Layout Cleansed! Duplicate MDPs removed & Smart Daisy-Chain applied.'),
+                    backgroundColor: BanaagTheme.successGreen,
+                  ),
+                );
               } else if (val == 'toggle_conduits') {
                 setState(() => _showConduits = !_showConduits);
               } else if (val == 'toggle_underlay') {
@@ -559,6 +618,16 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
               }
             },
             itemBuilder: (ctx) => [
+              PopupMenuItem(
+                value: 'auto_fit_reset',
+                child: Row(
+                  children: const [
+                    Icon(Icons.auto_fix_high, color: BanaagTheme.primaryAmber, size: 18),
+                    SizedBox(width: 10),
+                    Text('Auto-Clean & Daisy-Chain', style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
+                  ],
+                ),
+              ),
               PopupMenuItem(
                 value: 'toggle_conduits',
                 child: Row(
@@ -723,6 +792,7 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                         isHeatmap: _isHeatmapVisible,
                         showLabels: _showLabels,
                         showConduits: _showConduits,
+                        hasBlueprintUnderlay: _hasBlueprintFile && _isUnderlayVisible,
                         selectedPoint: _selectedPoint,
                       ),
                       child: Container(),
@@ -791,6 +861,7 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
               scrollDirection: Axis.horizontal,
               child: Row(
                 children: [
+                  _symbolButton('SELECT', Icons.near_me, 'Select / Move'),
                   _symbolButton('PANEL', Icons.dashboard, 'Panel'),
                   _symbolButton('SWITCH_1G', Icons.toggle_on, '1G Switch'),
                   _symbolButton('LIGHT', Icons.lightbulb, 'Light'),
@@ -898,6 +969,7 @@ class CanvasPainter extends CustomPainter {
   final bool isHeatmap;
   final bool showLabels;
   final bool showConduits;
+  final bool hasBlueprintUnderlay;
   final CanvasPoint? selectedPoint;
 
   CanvasPainter({
@@ -907,6 +979,7 @@ class CanvasPainter extends CustomPainter {
     this.isHeatmap = false,
     this.showLabels = true,
     this.showConduits = true,
+    this.hasBlueprintUnderlay = false,
     this.selectedPoint,
   });
 
@@ -924,8 +997,8 @@ class CanvasPainter extends CustomPainter {
       canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
     }
 
-    // Draw Room Walls if RoomGeometry is specified
-    if (roomGeometry != null) {
+    // Draw Synthetic Room Walls ONLY if no actual blueprint image/PDF is underlaid
+    if (roomGeometry != null && !hasBlueprintUnderlay) {
       _drawRoomWalls(canvas, size, roomGeometry!);
     }
 
