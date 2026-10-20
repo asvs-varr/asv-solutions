@@ -32,7 +32,11 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
   final double _underlayOpacity = 0.65;
   String? _blueprintPath;
   bool _showLabels = true;
+  bool _showConduits = true;
   CanvasPoint? _selectedPoint;
+  CanvasPoint? _draggedPoint;
+  Offset? _dragStartOffset;
+  bool _hasMovedSignificantly = false;
 
   bool get _hasBlueprintFile =>
       _blueprintPath != null && _blueprintPath!.isNotEmpty && File(_blueprintPath!).existsSync();
@@ -81,60 +85,171 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
   }
 
   void _autoGenerateFromAppliances(List<ApplianceItem> appliances) {
-    _points = [
-      CanvasPoint(id: 'pt-panel', type: 'PANEL', label: 'MDP', x: 80, y: 140),
-    ];
+    final panelPt = CanvasPoint(id: 'pt-panel', type: 'PANEL', label: 'MDP', x: 80, y: 140);
+    _points = [panelPt];
     _routes = [];
 
-    // Auto-spread nicely inside available area
-    double curX = 180.0;
-    double curY = 140.0;
-    int index = 1;
+    // Separate into Circuit Types:
+    // 1. Lighting (Circuit 1)
+    // 2. Convenience Outlets (Circuit 2)
+    // 3. Dedicated Equipment (Circuit 3+)
+    final List<Map<String, dynamic>> flatDevices = [];
+    int devCounter = 1;
 
     for (final app in appliances) {
       for (int i = 0; i < app.quantity; i++) {
-        final id = 'pt-$index';
         String pointType = 'OUTLET_DUPLEX';
         if (app.name.toLowerCase().contains('aircon') || app.name.toLowerCase().contains('acu')) {
           pointType = 'ACU';
-        } else if (app.name.toLowerCase().contains('light') || app.name.toLowerCase().contains('fan') || app.name.toLowerCase().contains('luminaire') || app.name.toLowerCase().contains('led')) {
+        } else if (app.name.toLowerCase().contains('light') ||
+            app.name.toLowerCase().contains('fan') ||
+            app.name.toLowerCase().contains('luminaire') ||
+            app.name.toLowerCase().contains('led')) {
           pointType = 'LIGHT';
         } else if (app.name.toLowerCase().contains('switch')) {
           pointType = 'SWITCH_1G';
         }
 
-        final compactLabel = _getShorthandLabel(pointType, app.name, index);
+        flatDevices.add({
+          'id': 'pt-$devCounter',
+          'type': pointType,
+          'name': app.name,
+          'isDedicated': app.isDedicatedCircuit,
+          'circuitNumber': app.circuitNumber,
+          'index': devCounter,
+        });
+        devCounter++;
+      }
+    }
 
-        _points.add(CanvasPoint(
-          id: id,
-          type: pointType,
-          label: compactLabel,
-          x: curX,
-          y: curY,
-          circuitNumber: app.isDedicatedCircuit ? index : 1,
-        ));
+    // Grid placement parameters
+    double curX = 180.0;
+    double curY = 140.0;
 
-        // Route from Panel or previous point
-        final fromId = app.isDedicatedCircuit ? 'pt-panel' : (_points.length > 2 ? _points[_points.length - 2].id : 'pt-panel');
+    // Track the last point in each circuit branch for clean daisy-chaining
+    String lastLightingPointId = 'pt-panel';
+    String lastOutletPointId = 'pt-panel';
+    int routeCounter = 1;
+
+    for (final dev in flatDevices) {
+      final String pId = dev['id'];
+      final String pType = dev['type'];
+      final String pName = dev['name'];
+      final bool isDedicated = dev['isDedicated'];
+      final int idx = dev['index'];
+
+      final compactLabel = _getShorthandLabel(pType, pName, idx);
+
+      _points.add(CanvasPoint(
+        id: pId,
+        type: pType,
+        label: compactLabel,
+        x: curX,
+        y: curY,
+        circuitNumber: isDedicated ? (idx + 2) : (pType == 'LIGHT' ? 1 : 2),
+      ));
+
+      // SMART ROUTING:
+      if (isDedicated) {
+        // Dedicated equipment: Single direct home-run conduit back to MDP
         _routes.add(ConduitRoute(
-          id: 'rt-$index',
-          fromPointId: fromId,
-          toPointId: id,
-          measuredLengthMeters: app.isDedicatedCircuit ? 8.5 : 4.0,
+          id: 'rt-${routeCounter++}',
+          fromPointId: 'pt-panel',
+          toPointId: pId,
+          measuredLengthMeters: 7.5,
         ));
+      } else if (pType == 'LIGHT' || pType == 'SWITCH_1G') {
+        // Lighting branch circuit daisy-chain (Panel -> Light 1 -> Light 2 -> ...)
+        _routes.add(ConduitRoute(
+          id: 'rt-${routeCounter++}',
+          fromPointId: lastLightingPointId,
+          toPointId: pId,
+          measuredLengthMeters: 3.5,
+        ));
+        lastLightingPointId = pId;
+      } else {
+        // Convenience outlet branch circuit daisy-chain (Panel -> CO 1 -> CO 2 -> ...)
+        _routes.add(ConduitRoute(
+          id: 'rt-${routeCounter++}',
+          fromPointId: lastOutletPointId,
+          toPointId: pId,
+          measuredLengthMeters: 3.8,
+        ));
+        lastOutletPointId = pId;
+      }
 
-        curX += 95.0;
-        if (curX > 400.0) {
-          curX = 180.0;
-          curY += 85.0;
-        }
-        index++;
+      curX += 95.0;
+      if (curX > 400.0) {
+        curX = 180.0;
+        curY += 85.0;
       }
     }
   }
 
+  void _handlePanStart(DragStartDetails details) {
+    final tapX = details.localPosition.dx;
+    final tapY = details.localPosition.dy;
+    _dragStartOffset = details.localPosition;
+    _hasMovedSignificantly = false;
+
+    // Detect if user grabbed a device point
+    CanvasPoint? hitPt;
+    for (final pt in _points.reversed) {
+      final dist = (Offset(pt.x, pt.y) - Offset(tapX, tapY)).distance;
+      if (dist <= 28.0) {
+        hitPt = pt;
+        break;
+      }
+    }
+
+    if (hitPt != null) {
+      setState(() {
+        _draggedPoint = hitPt;
+        _selectedPoint = hitPt;
+      });
+    }
+  }
+
+  void _handlePanUpdate(DragUpdateDetails details) {
+    if (_draggedPoint != null) {
+      final newPos = details.localPosition;
+      if (_dragStartOffset != null && (newPos - _dragStartOffset!).distance > 6.0) {
+        _hasMovedSignificantly = true;
+      }
+
+      setState(() {
+        // Snap gently to 5px CAD grid for precision
+        final snappedX = (newPos.dx / 5.0).round() * 5.0;
+        final snappedY = (newPos.dy / 5.0).round() * 5.0;
+        _draggedPoint!.x = snappedX.clamp(20.0, 1200.0);
+        _draggedPoint!.y = snappedY.clamp(20.0, 1200.0);
+      });
+    }
+  }
+
+  void _handlePanEnd(DragEndDetails details) {
+    if (_draggedPoint != null) {
+      if (_hasMovedSignificantly) {
+        // Persist updated point coordinates
+        if (widget.project != null) {
+          widget.project!.canvasPoints = _points;
+          ProjectRepository.instance.updateProject(widget.project!);
+        }
+      } else {
+        // Short tap without drag: open inspection sheet
+        _showPointInspectionSheet(_draggedPoint!);
+      }
+
+      setState(() {
+        _draggedPoint = null;
+        _dragStartOffset = null;
+        _hasMovedSignificantly = false;
+      });
+    }
+  }
+
   void _handleCanvasTap(TapUpDetails details) {
-    // Check if tapping an existing point (within 24px radius)
+    // If not dragging, check if tapping an existing point (within 24px radius)
     final tapX = details.localPosition.dx;
     final tapY = details.localPosition.dy;
 
@@ -433,6 +548,8 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                 }
               } else if (val == 'dxf_guide') {
                 DxfExportGuideDialog.show(context);
+              } else if (val == 'toggle_conduits') {
+                setState(() => _showConduits = !_showConduits);
               } else if (val == 'toggle_underlay') {
                 setState(() => _isUnderlayVisible = !_isUnderlayVisible);
               } else if (val == 'toggle_labels') {
@@ -442,6 +559,16 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
               }
             },
             itemBuilder: (ctx) => [
+              PopupMenuItem(
+                value: 'toggle_conduits',
+                child: Row(
+                  children: [
+                    Icon(_showConduits ? Icons.alt_route : Icons.route_outlined, color: Colors.orangeAccent, size: 18),
+                    const SizedBox(width: 10),
+                    Text(_showConduits ? 'Hide Conduit Lines' : 'Show Conduit Lines', style: const TextStyle(color: Colors.white, fontSize: 13)),
+                  ],
+                ),
+              ),
               PopupMenuItem(
                 value: 'toggle_labels',
                 child: Row(
@@ -564,6 +691,9 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
           Expanded(
             child: GestureDetector(
               onTapUp: _handleCanvasTap,
+              onPanStart: _handlePanStart,
+              onPanUpdate: _handlePanUpdate,
+              onPanEnd: _handlePanEnd,
               child: Container(
                 color: const Color(0xFF16191F),
                 child: Stack(
@@ -592,6 +722,7 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                         roomGeometry: _roomGeometry,
                         isHeatmap: _isHeatmapVisible,
                         showLabels: _showLabels,
+                        showConduits: _showConduits,
                         selectedPoint: _selectedPoint,
                       ),
                       child: Container(),
@@ -766,6 +897,7 @@ class CanvasPainter extends CustomPainter {
   final RoomGeometry? roomGeometry;
   final bool isHeatmap;
   final bool showLabels;
+  final bool showConduits;
   final CanvasPoint? selectedPoint;
 
   CanvasPainter({
@@ -774,6 +906,7 @@ class CanvasPainter extends CustomPainter {
     this.roomGeometry,
     this.isHeatmap = false,
     this.showLabels = true,
+    this.showConduits = true,
     this.selectedPoint,
   });
 
@@ -815,16 +948,42 @@ class CanvasPainter extends CustomPainter {
       }
     }
 
-    // Draw Conduit Routes
-    final routePaint = Paint()
-      ..color = Colors.amber.withValues(alpha: 0.8)
-      ..strokeWidth = 2.5
-      ..style = PaintingStyle.stroke;
+    // Draw Conduit Routes (Orthogonal 90-degree CAD Routing)
+    if (showConduits) {
+      final routePaint = Paint()
+        ..color = BanaagTheme.primaryAmber.withValues(alpha: 0.85)
+        ..strokeWidth = 2.0
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round;
 
-    for (final r in routes) {
-      final p1 = points.firstWhere((p) => p.id == r.fromPointId, orElse: () => points.first);
-      final p2 = points.firstWhere((p) => p.id == r.toPointId, orElse: () => points.first);
-      canvas.drawLine(Offset(p1.x, p1.y), Offset(p2.x, p2.y), routePaint);
+      for (final r in routes) {
+        final p1 = points.firstWhere((p) => p.id == r.fromPointId, orElse: () => points.first);
+        final p2 = points.firstWhere((p) => p.id == r.toPointId, orElse: () => points.first);
+
+        if (p1.id == p2.id) continue;
+
+        // Clean Orthogonal CAD Conduit Path (Right-Angle Manhattan routing)
+        final path = Path();
+        path.moveTo(p1.x, p1.y);
+
+        // Break routing through an intermediate elbow point:
+        // Horizontal-first if dx > dy, otherwise Vertical-first
+        final dx = (p2.x - p1.x).abs();
+        final dy = (p2.y - p1.y).abs();
+
+        if (dx >= dy) {
+          // Horizontal then Vertical
+          path.lineTo(p2.x, p1.y);
+          path.lineTo(p2.x, p2.y);
+        } else {
+          // Vertical then Horizontal
+          path.lineTo(p1.x, p2.y);
+          path.lineTo(p2.x, p2.y);
+        }
+
+        canvas.drawPath(path, routePaint);
+      }
     }
 
     // Draw Points
