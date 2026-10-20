@@ -8,6 +8,7 @@ import 'package:share_plus/share_plus.dart';
 import '../../domain/models.dart';
 import '../../domain/sld_engine.dart';
 import '../../domain/pec_engine.dart';
+import '../../domain/pec_safety_auditor.dart';
 import '../../domain/takeoff_engine.dart';
 import '../../domain/institutional_building_presets.dart';
 import '../../domain/bom_excel_exporter.dart';
@@ -340,9 +341,9 @@ class _SingleLineDiagramScreenState extends State<SingleLineDiagramScreen> with 
                   dropdownColor: BanaagTheme.surfaceCard,
                   decoration: const InputDecoration(labelText: 'Conductor Size (Wire Spec)'),
                   items: const [
-                    DropdownMenuItem(value: 2.0, child: Text('2.0 mm² (#14 AWG) - 20A Limit (Lighting)')),
-                    DropdownMenuItem(value: 3.5, child: Text('3.5 mm² (#12 AWG) - 25A Limit (Outlets)')),
-                    DropdownMenuItem(value: 5.5, child: Text('5.5 mm² (#10 AWG) - 35A Limit (Heavy Load)')),
+                    DropdownMenuItem(value: 2.0, child: Text('2.0 mm² (#14 AWG) - 20A Amp / 15A Max CB')),
+                    DropdownMenuItem(value: 3.5, child: Text('3.5 mm² (#12 AWG) - 25A Amp / 20A Max CB')),
+                    DropdownMenuItem(value: 5.5, child: Text('5.5 mm² (#10 AWG) - 35A Amp / 30A Max CB')),
                     DropdownMenuItem(value: 8.0, child: Text('8.0 mm² (#8 AWG) - 50A Limit (Feeder)')),
                     DropdownMenuItem(value: 14.0, child: Text('14.0 mm² (#6 AWG) - 65A Limit (Main Feeder)')),
                   ],
@@ -419,6 +420,31 @@ class _SingleLineDiagramScreenState extends State<SingleLineDiagramScreen> with 
                                 ),
                                 child: Text(statusBadge, style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 10)),
                               ),
+                              const Spacer(),
+                              if (validation.status != PecComplianceStatus.compliant)
+                                InkWell(
+                                  onTap: () {
+                                    setModalState(() {
+                                      selectedWireMm2 = validation.recommendedWireSizeMm2.clamp(2.0, 14.0);
+                                      breaker = validation.recommendedBreakerAmps.clamp(15, 60);
+                                      final egc = PecEngine.formatEquipmentGroundingConductor(breaker);
+                                      final wireSizeStr = selectedWireMm2.toStringAsFixed(1).replaceAll('.0', '');
+                                      wire = '2 - $wireSizeStr mm² THHN + 1 - $egc Ground';
+                                      conduit = selectedWireMm2 >= 8.0 ? '25 mm Ø PVC' : '20 mm Ø PVC';
+                                    });
+                                  },
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                    decoration: BoxDecoration(
+                                      color: BanaagTheme.primaryAmber,
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: const Text(
+                                      '⚡ Auto-Fix PEC',
+                                      style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 10),
+                                    ),
+                                  ),
+                                ),
                             ],
                           ),
                           const SizedBox(height: 6),
@@ -526,7 +552,358 @@ class _SingleLineDiagramScreenState extends State<SingleLineDiagramScreen> with 
     );
   }
 
+  Future<void> _verifySafetyBeforeExport(
+    String exportLabel,
+    Future<void> Function() executeExport,
+  ) async {
+    final audit = PecSafetyAuditor.auditSchedule(_sldData);
+    if (!audit.isExportBlocked) {
+      await executeExport();
+      return;
+    }
+
+    if (!mounted) return;
+    final criticalCircuits = audit.circuitFindings
+        .where((f) => f.severity == PecAuditSeverity.criticalHazard)
+        .toList();
+
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1D24),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: BanaagTheme.alertRed, width: 2.0),
+        ),
+        title: const Row(
+          children: [
+            Icon(Icons.gpp_bad, color: BanaagTheme.alertRed, size: 26),
+            SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                '🚨 PEC 2017 LIFE-SAFETY INTERLOCK',
+                style: TextStyle(color: BanaagTheme.alertRed, fontWeight: FontWeight.bold, fontSize: 15),
+              ),
+            ),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Pansamantalang hinarang ang pag-export ng $exportLabel dahil may nadetect na UNDER-SPECS (Fire / Thermal Overload Hazard) sa Schedule of Loads:',
+                style: const TextStyle(color: Colors.white, fontSize: 12, height: 1.35),
+              ),
+              const SizedBox(height: 12),
+              ...criticalCircuits.map(
+                (f) => Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: BanaagTheme.alertRed.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: BanaagTheme.alertRed.withValues(alpha: 0.5)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'C${f.circuitNumber}: ${f.description}',
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                      ),
+                      const SizedBox(height: 4),
+                      ...f.issues.map(
+                        (iss) => Padding(
+                          padding: const EdgeInsets.only(bottom: 2),
+                          child: Text('• $iss', style: const TextStyle(color: Colors.white70, fontSize: 11)),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '✔ PEC Standard Fix: ${f.recommendedWireMm2} mm² THHN + ${f.recommendedBreakerAmps} AT Breaker',
+                        style: const TextStyle(color: BanaagTheme.primaryAmber, fontWeight: FontWeight.bold, fontSize: 11),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              ...audit.feederIssues.map(
+                (iss) => Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Text('• Feeder: $iss', style: const TextStyle(color: BanaagTheme.alertRed, fontSize: 11)),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Bumalik at I-edit', style: TextStyle(color: BanaagTheme.textMuted)),
+          ),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: BanaagTheme.successGreen,
+              foregroundColor: Colors.black,
+            ),
+            icon: const Icon(Icons.auto_fix_high, size: 16),
+            label: const Text(
+              'Auto-Fix sa PEC 2017 & Export',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+            ),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              setState(() {
+                PecSafetyAuditor.autoHealSchedule(_sldData);
+              });
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('🛡️ Auto-Healed lahat ng circuits sa 100% Verbatim PEC 2017 Standard!'),
+                    backgroundColor: BanaagTheme.successGreen,
+                  ),
+                );
+              }
+              await executeExport();
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showSafetyAuditSheet() {
+    final report = PecSafetyAuditor.auditSchedule(_sldData);
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF12161E),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.82,
+        minChildSize: 0.50,
+        maxChildSize: 0.95,
+        builder: (_, scrollController) {
+          final isAllSafe = report.overallSeverity == PecAuditSeverity.compliant;
+          final isHazard = report.overallSeverity == PecAuditSeverity.criticalHazard;
+          final Color headerColor = isHazard
+              ? BanaagTheme.alertRed
+              : (isAllSafe ? BanaagTheme.successGreen : BanaagTheme.warningOrange);
+
+          return ListView(
+            controller: scrollController,
+            padding: const EdgeInsets.all(16),
+            children: [
+              Center(
+                child: Container(
+                  width: 44,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 14),
+                  decoration: BoxDecoration(
+                    color: Colors.white24,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: headerColor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: headerColor, width: 1.5),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          isHazard ? Icons.gpp_bad : Icons.verified_user,
+                          color: headerColor,
+                          size: 26,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                isHazard
+                                    ? '🚨 CRITICAL PEC 2017 SAFETY HAZARD DETECTED'
+                                    : (isAllSafe
+                                        ? '🛡️ 100% VERBATIM PEC 2017 CODE VERIFIED'
+                                        : '⚠️ PEC 2017 SAFE (WITH OVER-SPECS ADVISORY)'),
+                                style: TextStyle(
+                                  color: headerColor,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                ),
+                              ),
+                              Text(
+                                'Active Circuits: ${report.totalActiveCircuits} • Compliant: ${report.compliantCount} • Advisory: ${report.advisoryCount} • Hazard: ${report.criticalHazardCount}',
+                                style: const TextStyle(color: Colors.white70, fontSize: 11),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Verbatim Source: Philippine Electrical Code Part 1 (2017 Edition) — Table 3.10.2.6(B)(16) (p.174), Sec. 2.40.1.4(D) (p.84), Table 2.40.1.6(A) (p.86), Table 2.20.3.3 (p.56), Table 2.50.3.17 (p.113), Table 2.50.6.13 (p.124), Chapter 10 Tables (pp.932–942) & Appendix D Worked Examples (pp.1071–1078).',
+                      style: TextStyle(color: BanaagTheme.textMuted, fontSize: 10, height: 1.3),
+                    ),
+                    if (!isAllSafe) ...[
+                      const SizedBox(height: 10),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: BanaagTheme.primaryAmber,
+                            foregroundColor: Colors.black,
+                          ),
+                          icon: const Icon(Icons.auto_fix_high, size: 18),
+                          label: const Text(
+                            '⚡ AUTO-HEAL ALL CIRCUITS TO 100% PEC 2017 STANDARD',
+                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+                          ),
+                          onPressed: () {
+                            Navigator.pop(ctx);
+                            setState(() {
+                              PecSafetyAuditor.autoHealSchedule(_sldData);
+                            });
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('🛡️ Lahat ng circuits at main feeder ay na-restore na sa 100% Verbatim PEC 2017 Standard!'),
+                                backgroundColor: BanaagTheme.successGreen,
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'MAIN FEEDER & SERVICE ENTRANCE STEP-BY-STEP MATH AUDIT',
+                style: TextStyle(color: BanaagTheme.primaryAmber, fontWeight: FontWeight.bold, fontSize: 12),
+              ),
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: BanaagTheme.surfaceCard,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: BanaagTheme.surfaceCardBorder),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: report.feederMathSteps
+                      .map(
+                        (s) => Padding(
+                          padding: const EdgeInsets.only(bottom: 6),
+                          child: Text(
+                            s,
+                            style: const TextStyle(color: Colors.white, fontSize: 11, height: 1.3, fontFamily: 'monospace'),
+                          ),
+                        ),
+                      )
+                      .toList(),
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'BRANCH CIRCUIT-BY-CIRCUIT LIFE-SAFETY & MATH TRACE',
+                style: TextStyle(color: BanaagTheme.primaryAmber, fontWeight: FontWeight.bold, fontSize: 12),
+              ),
+              const SizedBox(height: 8),
+              ...report.circuitFindings.map((f) {
+                final Color cColor = f.severity == PecAuditSeverity.criticalHazard
+                    ? BanaagTheme.alertRed
+                    : (f.severity == PecAuditSeverity.advisory ? BanaagTheme.warningOrange : BanaagTheme.successGreen);
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: BanaagTheme.surfaceCard,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: cColor.withValues(alpha: 0.6)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            f.severity == PecAuditSeverity.criticalHazard
+                                ? Icons.dangerous
+                                : (f.severity == PecAuditSeverity.advisory ? Icons.warning_amber : Icons.check_circle),
+                            color: cColor,
+                            size: 16,
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              'C${f.circuitNumber}: ${f.description}',
+                              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        f.mathTrace,
+                        style: const TextStyle(color: Colors.white70, fontSize: 10, fontFamily: 'monospace', height: 1.3),
+                      ),
+                      if (f.issues.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        ...f.issues.map(
+                          (iss) => Text('• $iss', style: TextStyle(color: cColor, fontSize: 10.5, fontWeight: FontWeight.w600)),
+                        ),
+                      ],
+                      const SizedBox(height: 4),
+                      Text(
+                        '📖 ${f.citations.join(" • ")}',
+                        style: const TextStyle(color: BanaagTheme.textMuted, fontSize: 9.5),
+                      ),
+                    ],
+                  ),
+                );
+              }),
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.04),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.white12),
+                ),
+                child: const Text(
+                  '⚖️ R.A. 7920 Engineering Scope Note: Ang 100% Verbatim PEC 2017 Engine ng BANAAG ay sumasaklaw sa Single-Phase 230V Residential at Light Commercial Branch/Feeder Sizing, Demand Factors, Ampacity, Derating, Conduit Fill, Voltage Drop, at Grounding. Ang pinal na blueprint sign-off at site-specific fault current (kAIC) coordination ay dapat selyado ng Licensed PEE / REE / RME.',
+                  style: TextStyle(color: BanaagTheme.textMuted, fontSize: 10, height: 1.3),
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
   Future<void> _exportExcelBom() async {
+    await _verifySafetyBeforeExport('Excel BOM & Schedule of Loads', _executeExcelBomExport);
+  }
+
+  Future<void> _executeExcelBomExport() async {
     try {
       final takeoff = TakeoffEngine.calculate(
         points: widget.project.canvasPoints,
@@ -573,6 +950,10 @@ class _SingleLineDiagramScreenState extends State<SingleLineDiagramScreen> with 
   }
 
   Future<void> _exportBlueprintPdf() async {
+    await _verifySafetyBeforeExport('Sheet E-1 Blueprint PDF', _executeBlueprintPdfExport);
+  }
+
+  Future<void> _executeBlueprintPdfExport() async {
     try {
       final bytes = await BlueprintPdfExporter.generateBlueprintPdf(
         project: widget.project,
@@ -616,6 +997,13 @@ class _SingleLineDiagramScreenState extends State<SingleLineDiagramScreen> with 
 
   @override
   Widget build(BuildContext context) {
+    final safetyReport = PecSafetyAuditor.auditSchedule(_sldData);
+    final bool isHazard = safetyReport.overallSeverity == PecAuditSeverity.criticalHazard;
+    final bool isCompliant = safetyReport.overallSeverity == PecAuditSeverity.compliant;
+    final Color shieldColor = isHazard
+        ? BanaagTheme.alertRed
+        : (isCompliant ? BanaagTheme.successGreen : BanaagTheme.warningOrange);
+
     return Scaffold(
       appBar: AppBar(
         title: Column(
@@ -636,6 +1024,14 @@ class _SingleLineDiagramScreenState extends State<SingleLineDiagramScreen> with 
           ],
         ),
         actions: [
+          IconButton(
+            icon: Icon(
+              isHazard ? Icons.gpp_bad : Icons.verified_user,
+              color: shieldColor,
+            ),
+            tooltip: 'PEC 2017 Life-Safety & Math Audit Shield',
+            onPressed: _showSafetyAuditSheet,
+          ),
           IconButton(
             icon: const Icon(Icons.table_view_outlined, color: Colors.greenAccent),
             tooltip: 'Export Excel BOM & Sched of Loads (.xlsx)',
@@ -663,7 +1059,7 @@ class _SingleLineDiagramScreenState extends State<SingleLineDiagramScreen> with 
       ),
       body: Column(
         children: [
-          // Dynamic Multi-Panel Switcher Bar (MDP / Subpanels)
+          // Dynamic Multi-Panel Switcher Bar + Live PEC 2017 Safety Shield
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
             color: const Color(0xFF141922),
@@ -691,6 +1087,40 @@ class _SingleLineDiagramScreenState extends State<SingleLineDiagramScreen> with 
                           backgroundColor: Colors.white10,
                           side: const BorderSide(color: BanaagTheme.primaryAmber, width: 0.8),
                           onPressed: _showAddSubpanelDialog,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                InkWell(
+                  onTap: _showSafetyAuditSheet,
+                  borderRadius: BorderRadius.circular(8),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: shieldColor.withValues(alpha: 0.16),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: shieldColor, width: 1.2),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          isHazard ? Icons.gpp_bad : Icons.shield,
+                          size: 14,
+                          color: shieldColor,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          isHazard
+                              ? 'PEC HAZARD (${safetyReport.criticalHazardCount})'
+                              : '100% PEC SAFE',
+                          style: TextStyle(
+                            color: shieldColor,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 10.5,
+                          ),
                         ),
                       ],
                     ),

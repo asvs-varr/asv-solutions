@@ -42,7 +42,10 @@ class _PecCalculatorScreenState extends State<PecCalculatorScreen> with SingleTi
   }
 
   void _recalculate() {
-    _selectedWire = PecEngine.sizeWireForCurrent(_loadCurrent);
+    _selectedWire = PecEngine.sizeWireForCurrent(
+      _loadCurrent,
+      currentCarryingConductors: _conductorCount,
+    );
     _selectedConduit = PecEngine.recommendConduit(
       wireSpec: _selectedWire,
       conductorCount: _conductorCount,
@@ -90,8 +93,13 @@ class _PecCalculatorScreenState extends State<PecCalculatorScreen> with SingleTi
       wireSpec: _selectedWire,
     );
 
-    final int breakerRating = PecEngine.selectBreaker(_loadCurrent, _selectedWire.ampacity75C);
-    final bool isOverfilled = fillRatio > 40.0;
+    final int breakerRating = PecEngine.selectBreaker(
+      _loadCurrent,
+      _selectedWire.ampacity75C,
+      wireSizeMm2: _selectedWire.sizeMm2,
+    );
+    final double maxFillLimit = PecEngine.getMaxAllowedConduitFillPercent(_conductorCount);
+    final bool isOverfilled = fillRatio > maxFillLimit;
     final bool isVoltageDropHigh = vDropPercent > 3.0;
 
     // Real-Time PEC Spec Validation
@@ -100,6 +108,7 @@ class _PecCalculatorScreenState extends State<PecCalculatorScreen> with SingleTi
       wireSizeMm2: _selectedWire.sizeMm2,
       breakerRatingAmps: breakerRating,
       isLighting: false,
+      currentCarryingConductors: _conductorCount,
     );
 
     return SingleChildScrollView(
@@ -122,7 +131,7 @@ class _PecCalculatorScreenState extends State<PecCalculatorScreen> with SingleTi
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       _metricBadge('Recommended Wire', '${_selectedWire.sizeMm2} mm²', _selectedWire.awgEquivalent),
-                      _metricBadge('Breaker Trip', '$breakerRating A', 'Trip Rating'),
+                      _metricBadge('Breaker Trip', '$breakerRating A', 'PEC 2.40.1.6(A)'),
                     ],
                   ),
                   const Divider(color: BanaagTheme.surfaceCardBorder, height: 24),
@@ -132,13 +141,15 @@ class _PecCalculatorScreenState extends State<PecCalculatorScreen> with SingleTi
                       _metricBadge(
                         'Conduit Fill Ratio',
                         '${fillRatio.toStringAsFixed(1)}%',
-                        isOverfilled ? '⚠️ EXCEEDS 40% LIMIT' : '✓ PEC Compliant (<40%)',
+                        isOverfilled
+                            ? '⚠️ EXCEEDS ${maxFillLimit.toStringAsFixed(0)}% LIMIT'
+                            : '✓ PEC Compliant (≤${maxFillLimit.toStringAsFixed(0)}%)',
                         color: isOverfilled ? BanaagTheme.alertRed : BanaagTheme.successGreen,
                       ),
                       _metricBadge(
                         'Voltage Drop (230V)',
                         '${vDropPercent.toStringAsFixed(2)}%',
-                        isVoltageDropHigh ? '⚠️ EXCEEDS 3% LIMIT' : '✓ Good (<3% Drop)',
+                        isVoltageDropHigh ? '⚠️ EXCEEDS 3% LIMIT' : '✓ Good (≤3% Drop)',
                         color: isVoltageDropHigh ? BanaagTheme.alertRed : BanaagTheme.successGreen,
                       ),
                     ],

@@ -170,16 +170,28 @@ class MultiPanelInstitutionalRiser {
       }
     }
 
-    String mdpWire = '2 - 50 mm² THHN'; // 150A @ 75°C
+    String mdpWire = '2 - 50 mm² THHN'; // 140A @ 75°C (PEC Table 3.10.2.6(B)(16))
     String mdpConduit = '50 mm Ø RSC';
     String mdpGround = '1 - 14.0 mm² Bare Cu';
-    if (mdpMainBreaker > 200) {
-      mdpWire = '2 - 100 mm² THHN'; // 230A @ 75°C
+    if (mdpMainBreaker > 250) {
+      mdpWire = '2 - 200 mm² THHN'; // 325A @ 75°C
+      mdpConduit = '80 mm Ø RSC';
+      mdpGround = '1 - 22.0 mm² Bare Cu';
+    } else if (mdpMainBreaker > 200) {
+      mdpWire = '2 - 125 mm² THHN'; // 255A @ 75°C
       mdpConduit = '65 mm Ø RSC';
       mdpGround = '1 - 22.0 mm² Bare Cu';
-    } else if (mdpMainBreaker > 150) {
-      mdpWire = '2 - 80 mm² THHN'; // 200A @ 75°C
+    } else if (mdpMainBreaker > 175) {
+      mdpWire = '2 - 100 mm² THHN'; // 220A @ 75°C
       mdpConduit = '65 mm Ø RSC';
+      mdpGround = '1 - 14.0 mm² Bare Cu';
+    } else if (mdpMainBreaker > 150) {
+      mdpWire = '2 - 80 mm² THHN'; // 190A @ 75°C
+      mdpConduit = '65 mm Ø RSC';
+      mdpGround = '1 - 14.0 mm² Bare Cu';
+    } else if (mdpMainBreaker > 125) {
+      mdpWire = '2 - 60 mm² THHN'; // 155A @ 75°C
+      mdpConduit = '50 mm Ø RSC';
       mdpGround = '1 - 14.0 mm² Bare Cu';
     }
 

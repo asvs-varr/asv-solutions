@@ -405,37 +405,54 @@ class SldEngine {
     final double netDemandVA = netGeneralVA + dedicatedLoadsVA + (largestMotorVA * 0.25);
     final double netCurrentAmps = netDemandVA / 230.0;
 
-    // Sizing Main Breaker with 125% continuous design margin (PEC Art 2.15.1.3)
+    // Sizing Main Breaker with 125% continuous design margin (PEC Sec. 2.15.1.3 & Table 2.40.1.6(A))
     final double designMainAmps = netCurrentAmps * 1.25;
     int mainBreakerAmps = 60;
-    for (final rating in [60, 75, 100, 125, 150, 175, 200]) {
+    for (final rating in [60, 70, 80, 90, 100, 110, 125, 150, 175, 200, 225, 250, 300]) {
       if (rating >= designMainAmps) {
         mainBreakerAmps = rating;
         break;
       }
     }
 
-    // Determine Main Feeder Wire, Conduit, and Grounding Conductor (PEC Table 3.10.2.6 & Table 2.50.6.13)
+    // Determine Main Feeder Wire, Conduit, and Grounding Conductor
+    // Verbatim PEC 2017 Table 3.10.2.6(B)(16) (75°C Cu), Table 2.50.3.17 (GEC), & Table 2.50.6.13 (EGC)
     String feederWire = '2 - 22 mm² THHN';
     String feederConduit = '25 mm Ø PVC';
     String groundWire = '1 - 8.0 mm² Bare/Insulated Cu';
 
-    if (mainBreakerAmps <= 60) {
-      feederWire = '2 - 22 mm² THHN';
+    if (mainBreakerAmps <= 80) {
+      feederWire = '2 - 22 mm² THHN'; // 85 A @ 75°C
       feederConduit = '25 mm Ø PVC';
       groundWire = '1 - 8.0 mm² Bare/Insulated Cu';
     } else if (mainBreakerAmps <= 100) {
-      feederWire = '2 - 30 mm² THHN';
+      feederWire = '2 - 30 mm² THHN'; // 100 A @ 75°C
       feederConduit = '32 mm Ø PVC';
       groundWire = '1 - 8.0 mm² Bare/Insulated Cu';
+    } else if (mainBreakerAmps <= 110) {
+      feederWire = '2 - 38 mm² THHN'; // 115 A @ 75°C
+      feederConduit = '32 mm Ø PVC';
+      groundWire = '1 - 14.0 mm² Bare/Insulated Cu';
     } else if (mainBreakerAmps <= 125) {
-      feederWire = '2 - 38 mm² THHN';
+      feederWire = '2 - 50 mm² THHN'; // 140 A @ 75°C
       feederConduit = '40 mm Ø PVC';
       groundWire = '1 - 14.0 mm² Bare/Insulated Cu';
-    } else {
-      feederWire = '2 - 50 mm² THHN';
+    } else if (mainBreakerAmps <= 150) {
+      feederWire = '2 - 60 mm² THHN'; // 155 A @ 75°C
+      feederConduit = '40 mm Ø PVC';
+      groundWire = '1 - 14.0 mm² Bare/Insulated Cu';
+    } else if (mainBreakerAmps <= 175) {
+      feederWire = '2 - 80 mm² THHN'; // 190 A @ 75°C
       feederConduit = '50 mm Ø PVC';
       groundWire = '1 - 14.0 mm² Bare/Insulated Cu';
+    } else if (mainBreakerAmps <= 200) {
+      feederWire = '2 - 100 mm² THHN'; // 220 A @ 75°C
+      feederConduit = '50 mm Ø PVC';
+      groundWire = '1 - 14.0 mm² Bare/Insulated Cu';
+    } else {
+      feederWire = '2 - 125 mm² THHN'; // 255 A @ 75°C
+      feederConduit = '65 mm Ø PVC';
+      groundWire = '1 - 22.0 mm² Bare/Insulated Cu';
     }
 
     final int frameAmps = mainBreakerAmps <= 100 ? 100 : 225;
