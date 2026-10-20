@@ -267,6 +267,24 @@ class PecEngine {
       recommendedBreakerAmps: breakerRatingAmps,
     );
   }
+
+  /// PEC 2017 Table 2.50.6.13: Minimum Size Equipment Grounding Conductors
+  /// for Grounding Raceway and Equipment based on Overcurrent Device Rating
+  static double getMinimumEquipmentGroundingConductorMm2(int breakerRatingAmps) {
+    if (breakerRatingAmps <= 15) return 2.0; // #14 AWG
+    if (breakerRatingAmps <= 20) return 3.5; // #12 AWG
+    if (breakerRatingAmps <= 60) return 5.5; // #10 AWG (30A, 40A, 50A, 60A)
+    if (breakerRatingAmps <= 100) return 8.0; // #8 AWG
+    if (breakerRatingAmps <= 200) return 14.0; // #6 AWG
+    if (breakerRatingAmps <= 300) return 22.0; // #4 AWG
+    if (breakerRatingAmps <= 400) return 30.0; // #3 AWG
+    return 38.0;
+  }
+
+  static String formatEquipmentGroundingConductor(int breakerRatingAmps) {
+    final size = getMinimumEquipmentGroundingConductorMm2(breakerRatingAmps);
+    return '${size.toStringAsFixed(1).replaceAll('.0', '')} mm²';
+  }
 }
 
 enum PecComplianceStatus {

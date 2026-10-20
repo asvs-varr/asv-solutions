@@ -93,17 +93,10 @@ class _SingleLineDiagramScreenState extends State<SingleLineDiagramScreen> with 
     String wire = circuit.wireSizeDescription;
     String conduit = circuit.conduitDescription;
 
+    final phaseMatch = RegExp(r'2\s*-\s*([0-9.]+)\s*mm').firstMatch(wire);
     double selectedWireMm2 = 3.5;
-    if (wire.contains('2.0 mm²')) {
-      selectedWireMm2 = 2.0;
-    } else if (wire.contains('3.5 mm²')) {
-      selectedWireMm2 = 3.5;
-    } else if (wire.contains('5.5 mm²')) {
-      selectedWireMm2 = 5.5;
-    } else if (wire.contains('8.0 mm²')) {
-      selectedWireMm2 = 8.0;
-    } else if (wire.contains('14.0 mm²')) {
-      selectedWireMm2 = 14.0;
+    if (phaseMatch != null) {
+      selectedWireMm2 = double.tryParse(phaseMatch.group(1) ?? '3.5') ?? 3.5;
     }
 
     showDialog(
@@ -164,6 +157,9 @@ class _SingleLineDiagramScreenState extends State<SingleLineDiagramScreen> with 
                     if (val != null) {
                       setModalState(() {
                         breaker = val;
+                        final egc = PecEngine.formatEquipmentGroundingConductor(breaker);
+                        final wireSizeStr = selectedWireMm2.toStringAsFixed(1).replaceAll('.0', '');
+                        wire = '2 - $wireSizeStr mm² THHN + 1 - $egc Ground';
                       });
                     }
                   },
@@ -184,7 +180,9 @@ class _SingleLineDiagramScreenState extends State<SingleLineDiagramScreen> with 
                     if (val != null) {
                       setModalState(() {
                         selectedWireMm2 = val;
-                        wire = '2 - $selectedWireMm2 mm² THHN + 1 - 2.0 mm² Ground';
+                        final egc = PecEngine.formatEquipmentGroundingConductor(breaker);
+                        final wireSizeStr = selectedWireMm2.toStringAsFixed(1).replaceAll('.0', '');
+                        wire = '2 - $wireSizeStr mm² THHN + 1 - $egc Ground';
                         if (selectedWireMm2 >= 8.0) {
                           conduit = '25 mm Ø PVC';
                         } else {
@@ -346,7 +344,7 @@ class _SingleLineDiagramScreenState extends State<SingleLineDiagramScreen> with 
         loadCurrentAmps: 1200.0 / 230.0,
         breakerRatingAmps: 20,
         poles: 2,
-        wireSizeDescription: '2 - 3.5 mm² THHN + 1 - 2.0 mm² Ground',
+        wireSizeDescription: '2 - 3.5 mm² THHN + 1 - 3.5 mm² Ground',
         conduitDescription: '20 mm Ø PVC',
         isSpare: false,
       ));

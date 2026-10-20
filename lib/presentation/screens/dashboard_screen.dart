@@ -1,6 +1,7 @@
-// BANAAG Dashboard Screen: Gesture-First Quick-Tap Command Center
-
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:file_picker/file_picker.dart';
 import '../../domain/models.dart';
 import '../../data/project_repository.dart';
 import '../theme/banaag_theme.dart';
@@ -398,6 +399,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final amountController = TextEditingController();
     String utility = 'Meralco';
     String intakeMode = 'SITE_INTERVIEW';
+    String? selectedBlueprintPath;
+    String? selectedBlueprintFileName;
+    int? selectedBlueprintFileSize;
 
     showDialog(
       context: context,
@@ -498,6 +502,84 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   currentMode: intakeMode,
                   onSelect: (m) => setDialogState(() => intakeMode = m),
                 ),
+                // Interactive File Upload Slot / Dropzone Card when Blueprint Photo is selected
+                if (intakeMode == 'BLUEPRINT_PHOTO') ...[
+                  const SizedBox(height: 10),
+                  _buildBlueprintDropzoneCard(
+                    filePath: selectedBlueprintPath,
+                    fileName: selectedBlueprintFileName,
+                    fileSize: selectedBlueprintFileSize,
+                    onTakePhoto: () async {
+                      try {
+                        final picker = ImagePicker();
+                        final XFile? photo = await picker.pickImage(
+                          source: ImageSource.camera,
+                          imageQuality: 92,
+                        );
+                        if (photo != null) {
+                          final file = File(photo.path);
+                          final size = await file.length();
+                          setDialogState(() {
+                            selectedBlueprintPath = photo.path;
+                            selectedBlueprintFileName = photo.name.isNotEmpty
+                                ? photo.name
+                                : photo.path.split(Platform.pathSeparator).last;
+                            selectedBlueprintFileSize = size;
+                          });
+                        }
+                      } catch (e) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Camera error: $e'), backgroundColor: Colors.redAccent),
+                          );
+                        }
+                      }
+                    },
+                    onPickFile: () async {
+                      try {
+                        final file = await FilePicker.pickFile(
+                          type: FileType.custom,
+                          allowedExtensions: ['jpg', 'jpeg', 'png', 'webp', 'pdf'],
+                        );
+                        if (file != null && file.path != null) {
+                          final size = file.lengthSync() ?? 0;
+                          setDialogState(() {
+                            selectedBlueprintPath = file.path;
+                            selectedBlueprintFileName = file.name;
+                            selectedBlueprintFileSize = size;
+                          });
+                        }
+                      } catch (e) {
+                        // Fallback to ImagePicker gallery
+                        try {
+                          final picker = ImagePicker();
+                          final XFile? image = await picker.pickImage(
+                            source: ImageSource.gallery,
+                            imageQuality: 92,
+                          );
+                          if (image != null) {
+                            final file = File(image.path);
+                            final size = await file.length();
+                            setDialogState(() {
+                              selectedBlueprintPath = image.path;
+                              selectedBlueprintFileName = image.name.isNotEmpty
+                                  ? image.name
+                                  : image.path.split(Platform.pathSeparator).last;
+                              selectedBlueprintFileSize = size;
+                            });
+                          }
+                        } catch (_) {}
+                      }
+                    },
+                    onRemove: () {
+                      setDialogState(() {
+                        selectedBlueprintPath = null;
+                        selectedBlueprintFileName = null;
+                        selectedBlueprintFileSize = null;
+                      });
+                    },
+                  ),
+                ],
                 const SizedBox(height: 6),
                 _buildIntakeModeCard(
                   title: '📐 AutoCAD .DXF Direct Import',
@@ -534,6 +616,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   retentionPercent: 10.0,
                   currentPhaseNumber: 1, // Starts at Consultation
                   intakeMode: intakeMode,
+                  blueprintImagePath: selectedBlueprintPath,
                   phases: repo.createDefaultPhases(intakeMode: intakeMode),
                   createdAt: DateTime.now(),
                 );
@@ -541,12 +624,210 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 repo.addProject(newProject);
                 Navigator.pop(ctx);
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('⚡ New project "${newProject.title}" successfully created (${newProject.intakeMode})!')),
+                  SnackBar(
+                    content: Text('⚡ New project "${newProject.title}" successfully created (${newProject.intakeMode})!'),
+                    action: selectedBlueprintPath != null
+                        ? SnackBarAction(
+                            label: 'OPEN CANVAS',
+                            textColor: BanaagTheme.primaryAmber,
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(builder: (_) => PlanCanvasScreen(project: newProject)),
+                              );
+                            },
+                          )
+                        : null,
+                  ),
                 );
               },
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildBlueprintDropzoneCard({
+    required String? filePath,
+    required String? fileName,
+    required int? fileSize,
+    required VoidCallback onTakePhoto,
+    required VoidCallback onPickFile,
+    required VoidCallback onRemove,
+  }) {
+    final bool hasFile = filePath != null && filePath.isNotEmpty;
+    final bool isPdf = hasFile && filePath.toLowerCase().endsWith('.pdf');
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF131923),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: hasFile ? BanaagTheme.primaryAmber : const Color(0xFF384357),
+          width: 1.5,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                hasFile ? Icons.check_circle : Icons.cloud_upload_outlined,
+                color: hasFile ? BanaagTheme.successGreen : BanaagTheme.primaryAmber,
+                size: 20,
+              ),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text(
+                  'Blueprint & Floor Plan Dropzone',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.white),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: (hasFile ? BanaagTheme.successGreen : BanaagTheme.primaryAmber).withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  hasFile ? 'READY' : 'ACTIVE SLOT',
+                  style: TextStyle(
+                    color: hasFile ? BanaagTheme.successGreen : BanaagTheme.primaryAmber,
+                    fontSize: 9,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          if (!hasFile) ...[
+            const Text(
+              'Kumuha ng litrato ng blueprint sa site o pumili mula sa gallery/PDF para mai-load agad sa Takeoff Canvas background.',
+              style: TextStyle(fontSize: 11, color: BanaagTheme.textMuted, height: 1.3),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    icon: const Icon(Icons.camera_alt, size: 15),
+                    label: const Text('Take Photo', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF283446),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                    onPressed: onTakePhoto,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    icon: const Icon(Icons.photo_library, size: 15),
+                    label: const Text('Pick Blueprint', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: BanaagTheme.primaryAmber,
+                      foregroundColor: Colors.black,
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                    onPressed: onPickFile,
+                  ),
+                ),
+              ],
+            ),
+          ] else ...[
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Stack(
+                children: [
+                  if (isPdf)
+                    Container(
+                      height: 90,
+                      width: double.infinity,
+                      color: const Color(0xFF1E2634),
+                      child: const Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.picture_as_pdf, color: Colors.redAccent, size: 36),
+                          SizedBox(height: 4),
+                          Text('PDF Blueprint Document', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                    )
+                  else
+                    Image.file(
+                      File(filePath),
+                      height: 110,
+                      width: double.infinity,
+                      fit: BoxFit.cover,
+                      errorBuilder: (ctx, error, stackTrace) => Container(
+                        height: 90,
+                        color: Colors.black26,
+                        child: const Center(
+                          child: Icon(Icons.broken_image, color: Colors.white38),
+                        ),
+                      ),
+                    ),
+                  Positioned(
+                    top: 6,
+                    right: 6,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.black87,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: const Text(
+                        'PREVIEW',
+                        style: TextStyle(color: BanaagTheme.primaryAmber, fontSize: 9, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        fileName ?? filePath.split(Platform.pathSeparator).last,
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.white),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '${fileSize != null ? (fileSize / (1024 * 1024)).toStringAsFixed(2) : "0"} MB • Ready for Canvas Underlay',
+                        style: const TextStyle(color: BanaagTheme.successGreen, fontSize: 10, fontWeight: FontWeight.w600),
+                      ),
+                    ],
+                  ),
+                ),
+                TextButton.icon(
+                  icon: const Icon(Icons.replay, size: 14, color: BanaagTheme.primaryAmber),
+                  label: const Text('Replace', style: TextStyle(color: BanaagTheme.primaryAmber, fontSize: 11)),
+                  onPressed: onPickFile,
+                ),
+                IconButton(
+                  icon: const Icon(Icons.delete_outline, size: 18, color: BanaagTheme.alertRed),
+                  tooltip: 'Remove',
+                  onPressed: onRemove,
+                ),
+              ],
+            ),
+          ],
+        ],
       ),
     );
   }

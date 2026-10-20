@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:file_picker/file_picker.dart';
 import '../../domain/models.dart';
 import '../../domain/takeoff_engine.dart';
 import '../../domain/dxf_cad_engine.dart';
@@ -27,11 +28,18 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
   RoomGeometry? _roomGeometry;
   bool _isHeatmapVisible = false;
   String _selectedTool = 'PANEL';
+  bool _isUnderlayVisible = true;
+  final double _underlayOpacity = 0.65;
+  String? _blueprintPath;
+
+  bool get _hasBlueprintFile =>
+      _blueprintPath != null && _blueprintPath!.isNotEmpty && File(_blueprintPath!).existsSync();
 
   @override
   void initState() {
     super.initState();
     _roomGeometry = widget.project?.roomGeometry;
+    _blueprintPath = widget.project?.blueprintImagePath;
     if (widget.project != null && widget.project!.canvasPoints.isNotEmpty) {
       _points = widget.project!.canvasPoints;
       _routes = widget.project!.conduitRoutes;
@@ -284,9 +292,34 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                 }
               } else if (val == 'dxf_guide') {
                 DxfExportGuideDialog.show(context);
+              } else if (val == 'toggle_underlay') {
+                setState(() => _isUnderlayVisible = !_isUnderlayVisible);
+              } else if (val == 'pick_underlay') {
+                _pickNewUnderlay();
               }
             },
             itemBuilder: (ctx) => [
+              if (_hasBlueprintFile)
+                PopupMenuItem(
+                  value: 'toggle_underlay',
+                  child: Row(
+                    children: [
+                      Icon(_isUnderlayVisible ? Icons.layers_clear : Icons.layers, color: Colors.cyanAccent, size: 18),
+                      const SizedBox(width: 10),
+                      Text(_isUnderlayVisible ? 'Hide Floor Plan Underlay' : 'Show Floor Plan Underlay', style: const TextStyle(color: Colors.white, fontSize: 13)),
+                    ],
+                  ),
+                ),
+              PopupMenuItem(
+                value: 'pick_underlay',
+                child: Row(
+                  children: const [
+                    Icon(Icons.add_photo_alternate_outlined, color: Colors.amberAccent, size: 18),
+                    SizedBox(width: 10),
+                    Text('Attach/Change Floor Plan', style: TextStyle(color: Colors.white, fontSize: 13)),
+                  ],
+                ),
+              ),
               PopupMenuItem(
                 value: 'heatmap',
                 child: Row(
@@ -374,20 +407,91 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
             ),
           ),
 
-          // Interactive 2D Grid Canvas
+          // Interactive 2D Grid Canvas with Blueprint Floor Plan Underlay
           Expanded(
             child: GestureDetector(
               onTapUp: _addPointAt,
               child: Container(
                 color: const Color(0xFF16191F),
-                child: CustomPaint(
-                  painter: CanvasPainter(
-                    points: _points,
-                    routes: _routes,
-                    roomGeometry: _roomGeometry,
-                    isHeatmap: _isHeatmapVisible,
-                  ),
-                  child: Container(),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    // 1. Blueprint Floor Plan Underlay
+                    if (_hasBlueprintFile && _isUnderlayVisible)
+                      Positioned.fill(
+                        child: Opacity(
+                          opacity: _underlayOpacity,
+                          child: _blueprintPath!.toLowerCase().endsWith('.pdf')
+                              ? _buildPdfUnderlayPlaceholder()
+                              : Image.file(
+                                  File(_blueprintPath!),
+                                  fit: BoxFit.contain,
+                                  errorBuilder: (ctx, err, stack) => const SizedBox.shrink(),
+                                ),
+                        ),
+                      ),
+
+                    // 2. Interactive Vector Electrical Layer
+                    CustomPaint(
+                      painter: CanvasPainter(
+                        points: _points,
+                        routes: _routes,
+                        roomGeometry: _roomGeometry,
+                        isHeatmap: _isHeatmapVisible,
+                      ),
+                      child: Container(),
+                    ),
+
+                    // 3. Floating Blueprint Layer Pill Indicator
+                    if (_hasBlueprintFile)
+                      Positioned(
+                        top: 10,
+                        left: 12,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: const Color(0xDD11151E),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: BanaagTheme.primaryAmber.withValues(alpha: 0.6)),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.4),
+                                blurRadius: 4,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                _blueprintPath!.toLowerCase().endsWith('.pdf') ? Icons.picture_as_pdf : Icons.image,
+                                size: 14,
+                                color: BanaagTheme.primaryAmber,
+                              ),
+                              const SizedBox(width: 6),
+                              ConstrainedBox(
+                                constraints: const BoxConstraints(maxWidth: 160),
+                                child: Text(
+                                  _blueprintPath!.split(Platform.pathSeparator).last,
+                                  style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              GestureDetector(
+                                onTap: () => setState(() => _isUnderlayVisible = !_isUnderlayVisible),
+                                child: Icon(
+                                  _isUnderlayVisible ? Icons.visibility : Icons.visibility_off,
+                                  size: 16,
+                                  color: _isUnderlayVisible ? BanaagTheme.primaryAmber : Colors.white38,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
               ),
             ),
@@ -438,6 +542,64 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
         label: Text(label, style: TextStyle(color: isSelected ? Colors.black : Colors.white, fontSize: 12)),
         selected: isSelected,
         onSelected: (_) => setState(() => _selectedTool = type),
+      ),
+    );
+  }
+
+  Future<void> _pickNewUnderlay() async {
+    try {
+      final file = await FilePicker.pickFile(
+        type: FileType.custom,
+        allowedExtensions: ['jpg', 'jpeg', 'png', 'webp', 'pdf'],
+      );
+      if (file != null && file.path != null) {
+        final path = file.path!;
+        setState(() {
+          _blueprintPath = path;
+          _isUnderlayVisible = true;
+          if (widget.project != null) {
+            widget.project!.blueprintImagePath = path;
+            ProjectRepository.instance.updateProject(widget.project!);
+          }
+        });
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('📐 Floor plan attached: ${path.split(Platform.pathSeparator).last}!'),
+              backgroundColor: BanaagTheme.successGreen,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error picking plan: $e'), backgroundColor: Colors.redAccent),
+        );
+      }
+    }
+  }
+
+  Widget _buildPdfUnderlayPlaceholder() {
+    return Container(
+      color: const Color(0xFF1B2332),
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.picture_as_pdf, size: 64, color: Colors.redAccent),
+            const SizedBox(height: 12),
+            Text(
+              'PDF Blueprint: ${_blueprintPath!.split(Platform.pathSeparator).last}',
+              style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              'Floor Plan Reference Calibrated • Grid Overlay Active',
+              style: TextStyle(color: BanaagTheme.textMuted, fontSize: 12),
+            ),
+          ],
+        ),
       ),
     );
   }

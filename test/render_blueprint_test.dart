@@ -29,7 +29,7 @@ void main() {
           loadCurrentAmps: 5.22,
           breakerRatingAmps: 15,
           poles: 2,
-          wireSizeDescription: '2 - 2.0 mm² THHN Cu',
+          wireSizeDescription: '2 - 2.0 mm² THHN Cu + 1 - 2.0 mm² Ground',
           conduitDescription: '20 mm Ø PVC',
           measuredRunMeters: 14.5,
           voltageDropPercent: 0.82,
@@ -42,7 +42,7 @@ void main() {
           loadCurrentAmps: 7.83,
           breakerRatingAmps: 20,
           poles: 2,
-          wireSizeDescription: '2 - 3.5 mm² THHN Cu',
+          wireSizeDescription: '2 - 3.5 mm² THHN Cu + 1 - 3.5 mm² Ground',
           conduitDescription: '20 mm Ø PVC',
           measuredRunMeters: 22.0,
           voltageDropPercent: 1.45,
@@ -55,7 +55,7 @@ void main() {
           loadCurrentAmps: 10.43,
           breakerRatingAmps: 30,
           poles: 2,
-          wireSizeDescription: '2 - 5.5 mm² THHN Cu',
+          wireSizeDescription: '2 - 5.5 mm² THHN Cu + 1 - 5.5 mm² Ground',
           conduitDescription: '20 mm Ø PVC',
           measuredRunMeters: 38.5,
           voltageDropPercent: 2.12,
@@ -68,7 +68,7 @@ void main() {
           loadCurrentAmps: 19.57,
           breakerRatingAmps: 40,
           poles: 2,
-          wireSizeDescription: '2 - 8.0 mm² THHN Cu',
+          wireSizeDescription: '2 - 8.0 mm² THHN Cu + 1 - 5.5 mm² Ground',
           conduitDescription: '25 mm Ø PVC',
           measuredRunMeters: 18.0,
           voltageDropPercent: 1.68,
@@ -110,6 +110,7 @@ void main() {
 
     final file = File('test_cad_blueprint_sheet_e1.pdf');
     await file.writeAsBytes(pdfBytes);
+    // ignore: avoid_print
     print('SUCCESS: Generated test_cad_blueprint_sheet_e1.pdf (${pdfBytes.length} bytes)');
   });
 }

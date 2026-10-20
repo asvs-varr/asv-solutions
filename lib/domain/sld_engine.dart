@@ -264,7 +264,7 @@ class SldEngine {
       loadCurrentAmps: 0.0,
       breakerRatingAmps: 20,
       poles: 2,
-      wireSizeDescription: '2 - 3.5 mm² THHN',
+      wireSizeDescription: '2 - 3.5 mm² THHN + 1 - 3.5 mm² Ground',
       conduitDescription: '20 mm Ø PVC',
       isSpare: true,
     ));
@@ -275,7 +275,7 @@ class SldEngine {
       loadCurrentAmps: 0.0,
       breakerRatingAmps: 30,
       poles: 2,
-      wireSizeDescription: '2 - 5.5 mm² THHN',
+      wireSizeDescription: '2 - 5.5 mm² THHN + 1 - 5.5 mm² Ground',
       conduitDescription: '20 mm Ø PVC',
       isSpare: true,
     ));
@@ -432,20 +432,16 @@ class SldEngine {
       }
     }
 
-    // Determine Ground wire & Conduit based on final wire size
-    String groundWireSize = '2.0 mm²';
-    if (currentWireSpec.sizeMm2 >= 8.0) {
-      groundWireSize = '5.5 mm²';
-    } else if (currentWireSpec.sizeMm2 >= 5.5) {
-      groundWireSize = '3.5 mm²';
-    }
+    // Determine Ground wire & Conduit based on PEC Table 2.50.6.13 breaker rating
+    final double egcMm2 = PecEngine.getMinimumEquipmentGroundingConductorMm2(breaker);
+    final String groundWireSize = '${egcMm2.toStringAsFixed(1).replaceAll('.0', '')} mm²';
 
     String conduit = '20 mm Ø PVC';
     if (currentWireSpec.sizeMm2 >= 8.0) {
       conduit = '25 mm Ø PVC';
     }
 
-    final String wireDesc = '2 - ${currentWireSpec.sizeMm2.toStringAsFixed(1)} mm² THHN + 1 - $groundWireSize Ground';
+    final String wireDesc = '2 - ${currentWireSpec.sizeMm2.toStringAsFixed(1).replaceAll('.0', '')} mm² THHN + 1 - $groundWireSize Ground';
 
     return SldBranchCircuit(
       circuitNumber: circuitNumber,
@@ -495,7 +491,7 @@ class SldEngine {
         loadVA: 1440.0,
         loadCurrentAmps: 6.26,
         breakerRatingAmps: 20,
-        wireSizeDescription: '2 - 3.5 mm² THHN + 1 - 2.0 mm² Ground',
+        wireSizeDescription: '2 - 3.5 mm² THHN + 1 - 3.5 mm² Ground',
         conduitDescription: '20 mm Ø PVC',
         measuredRunMeters: 16.5,
         voltageDropPercent: 0.58,
@@ -506,7 +502,7 @@ class SldEngine {
         loadVA: 1800.0,
         loadCurrentAmps: 7.83,
         breakerRatingAmps: 20,
-        wireSizeDescription: '2 - 3.5 mm² THHN + 1 - 2.0 mm² Ground',
+        wireSizeDescription: '2 - 3.5 mm² THHN + 1 - 3.5 mm² Ground',
         conduitDescription: '20 mm Ø PVC',
         measuredRunMeters: 19.5,
         voltageDropPercent: 0.86,
@@ -517,7 +513,7 @@ class SldEngine {
         loadVA: 1950.0,
         loadCurrentAmps: 8.48,
         breakerRatingAmps: 30,
-        wireSizeDescription: '2 - 5.5 mm² THHN + 1 - 3.5 mm² Ground',
+        wireSizeDescription: '2 - 5.5 mm² THHN + 1 - 5.5 mm² Ground',
         conduitDescription: '20 mm Ø PVC',
         measuredRunMeters: 22.0,
         voltageDropPercent: 0.67,
@@ -528,7 +524,7 @@ class SldEngine {
         loadVA: 3500.0,
         loadCurrentAmps: 15.22,
         breakerRatingAmps: 30,
-        wireSizeDescription: '2 - 5.5 mm² THHN + 1 - 3.5 mm² Ground',
+        wireSizeDescription: '2 - 5.5 mm² THHN + 1 - 5.5 mm² Ground',
         conduitDescription: '20 mm Ø PVC',
         measuredRunMeters: 24.5,
         voltageDropPercent: 1.33,
@@ -539,7 +535,7 @@ class SldEngine {
         loadVA: 0.0,
         loadCurrentAmps: 0.0,
         breakerRatingAmps: 20,
-        wireSizeDescription: '2 - 3.5 mm² THHN',
+        wireSizeDescription: '2 - 3.5 mm² THHN + 1 - 3.5 mm² Ground',
         conduitDescription: '20 mm Ø PVC',
         isSpare: true,
         measuredRunMeters: 0.0,
@@ -551,7 +547,7 @@ class SldEngine {
         loadVA: 0.0,
         loadCurrentAmps: 0.0,
         breakerRatingAmps: 30,
-        wireSizeDescription: '2 - 5.5 mm² THHN',
+        wireSizeDescription: '2 - 5.5 mm² THHN + 1 - 5.5 mm² Ground',
         conduitDescription: '20 mm Ø PVC',
         isSpare: true,
         measuredRunMeters: 0.0,

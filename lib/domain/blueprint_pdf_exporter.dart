@@ -10,6 +10,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'models.dart';
 import 'sld_engine.dart';
+import 'pec_engine.dart';
 
 class BlueprintPdfExporter {
   // CAD White Paper Color Palette (Ink-Saving & High-Contrast Drafting)
@@ -291,8 +292,8 @@ class BlueprintPdfExporter {
               _tableDataCell('${ckt.breakerRatingAmps} AT'),
               _tableDataCell('${ckt.measuredRunMeters.toStringAsFixed(1)}m'),
               _tableDataCell('${ckt.voltageDropPercent.toStringAsFixed(2)}%'),
-              _tableDataCell(ckt.wireSizeDescription.replaceAll('mm²', 'mm2')),
-              _tableDataCell(ckt.conduitDescription.replaceAll('Ø', 'mm DIA')),
+              _tableDataCell(_formatCircuitConductors(ckt)),
+              _tableDataCell(_formatConduitText(ckt.conduitDescription)),
               _tableDataCell(ckt.isUpsized ? 'UPSIZED FOR VD' : (ckt.isSpare ? 'SPARE' : 'PASS (<3%)')),
             ],
           );
@@ -312,12 +313,44 @@ class BlueprintPdfExporter {
             _tableDataCell('-'),
             _tableDataCell('<= 3.0%'),
             _tableDataCell(sldData.feeder.feederWireDescription.replaceAll('mm²', 'mm2'), isBold: true),
-            _tableDataCell(sldData.feeder.conduitDescription.replaceAll('Ø', 'mm DIA'), isBold: true),
+            _tableDataCell(_formatConduitText(sldData.feeder.conduitDescription), isBold: true),
             _tableDataCell('MAIN FEEDER (125% CONTINUOUS)', isBold: true),
           ],
         ),
       ],
     );
+  }
+
+  static String _formatCircuitConductors(SldBranchCircuit ckt) {
+    if (ckt.isSpare && (ckt.wireSizeDescription.trim().isEmpty || ckt.wireSizeDescription == '-')) {
+      return 'SPARE PROVISION';
+    }
+    String desc = ckt.wireSizeDescription.replaceAll('mm²', 'mm2');
+    final requiredEgc = PecEngine.formatEquipmentGroundingConductor(ckt.breakerRatingAmps).replaceAll('mm²', 'mm2');
+
+    // Check if ground is already in the string
+    final groundRegex = RegExp(r'\+\s*1\s*-\s*([0-9.]+)\s*mm2\s*Ground', caseSensitive: false);
+    final match = groundRegex.firstMatch(desc);
+    if (match != null) {
+      final existingSize = double.tryParse(match.group(1) ?? '0') ?? 0.0;
+      final minSize = PecEngine.getMinimumEquipmentGroundingConductorMm2(ckt.breakerRatingAmps);
+      // Auto-correct substandard ground size to PEC 2017 Table 2.50.6.13 minimum
+      if (existingSize < minSize) {
+        desc = desc.replaceRange(match.start, match.end, '+ 1 - $requiredEgc Ground');
+      }
+    } else if (!desc.toLowerCase().contains('ground') && desc != '-' && desc.isNotEmpty) {
+      desc = '$desc + 1 - $requiredEgc Ground';
+    }
+    return desc;
+  }
+
+  static String _formatConduitText(String conduit) {
+    if (conduit.trim().isEmpty || conduit == '-') return '-';
+    return conduit
+        .replaceAll('Ø', 'DIA')
+        .replaceAll('mm mm', 'mm')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
   }
 
   static pw.Widget _tableHeaderCell(String text) {
@@ -553,7 +586,7 @@ class BlueprintPdfExporter {
                   ),
                   pw.SizedBox(height: 1),
                   pw.Text(
-                    'FEEDER: ${sldData.feeder.feederWireDescription.replaceAll('mm²', 'mm2')} IN ${sldData.feeder.conduitDescription.replaceAll('Ø', 'mm DIA')}',
+                    'FEEDER: ${sldData.feeder.feederWireDescription.replaceAll('mm²', 'mm2')} IN ${_formatConduitText(sldData.feeder.conduitDescription).toUpperCase()}',
                     style: const pw.TextStyle(color: cadMuted, fontSize: 8.5),
                   ),
                 ],
@@ -651,7 +684,6 @@ class BlueprintPdfExporter {
                 child: pw.Column(
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: sldData.branchCircuits.asMap().entries.map((entry) {
-                    final int index = entry.key;
                     final SldBranchCircuit ckt = entry.value;
                     final bool isPass = ckt.voltageDropPercent <= 3.0;
 
@@ -712,31 +744,32 @@ class BlueprintPdfExporter {
                               ),
                               pw.SizedBox(height: 1),
                               pw.Text(
-                                '${ckt.wireSizeDescription.replaceAll('mm²', 'mm2')} + 1 - 2.0 mm2 Ground in ${ckt.conduitDescription.replaceAll('Ø', 'mm DIA')}',
+                                '${_formatCircuitConductors(ckt)} in ${_formatConduitText(ckt.conduitDescription)}',
                                 style: const pw.TextStyle(color: cadDark, fontSize: 8),
                               ),
-                              pw.SizedBox(height: 1),
-                              pw.Row(
-                                children: [
-                                  pw.Text(
-                                    'VD: ${ckt.voltageDropPercent.toStringAsFixed(2)}% [${isPass ? 'PASS' : 'FAIL'}]',
-                                    style: pw.TextStyle(
-                                      color: isPass ? cadGreen : PdfColors.redAccent,
-                                      fontWeight: pw.FontWeight.bold,
-                                      fontSize: 8,
+                              if (!ckt.isSpare) ...[
+                                pw.SizedBox(height: 1),
+                                pw.Row(
+                                  children: [
+                                    pw.Text(
+                                      'VD: ${ckt.voltageDropPercent.toStringAsFixed(2)}% [${isPass ? 'PASS' : 'FAIL'}]',
+                                      style: pw.TextStyle(
+                                        color: isPass ? cadGreen : PdfColors.redAccent,
+                                        fontWeight: pw.FontWeight.bold,
+                                        fontSize: 8,
+                                      ),
                                     ),
-                                  ),
-                                  pw.Text(
-                                    ' | 3D Run: ${ckt.measuredRunMeters.toStringAsFixed(1)}m',
-                                    style: const pw.TextStyle(color: cadMuted, fontSize: 8),
-                                  ),
-                                  if (!ckt.isSpare)
+                                    pw.Text(
+                                      ' | 3D Run: ${ckt.measuredRunMeters.toStringAsFixed(1)}m',
+                                      style: const pw.TextStyle(color: cadMuted, fontSize: 8),
+                                    ),
                                     pw.Text(
                                       ' | Load: ${ckt.loadVA.toStringAsFixed(0)} VA (${ckt.loadCurrentAmps.toStringAsFixed(1)}A)',
                                       style: pw.TextStyle(color: cadAmber, fontWeight: pw.FontWeight.bold, fontSize: 8),
                                     ),
-                                ],
-                              ),
+                                  ],
+                                ),
+                              ],
                             ],
                           ),
                         ],
@@ -876,7 +909,7 @@ class BlueprintPdfExporter {
                 children: [
                   pw.Align(
                     alignment: pw.Alignment.topLeft,
-                    child: pw.Text('SITE ELECTRICAL SERVICE CONNECTION PLAN (SCALE: N.T.S.)', style: const pw.TextStyle(color: cadDark, fontSize: 7, fontWeight: pw.FontWeight.bold)),
+                    child: pw.Text('SITE ELECTRICAL SERVICE CONNECTION PLAN (SCALE: N.T.S.)', style: pw.TextStyle(color: cadDark, fontSize: 7, fontWeight: pw.FontWeight.bold)),
                   ),
                   pw.Align(
                     alignment: pw.Alignment.topRight,

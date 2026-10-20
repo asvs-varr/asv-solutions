@@ -1,6 +1,7 @@
 // BANAAG Raw Floor Plan & DXF Calibration Modal
 // Supports uploading/selecting raw images/PDFs and messy DXFs with 2-point calibration and 1-tap PEC Auto-Placement.
 
+import 'dart:io';
 import 'package:flutter/material.dart';
 import '../../domain/models.dart';
 import '../../domain/dxf_intake_engine.dart';
@@ -177,6 +178,10 @@ class _RawPlanCalibrationModalState extends State<RawPlanCalibrationModal> {
   }
 
   Widget _buildRawPlanTab() {
+    final blueprintPath = widget.project?.blueprintImagePath;
+    final bool hasFile = blueprintPath != null && blueprintPath.isNotEmpty && File(blueprintPath).existsSync();
+    final fileName = hasFile ? blueprintPath.split(Platform.pathSeparator).last : null;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -187,16 +192,31 @@ class _RawPlanCalibrationModalState extends State<RawPlanCalibrationModal> {
           decoration: BoxDecoration(
             color: const Color(0xFF1B212D),
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.white24, style: BorderStyle.solid),
+            border: Border.all(
+              color: hasFile ? BanaagTheme.primaryAmber : Colors.white24,
+              style: BorderStyle.solid,
+            ),
           ),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.cloud_upload_outlined, size: 36, color: BanaagTheme.primaryAmber.withValues(alpha: 0.8)),
+              Icon(
+                hasFile ? Icons.check_circle_outline : Icons.cloud_upload_outlined,
+                size: 36,
+                color: hasFile ? BanaagTheme.successGreen : BanaagTheme.primaryAmber.withValues(alpha: 0.8),
+              ),
               const SizedBox(height: 8),
-              const Text('I-upload ang Blueprint Photo, Scan, o PDF', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.white)),
+              Text(
+                hasFile ? 'Naka-Link na Floor Plan:' : 'I-upload ang Blueprint Photo, Scan, o PDF',
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.white),
+              ),
               const SizedBox(height: 4),
-              const Text('Kahit walang electrical layout (architectural walls lang)', style: TextStyle(fontSize: 11, color: BanaagTheme.textMuted)),
+              Text(
+                hasFile ? (fileName ?? '') : 'Kahit walang electrical layout (architectural walls lang)',
+                style: const TextStyle(fontSize: 11, color: BanaagTheme.textMuted),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
               const SizedBox(height: 8),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -204,7 +224,10 @@ class _RawPlanCalibrationModalState extends State<RawPlanCalibrationModal> {
                   color: BanaagTheme.successGreen.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(4),
                 ),
-                child: const Text('SAMPLE PLAN LOADED: 8.0m x 6.0m House Plan', style: TextStyle(fontSize: 10, color: BanaagTheme.successGreen, fontWeight: FontWeight.bold)),
+                child: Text(
+                  hasFile ? 'ACTIVE IN CANVAS BACKGROUND' : 'SAMPLE PLAN LOADED: 8.0m x 6.0m House Plan',
+                  style: const TextStyle(fontSize: 10, color: BanaagTheme.successGreen, fontWeight: FontWeight.bold),
+                ),
               ),
             ],
           ),

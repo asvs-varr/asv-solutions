@@ -358,6 +358,19 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
                 );
               } else if (item.id == 'c_dxf') {
                 _handleDxfUpload(phase, item);
+              } else if (item.id == 'c_takeoff' || item.id == 'p_takeoff') {
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => PlanCanvasScreen(project: _project),
+                  ),
+                );
+                setState(() {
+                  _project = ProjectRepository.instance.allProjects.firstWhere(
+                    (p) => p.id == _project.id,
+                    orElse: () => _project,
+                  );
+                });
               } else if (item.id == 'p1') {
                 await Navigator.push(
                   context,
