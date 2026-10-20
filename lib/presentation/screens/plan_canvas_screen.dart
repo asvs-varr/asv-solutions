@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -40,6 +41,57 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
   final TransformationController _zoomController = TransformationController();
   double _currentZoom = 1.0;
 
+  // Room-Zone Ceiling Centers (strictly inside house walls [x: 68..230, y: 168..358])
+  static const List<Offset> _roomCeilingAnchors = [
+    Offset(74, 172),  // Bath ceiling
+    Offset(105, 172), // Bath/Hall ceiling
+    Offset(178, 172), // Bedroom 3 ceiling left
+    Offset(222, 172), // Bedroom 3 ceiling right
+    Offset(222, 206), // Bedroom 3 ceiling lower-right
+    Offset(178, 206), // Bedroom 3 ceiling lower-left
+    Offset(74, 212),  // Closet ceiling
+    Offset(82, 262),  // Kitchen ceiling left
+    Offset(118, 262), // Kitchen ceiling right
+    Offset(178, 258), // Mid-hall/Stairs ceiling left
+    Offset(222, 258), // Mid-hall/Stairs ceiling right
+    Offset(222, 312), // Living Room ceiling upper-right
+    Offset(178, 312), // Living Room ceiling upper-left
+    Offset(118, 318), // Dining/Entry ceiling upper
+    Offset(78, 318),  // Dining/Entry ceiling left
+    Offset(78, 356),  // Entry ceiling lower-left
+    Offset(118, 356), // Entry ceiling lower-right
+    Offset(178, 356), // Living Room ceiling lower-left
+    Offset(222, 356), // Living Room ceiling lower-right
+  ];
+
+  // Perimeter & Partition Wall Anchors ordered clockwise around the house ([x: 48..258, y: 156..386])
+  static const List<Offset> _wallPerimeterAnchors = [
+    Offset(52, 248),  // Kitchen left wall upper
+    Offset(52, 212),  // Closet left wall
+    Offset(52, 160),  // Bathroom top-left wall
+    Offset(96, 156),  // Bathroom top wall
+    Offset(124, 185), // Bathroom partition wall
+    Offset(160, 156), // Bedroom 3 top-left wall
+    Offset(208, 156), // Bedroom 3 top-mid wall
+    Offset(256, 162), // Bedroom 3 top-right exterior wall (ACU/Outlet)
+    Offset(256, 196), // Bedroom 3 right exterior wall
+    Offset(256, 226), // Bedroom 3 lower-right wall
+    Offset(256, 256), // Mid-right exterior wall
+    Offset(256, 286), // Living/Stairs right exterior wall
+    Offset(256, 318), // Living Room right exterior wall upper
+    Offset(256, 350), // Living Room right exterior wall lower
+    Offset(256, 382), // Living Room bottom-right corner wall
+    Offset(212, 386), // Living Room bottom exterior wall
+    Offset(165, 386), // Living Room bottom-mid wall
+    Offset(124, 386), // Entry bottom wall right
+    Offset(82, 386),  // Entry bottom wall left
+    Offset(52, 376),  // Entry bottom-left corner wall
+    Offset(52, 338),  // Dining/Kitchen lower-left wall
+    Offset(132, 342), // Interior partition lower
+    Offset(132, 292), // Kitchen counter partition lower
+    Offset(132, 245), // Kitchen counter partition upper
+  ];
+
   bool get _hasBlueprintFile =>
       _blueprintPath != null && _blueprintPath!.isNotEmpty && File(_blueprintPath!).existsSync();
 
@@ -66,7 +118,7 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
         CanvasPoint(id: 'pt-2', type: 'SWITCH_1G', label: 'S1-1', x: 110, y: 225),
         CanvasPoint(id: 'pt-3', type: 'LIGHT', label: 'L-1', x: 190, y: 225),
         CanvasPoint(id: 'pt-4', type: 'OUTLET_DUPLEX', label: 'CO-1', x: 140, y: 335),
-        CanvasPoint(id: 'pt-5', type: 'ACU', label: 'ACU-1', x: 285, y: 235),
+        CanvasPoint(id: 'pt-5', type: 'ACU', label: 'ACU-1', x: 254, y: 170),
       ];
       _routes = [
         ConduitRoute(id: 'rt-1', fromPointId: 'pt-1', toPointId: 'pt-2', measuredLengthMeters: 4.5),
@@ -77,17 +129,16 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
     }
   }
 
-  /// Automatically cleans up duplicate MDP panels or out-of-bounds legacy coordinates
-  /// so all items sit strictly inside the rendered floor plan bounds.
+  /// Automatically cleans up duplicate MDP panels or out-of-bounds coordinates
+  /// (e.g. x > 266 outside the right exterior wall) so all items sit strictly inside the rooms.
   void _sanitizeAndFitExistingPointsIfNeeded() {
     final panelCount = _points.where((p) => p.type == 'PANEL').length;
-    final hasOutOfBounds = _points.any((p) => p.x > 335.0 || p.y < 170.0 || p.y > 410.0);
+    final hasOutOfBounds = _points.any((p) => p.x > 266.0 || p.y < 150.0 || p.y > 395.0);
 
     if (panelCount > 1 || hasOutOfBounds) {
       if (widget.project != null && widget.project!.applianceLoads.isNotEmpty) {
         _autoGenerateFromAppliances(widget.project!.applianceLoads);
       } else {
-        // Deduplicate extra PANEL points and clamp into floor plan safe zone
         bool keptFirstPanel = false;
         final List<CanvasPoint> cleaned = [];
         for (final pt in _points) {
@@ -98,28 +149,32 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
               id: pt.id,
               type: pt.type,
               label: 'MDP',
-              x: 40.0,
-              y: 285.0,
+              x: 42.0,
+              y: 280.0,
               circuitNumber: pt.circuitNumber,
             ));
             continue;
           }
           cleaned.add(pt);
         }
-        final nonPanels = cleaned.where((p) => p.type != 'PANEL').toList();
-        final int total = nonPanels.length;
-        final int cols = total <= 6 ? 3 : (total <= 12 ? 4 : 5);
-        final int rows = (total / cols).ceil().clamp(1, 10);
-        const double startX = 82.0, endX = 320.0;
-        const double startY = 195.0, endY = 385.0;
-        final double stepX = cols > 1 ? (endX - startX) / (cols - 1) : 0.0;
-        final double stepY = rows > 1 ? (endY - startY) / (rows - 1) : 0.0;
 
-        for (int i = 0; i < nonPanels.length; i++) {
-          final int col = i % cols;
-          final int row = i ~/ cols;
-          nonPanels[i].x = startX + (col * stepX);
-          nonPanels[i].y = startY + (row * stepY);
+        int lightIdx = 0;
+        int wallIdx = 0;
+        for (final pt in cleaned) {
+          if (pt.type == 'PANEL') continue;
+          if (pt.type == 'LIGHT' || pt.type == 'FAN') {
+            final anchor = _roomCeilingAnchors[lightIdx % _roomCeilingAnchors.length];
+            final int cycle = lightIdx ~/ _roomCeilingAnchors.length;
+            pt.x = (anchor.dx + (cycle * 12.0)).clamp(52.0, 248.0);
+            pt.y = (anchor.dy + (cycle * 10.0)).clamp(160.0, 380.0);
+            lightIdx++;
+          } else {
+            final anchor = _wallPerimeterAnchors[wallIdx % _wallPerimeterAnchors.length];
+            final int cycle = wallIdx ~/ _wallPerimeterAnchors.length;
+            pt.x = (anchor.dx - (cycle * 10.0)).clamp(48.0, 258.0);
+            pt.y = (anchor.dy + (cycle * 8.0)).clamp(156.0, 386.0);
+            wallIdx++;
+          }
         }
         _points = cleaned;
         final validIds = _points.map((p) => p.id).toSet();
@@ -147,9 +202,9 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
       if (_currentZoom == 1.0) {
         _zoomController.value = Matrix4.identity();
       } else {
-        // Zoom toward the center of the floor plan (approx x: 180, y: 290)
-        const double centerX = 180.0;
-        const double centerY = 290.0;
+        // Zoom toward the center of the floor plan (approx x: 160, y: 275)
+        const double centerX = 160.0;
+        const double centerY = 275.0;
         final double dx = -centerX * (_currentZoom - 1.0);
         final double dy = -centerY * (_currentZoom - 1.0);
         _zoomController.value = Matrix4.identity()
@@ -176,12 +231,13 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
   }
 
   void _autoGenerateFromAppliances(List<ApplianceItem> appliances) {
-    // Place MDP right at the left entrance wall inside the floor plan box
-    final panelPt = CanvasPoint(id: 'pt-panel', type: 'PANEL', label: 'MDP', x: 40.0, y: 285.0);
+    // Place MDP on the left entrance/kitchen wall inside the floor plan
+    final panelPt = CanvasPoint(id: 'pt-panel', type: 'PANEL', label: 'MDP', x: 42.0, y: 280.0);
     _points = [panelPt];
     _routes = [];
 
-    final List<Map<String, dynamic>> flatDevices = [];
+    final List<Map<String, dynamic>> ceilingDevices = [];
+    final List<Map<String, dynamic>> wallDevices = [];
     int devCounter = 1;
 
     for (final app in appliances) {
@@ -198,50 +254,40 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
           pointType = 'SWITCH_1G';
         }
 
-        flatDevices.add({
+        final devMap = {
           'id': 'pt-$devCounter',
           'type': pointType,
           'name': app.name,
           'isDedicated': app.isDedicatedCircuit,
           'circuitNumber': app.circuitNumber,
           'index': devCounter,
-        });
+        };
+
+        if (pointType == 'LIGHT' || pointType == 'FAN') {
+          ceilingDevices.add(devMap);
+        } else {
+          wallDevices.add(devMap);
+        }
         devCounter++;
       }
     }
 
-    // Dynamic grid bounded strictly inside the rendered floor plan area:
-    // Horizontal safe zone: [82.0 .. 320.0] (within 360px phone screen)
-    // Vertical safe zone: [195.0 .. 385.0] (within centered landscape floor plan)
-    final int totalDevs = flatDevices.length;
-    final int cols = totalDevs <= 6 ? 3 : (totalDevs <= 12 ? 4 : 5);
-    final int rows = (totalDevs / cols).ceil().clamp(1, 12);
-    const double startX = 82.0;
-    const double endX = 320.0;
-    const double startY = 195.0;
-    const double endY = 385.0;
-    final double stepX = cols > 1 ? (endX - startX) / (cols - 1) : 0.0;
-    final double stepY = rows > 1 ? (endY - startY) / (rows - 1) : 0.0;
-
-    // Track the last point in each circuit branch for clean daisy-chaining
     String lastLightingPointId = 'pt-panel';
     String lastOutletPointId = 'pt-panel';
     int routeCounter = 1;
 
-    for (int i = 0; i < flatDevices.length; i++) {
-      final dev = flatDevices[i];
+    // 1. Place Ceiling Luminaires in Room Centers & Daisy-Chain Room-to-Room
+    for (int i = 0; i < ceilingDevices.length; i++) {
+      final dev = ceilingDevices[i];
       final String pId = dev['id'];
       final String pType = dev['type'];
       final String pName = dev['name'];
-      final bool isDedicated = dev['isDedicated'];
       final int idx = dev['index'];
 
-      final int col = i % cols;
-      final int row = i ~/ cols;
-      // Serpentine row ordering so daisy-chain conduits don't zig-zag across the entire plan
-      final int effectiveCol = (row.isOdd) ? (cols - 1 - col) : col;
-      final double curX = startX + (effectiveCol * stepX);
-      final double curY = startY + (row * stepY);
+      final anchor = _roomCeilingAnchors[i % _roomCeilingAnchors.length];
+      final int cycle = i ~/ _roomCeilingAnchors.length;
+      final double curX = (anchor.dx + (cycle * 14.0)).clamp(58.0, 244.0);
+      final double curY = (anchor.dy + (cycle * 12.0)).clamp(162.0, 376.0);
 
       final compactLabel = _getShorthandLabel(pType, pName, idx);
 
@@ -251,29 +297,53 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
         label: compactLabel,
         x: curX,
         y: curY,
-        circuitNumber: isDedicated ? (idx + 2) : (pType == 'LIGHT' ? 1 : 2),
+        circuitNumber: 1,
       ));
 
-      // SMART ROUTING:
+      _routes.add(ConduitRoute(
+        id: 'rt-${routeCounter++}',
+        fromPointId: lastLightingPointId,
+        toPointId: pId,
+        measuredLengthMeters: 3.5,
+      ));
+      lastLightingPointId = pId;
+    }
+
+    // 2. Place Outlets, Switches & ACUs Along Perimeter/Interior Walls Clockwise
+    for (int i = 0; i < wallDevices.length; i++) {
+      final dev = wallDevices[i];
+      final String pId = dev['id'];
+      final String pType = dev['type'];
+      final String pName = dev['name'];
+      final bool isDedicated = dev['isDedicated'];
+      final int idx = dev['index'];
+
+      final anchor = _wallPerimeterAnchors[i % _wallPerimeterAnchors.length];
+      final int cycle = i ~/ _wallPerimeterAnchors.length;
+      final double curX = (anchor.dx - (cycle * 12.0)).clamp(48.0, 258.0);
+      final double curY = (anchor.dy + (cycle * 10.0)).clamp(156.0, 386.0);
+
+      final compactLabel = _getShorthandLabel(pType, pName, idx);
+
+      _points.add(CanvasPoint(
+        id: pId,
+        type: pType,
+        label: compactLabel,
+        x: curX,
+        y: curY,
+        circuitNumber: isDedicated ? (idx + 2) : 2,
+      ));
+
       if (isDedicated) {
-        // Dedicated equipment: Single direct home-run conduit back to MDP
+        // Dedicated equipment: Home-run conduit back to MDP (rendered as CAD Home-Run Arrowhead!)
         _routes.add(ConduitRoute(
           id: 'rt-${routeCounter++}',
           fromPointId: 'pt-panel',
           toPointId: pId,
           measuredLengthMeters: 7.5,
         ));
-      } else if (pType == 'LIGHT' || pType == 'SWITCH_1G') {
-        // Lighting branch circuit daisy-chain (Panel -> Light 1 -> Light 2 -> ...)
-        _routes.add(ConduitRoute(
-          id: 'rt-${routeCounter++}',
-          fromPointId: lastLightingPointId,
-          toPointId: pId,
-          measuredLengthMeters: 3.5,
-        ));
-        lastLightingPointId = pId;
       } else {
-        // Convenience outlet branch circuit daisy-chain (Panel -> CO 1 -> CO 2 -> ...)
+        // Convenience outlet branch circuit daisy-chain along perimeter walls
         _routes.add(ConduitRoute(
           id: 'rt-${routeCounter++}',
           fromPointId: lastOutletPointId,
@@ -1224,20 +1294,74 @@ class CanvasPainter extends CustomPainter {
       }
     }
 
-    // Draw Conduit Routes (Sleek Orthogonal 90-degree CAD Routing)
+    // Draw Conduit Routes (Sleek Orthogonal 90-degree CAD Routing + AutoCAD Home-Run Arrowheads)
     if (showConduits) {
       final routePaint = Paint()
-        ..color = BanaagTheme.primaryAmber.withValues(alpha: 0.68)
-        ..strokeWidth = 1.3
+        ..color = BanaagTheme.primaryAmber.withValues(alpha: 0.62)
+        ..strokeWidth = 1.2
         ..style = PaintingStyle.stroke
         ..strokeCap = StrokeCap.round
         ..strokeJoin = StrokeJoin.round;
+
+      final homerunStubPaint = Paint()
+        ..color = Colors.cyanAccent.withValues(alpha: 0.85)
+        ..strokeWidth = 1.3
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round;
 
       for (final r in routes) {
         final p1 = points.firstWhere((p) => p.id == r.fromPointId, orElse: () => points.first);
         final p2 = points.firstWhere((p) => p.id == r.toPointId, orElse: () => points.first);
 
         if (p1.id == p2.id) continue;
+
+        final bool isDedicatedHomerun =
+            p1.type == 'PANEL' && (p2.type == 'ACU' || p2.circuitNumber > 2);
+
+        if (isDedicatedHomerun) {
+          // AutoCAD Standard: Draw a short Home-Run Arrowhead stub pointing toward MDP
+          // instead of cluttering the floor plan with long crossing lines
+          final angle = math.atan2(p1.y - p2.y, p1.x - p2.x);
+          const double startDist = 7.5;
+          const double endDist = 18.0;
+          final stubStart = Offset(
+            p2.x + math.cos(angle) * startDist,
+            p2.y + math.sin(angle) * startDist,
+          );
+          final stubTip = Offset(
+            p2.x + math.cos(angle) * endDist,
+            p2.y + math.sin(angle) * endDist,
+          );
+
+          canvas.drawLine(stubStart, stubTip, homerunStubPaint);
+
+          // Arrowhead wings at stubTip
+          const double wingLen = 4.5;
+          const double wingAngle = 0.55;
+          final wing1 = Offset(
+            stubTip.dx - math.cos(angle - wingAngle) * wingLen,
+            stubTip.dy - math.sin(angle - wingAngle) * wingLen,
+          );
+          final wing2 = Offset(
+            stubTip.dx - math.cos(angle + wingAngle) * wingLen,
+            stubTip.dy - math.sin(angle + wingAngle) * wingLen,
+          );
+          canvas.drawLine(stubTip, wing1, homerunStubPaint);
+          canvas.drawLine(stubTip, wing2, homerunStubPaint);
+
+          // Tiny conductor slash tick across the midpoint of the homerun stub
+          final midStub = Offset(
+            (stubStart.dx + stubTip.dx) / 2,
+            (stubStart.dy + stubTip.dy) / 2,
+          );
+          final perpAngle = angle + (math.pi / 4);
+          canvas.drawLine(
+            Offset(midStub.dx - math.cos(perpAngle) * 3.0, midStub.dy - math.sin(perpAngle) * 3.0),
+            Offset(midStub.dx + math.cos(perpAngle) * 3.0, midStub.dy + math.sin(perpAngle) * 3.0),
+            homerunStubPaint,
+          );
+          continue;
+        }
 
         final path = Path();
         path.moveTo(p1.x, p1.y);
