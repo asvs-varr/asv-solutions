@@ -106,6 +106,18 @@ class SldFeederSpec {
     'conduitDescription': conduitDescription,
     'serviceDropDescription': serviceDropDescription,
   };
+
+  factory SldFeederSpec.fromJson(Map<String, dynamic> json) => SldFeederSpec(
+    totalConnectedVA: (json['totalConnectedVA'] as num?)?.toDouble() ?? 0.0,
+    netDemandVA: (json['netDemandVA'] as num?)?.toDouble() ?? 0.0,
+    netCurrentAmps: (json['netCurrentAmps'] as num?)?.toDouble() ?? 0.0,
+    mainBreakerAmps: json['mainBreakerAmps'] ?? 60,
+    mainBreakerDescription: json['mainBreakerDescription'] ?? '',
+    feederWireDescription: json['feederWireDescription'] ?? '',
+    groundingDescription: json['groundingDescription'] ?? '',
+    conduitDescription: json['conduitDescription'] ?? '',
+    serviceDropDescription: json['serviceDropDescription'] ?? '',
+  );
 }
 
 class SingleLineDiagramData {
@@ -120,6 +132,23 @@ class SingleLineDiagramData {
     this.panelName = 'LP-1 (Main Distribution Panel)',
     this.utilityProvider = 'Meralco',
   });
+
+  Map<String, dynamic> toJson() => {
+    'feeder': feeder.toJson(),
+    'branchCircuits': branchCircuits.map((b) => b.toJson()).toList(),
+    'panelName': panelName,
+    'utilityProvider': utilityProvider,
+  };
+
+  factory SingleLineDiagramData.fromJson(Map<String, dynamic> json) => SingleLineDiagramData(
+    feeder: SldFeederSpec.fromJson(json['feeder'] as Map<String, dynamic>),
+    branchCircuits: (json['branchCircuits'] as List<dynamic>?)
+            ?.map((b) => SldBranchCircuit.fromJson(b as Map<String, dynamic>))
+            .toList() ??
+        [],
+    panelName: json['panelName'] ?? 'LP-1 (Main Distribution Panel)',
+    utilityProvider: json['utilityProvider'] ?? 'Meralco',
+  );
 
   /// Official PEC 2017 Basis & Citations for this specific Schedule of Loads calculation
   List<Map<String, String>> get pecEngineeringBasis => [

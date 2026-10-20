@@ -207,19 +207,15 @@
 ---
 
 ### [HRZ-012] Dynamic Multi-Panel Distribution Riser & Subpanel Management (MDP -> Subpanels)
-- **Status**: ⏳ ARCHITECTURE READY / UI INTEGRATION DEFERRED
-- **Blocker Category**: `[UX/ARCHITECTURAL-EXPANSION]`
+- **Status**: ✅ GRADUATED & LIVE IN UI (v1.1.0)
+- **Blocker Category**: `[UX/ARCHITECTURAL-EXPANSION] (RESOLVED)`
 - **Strategic / Business Impact**: 🏆 Game-Changer (Unlocks commercial buildings, multi-storey apartments, schools, hospitals)
 - **Technical Effort**: Medium
 - **Current Technical Progress**:
-  - ✅ **Engine Verified**: Binuo na ang `InstitutionalBuildingPreset` at `MultiPanelInstitutionalRiser` sa `lib/domain/institutional_building_presets.dart` na nagko-compute ng buong hierarchy (LP-1, LP-2, at Main Distribution Panel MDP na may feeder cables at 4-rod grounding grid).
-- **Why It's Deferred in the UI Today**:
-  - Kasalukuyang naka-focus ang pangunahing user flow sa 1-panel residential dwelling homes. Ang UI para sa pagdaragdag at paglipat-lipat ng subpanels (e.g. `+ Add Subpanel LP-2`, `Switch Panelboard view`, multi-tab Single Line Diagram) ay kailangang buuin nang hindi nagiging kumplikado para sa mga karaniwang residential electricians.
-- **Actionable Implementation Steps**:
-  1. Magdagdag ng `List<SingleLineDiagramData> subpanels` sa Project model o payagan ang MDP panel selection.
-  2. Sa Single Line Diagram screen, maglagay ng Panel Selector Dropdown / Segmented Button (`[MDP]`, `[LP-1]`, `[LP-2]`, `[+ Add Subpanel]`).
-  3. I-link ang mga sub-feeders ng MDP nang direkta sa main breaker ng bawat designated subpanel.
-  4. Sa Sheet E-1 blueprint PDF export, mag-generate ng buong Distribution Riser Diagram sa tabi ng Schedule of Loads.
+  - ✅ **Engine Verified**: Binuo ang `InstitutionalBuildingPreset` at `MultiPanelInstitutionalRiser` sa `lib/domain/institutional_building_presets.dart` na nagko-compute ng buong hierarchy (LP-1, LP-2, at Main Distribution Panel MDP na may feeder cables at 4-rod grounding grid).
+  - ✅ **Dynamic UI Switcher**: Naka-mount na ang dynamic Panel Switcher Bar sa `SingleLineDiagramScreen` (`[MDP (Main)]`, `[Panel LP-1]`, `[Panel LP-2]`, `[+ Subpanel]`).
+  - ✅ **Interactive Subpanel Creation**: May 1-tap dynamic modal para magdagdag ng bagong subpanels (tulad ng `LP-2`, `PP-ACU`, `Sub-1`) kung saan awtomatikong lumilikha ng sub-feeder breaker sa Main Panel alinsunod sa PEC 2017 Article 2.15 & 4.08.
+  - ✅ **Persistence**: Naka-save ang dynamic `panelboards` list sa bawat `Project` record gamit ang JSON serialization.
 - **Detailed Architectural Notes**:
   - Alinsunod sa PEC 2017 Article 2.15 (Feeders) at Article 4.08 (Switchboards & Panelboards).
   - Titiyakin ang tamang diversity factors (85%-90%) sa pagitan ng mga subpanels bago sukatang ang kabuuang Main Feeder Breaker at Service Entrance conductors.

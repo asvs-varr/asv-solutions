@@ -159,6 +159,42 @@ class RoomSpace {
   );
 }
 
+class PanelboardSpec {
+  final String id;
+  String tag; // e.g. 'MDP', 'LP-1', 'LP-2', 'PP-ACU'
+  String name; // e.g. 'Main Distribution Panel', 'First Floor Lighting & Power', etc.
+  bool isMain; // true if this is the Main Distribution Panelboard
+  String? fedFromPanelId; // null if fed directly from Utility Service Entrance / Meter
+  int enclosureBranches; // 6, 8, 12, 16, 20 branches
+
+  PanelboardSpec({
+    required this.id,
+    required this.tag,
+    required this.name,
+    this.isMain = false,
+    this.fedFromPanelId,
+    this.enclosureBranches = 12,
+  });
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'tag': tag,
+    'name': name,
+    'isMain': isMain,
+    'fedFromPanelId': fedFromPanelId,
+    'enclosureBranches': enclosureBranches,
+  };
+
+  factory PanelboardSpec.fromJson(Map<String, dynamic> json) => PanelboardSpec(
+    id: json['id'] ?? '',
+    tag: json['tag'] ?? 'LP-1',
+    name: json['name'] ?? 'Distribution Panelboard',
+    isMain: json['isMain'] ?? false,
+    fedFromPanelId: json['fedFromPanelId'],
+    enclosureBranches: json['enclosureBranches'] ?? 12,
+  );
+}
+
 class CanvasPoint {
   final String id;
   final String type; // 'PANEL', 'LIGHT', 'SWITCH_1G', 'OUTLET_DUPLEX', 'ACU'
@@ -373,6 +409,7 @@ class Project {
   List<ApplianceItem> applianceLoads;
   List<CanvasPoint> canvasPoints;
   List<ConduitRoute> conduitRoutes;
+  List<PanelboardSpec> panelboards;
   final List<ProjectPhase> phases;
   final DateTime createdAt;
 
@@ -396,6 +433,7 @@ class Project {
     List<ApplianceItem>? applianceLoads,
     List<CanvasPoint>? canvasPoints,
     List<ConduitRoute>? conduitRoutes,
+    List<PanelboardSpec>? panelboards,
     required this.phases,
     required this.createdAt,
   })  : spaces = spaces ?? [
@@ -406,7 +444,10 @@ class Project {
         ],
         applianceLoads = applianceLoads ?? [],
         canvasPoints = canvasPoints ?? [],
-        conduitRoutes = conduitRoutes ?? [];
+        conduitRoutes = conduitRoutes ?? [],
+        panelboards = panelboards ?? [
+          PanelboardSpec(id: 'panel-main', tag: 'LP-1', name: 'Main Lighting & Power Panel', isMain: true),
+        ];
 
   double get retentionAmount => contractAmount * (retentionPercent / 100.0);
   double get billableAmount => contractAmount - retentionAmount;
@@ -432,6 +473,7 @@ class Project {
     'applianceLoads': applianceLoads.map((a) => a.toJson()).toList(),
     'canvasPoints': canvasPoints.map((c) => c.toJson()).toList(),
     'conduitRoutes': conduitRoutes.map((r) => r.toJson()).toList(),
+    'panelboards': panelboards.map((p) => p.toJson()).toList(),
     'phases': phases.map((p) => p.toJson()).toList(),
     'createdAt': createdAt.toIso8601String(),
   };
@@ -479,6 +521,12 @@ class Project {
             ?.map((r) => ConduitRoute.fromJson(r as Map<String, dynamic>))
             .toList() ??
         [],
+    panelboards: (json['panelboards'] as List<dynamic>?)
+            ?.map((p) => PanelboardSpec.fromJson(p as Map<String, dynamic>))
+            .toList() ??
+        [
+          PanelboardSpec(id: 'panel-main', tag: 'LP-1', name: 'Main Lighting & Power Panel', isMain: true),
+        ],
     phases: (json['phases'] as List<dynamic>?)
             ?.map((p) => ProjectPhase.fromJson(p as Map<String, dynamic>))
             .toList() ??

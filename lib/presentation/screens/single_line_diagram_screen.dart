@@ -29,7 +29,8 @@ class _SingleLineDiagramScreenState extends State<SingleLineDiagramScreen> with 
   bool _isApproved = false;
 
   MultiPanelInstitutionalRiser? _multiPanelRiser;
-  String _activePanelKey = 'MAIN'; // 'MDP', 'LP-1', 'LP-2'
+  String _activePanelKey = 'MAIN'; // 'MDP', 'LP-1', 'LP-2' etc.
+  final Map<String, SingleLineDiagramData> _panelsMap = {};
 
   @override
   void initState() {
@@ -47,8 +48,21 @@ class _SingleLineDiagramScreenState extends State<SingleLineDiagramScreen> with 
       _multiPanelRiser = MultiPanelInstitutionalRiser.compute(preset, utility: widget.project.utilityProvider);
       _sldData = _multiPanelRiser!.mdp;
       _activePanelKey = 'MDP';
+      _panelsMap['MDP'] = _multiPanelRiser!.mdp;
+      _panelsMap['LP-1'] = _multiPanelRiser!.lp1;
+      _panelsMap['LP-2'] = _multiPanelRiser!.lp2;
     } else {
+      // Normal project: generate base SLD
       _sldData = SldEngine.generateFromProject(widget.project);
+      _activePanelKey = widget.project.panelboards.first.tag;
+      _panelsMap[_activePanelKey] = _sldData;
+
+      // Populate any additional subpanels configured in widget.project.panelboards
+      for (final pb in widget.project.panelboards) {
+        if (!_panelsMap.containsKey(pb.tag)) {
+          _panelsMap[pb.tag] = _createSubpanelSld(pb);
+        }
+      }
     }
 
     // Check if p1 checklist item is already completed
@@ -82,6 +96,161 @@ class _SingleLineDiagramScreenState extends State<SingleLineDiagramScreen> with 
       const SnackBar(
         content: Text('✅ Single-Line Diagram & Schedule of Loads approved! Phase 2 Checklist auto-checked.'),
         backgroundColor: BanaagTheme.successGreen,
+      ),
+    );
+  }
+
+  SingleLineDiagramData _createSubpanelSld(PanelboardSpec pb) {
+    // Sizing sub-feeder for subpanel (standard 60A / 100A subpanel)
+    final double defaultSubDemandVA = 6000.0;
+    final double netCurrent = defaultSubDemandVA / 230.0;
+    return SingleLineDiagramData(
+      feeder: SldFeederSpec(
+        totalConnectedVA: defaultSubDemandVA,
+        netDemandVA: defaultSubDemandVA,
+        netCurrentAmps: netCurrent,
+        mainBreakerAmps: 60,
+        mainBreakerDescription: '60 AT / 100 AF, 2-Pole, 230V, 60Hz MCB',
+        feederWireDescription: '2 - 14.0 mm² THHN',
+        groundingDescription: '1 - 8.0 mm² Bare Cu to Ground Bus',
+        conduitDescription: '25 mm Ø PVC',
+        serviceDropDescription: 'Fed from Main Distribution Panel (${pb.fedFromPanelId ?? "MDP"})',
+      ),
+      branchCircuits: [
+        SldBranchCircuit(
+          circuitNumber: 1,
+          description: 'Subpanel Branch Circuits (Lighting & Power)',
+          loadVA: 2400.0,
+          loadCurrentAmps: 2400.0 / 230.0,
+          breakerRatingAmps: 20,
+          wireSizeDescription: '2 - 3.5 mm² THHN + 1 - 3.5 mm² Ground',
+          conduitDescription: '20 mm Ø PVC',
+        ),
+        SldBranchCircuit(
+          circuitNumber: 2,
+          description: 'Subpanel Convenience Receptacles',
+          loadVA: 3600.0,
+          loadCurrentAmps: 3600.0 / 230.0,
+          breakerRatingAmps: 20,
+          wireSizeDescription: '2 - 3.5 mm² THHN + 1 - 3.5 mm² Ground',
+          conduitDescription: '20 mm Ø PVC',
+        ),
+        SldBranchCircuit(
+          circuitNumber: 3,
+          description: 'SPARE (Future Expansion)',
+          loadVA: 0.0,
+          loadCurrentAmps: 0.0,
+          breakerRatingAmps: 20,
+          wireSizeDescription: '2 - 3.5 mm² THHN + 1 - 3.5 mm² Ground',
+          conduitDescription: '20 mm Ø PVC',
+          isSpare: true,
+        ),
+      ],
+      panelName: '${pb.tag} (${pb.name})',
+      utilityProvider: widget.project.utilityProvider,
+    );
+  }
+
+  void _showAddSubpanelDialog() {
+    final tagController = TextEditingController(text: 'LP-${widget.project.panelboards.length + 1}');
+    final nameController = TextEditingController(text: 'Secondary Subpanel');
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: BanaagTheme.surfaceCard,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.domain_add, color: BanaagTheme.primaryAmber, size: 22),
+            SizedBox(width: 8),
+            Text('Add Subpanel / Distribution', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Alinsunod sa PEC 2017 Article 2.15 & 4.08, magtatalaga ng dedicated sub-feeder breaker mula sa Main Panel papunta sa bagong subpanel na ito.',
+              style: TextStyle(color: BanaagTheme.textMuted, fontSize: 12, height: 1.3),
+            ),
+            const SizedBox(height: 14),
+            TextField(
+              controller: tagController,
+              decoration: const InputDecoration(
+                labelText: 'Panel Tag (e.g. LP-2, PP-ACU, Sub-1)',
+                labelStyle: TextStyle(color: BanaagTheme.textMuted),
+              ),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: nameController,
+              decoration: const InputDecoration(
+                labelText: 'Panel Description / Area',
+                labelStyle: TextStyle(color: BanaagTheme.textMuted),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel', style: TextStyle(color: BanaagTheme.textMuted)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: BanaagTheme.primaryAmber,
+              foregroundColor: Colors.black,
+            ),
+            onPressed: () {
+              final tag = tagController.text.trim().toUpperCase();
+              final name = nameController.text.trim();
+              if (tag.isNotEmpty) {
+                final newPb = PanelboardSpec(
+                  id: 'panel-${DateTime.now().millisecondsSinceEpoch}',
+                  tag: tag,
+                  name: name.isEmpty ? 'Subpanel $tag' : name,
+                  isMain: false,
+                  fedFromPanelId: _activePanelKey,
+                );
+
+                setState(() {
+                  widget.project.panelboards.add(newPb);
+                  final newSld = _createSubpanelSld(newPb);
+                  _panelsMap[tag] = newSld;
+                  _activePanelKey = tag;
+                  _sldData = newSld;
+
+                  // Also add a sub-feeder breaker on the active main panel if not yet present
+                  final mainData = _panelsMap['MDP'] ?? _panelsMap['LP-1'] ?? _panelsMap.values.first;
+                  mainData.branchCircuits.insert(
+                    mainData.branchCircuits.length > 2 ? mainData.branchCircuits.length - 2 : mainData.branchCircuits.length,
+                    SldBranchCircuit(
+                      circuitNumber: mainData.branchCircuits.length + 1,
+                      description: 'Sub-feeder to Panel $tag ($name)',
+                      loadVA: newSld.feeder.netDemandVA,
+                      loadCurrentAmps: newSld.feeder.netCurrentAmps,
+                      breakerRatingAmps: 60,
+                      wireSizeDescription: '2 - 14.0 mm² THHN',
+                      conduitDescription: '25 mm Ø PVC',
+                    ),
+                  );
+
+                  ProjectRepository.instance.updateProject(widget.project);
+                });
+                Navigator.pop(ctx);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('⚡ Naidagdag ang Subpanel $tag! Naka-link na ang sub-feeder sa Main Panel.'),
+                    backgroundColor: BanaagTheme.successGreen,
+                  ),
+                );
+              }
+            },
+            child: const Text('Add Subpanel', style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+        ],
       ),
     );
   }
@@ -491,33 +660,42 @@ class _SingleLineDiagramScreenState extends State<SingleLineDiagramScreen> with 
       ),
       body: Column(
         children: [
-          if (_multiPanelRiser != null)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              color: const Color(0xFF141922),
-              child: Row(
-                children: [
-                  const Icon(Icons.domain, color: BanaagTheme.primaryAmber, size: 18),
-                  const SizedBox(width: 8),
-                  const Text('Riser:', style: TextStyle(color: BanaagTheme.textMuted, fontSize: 11, fontWeight: FontWeight.bold)),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
-                        children: [
-                          _buildPanelChip('MDP (Main)', 'MDP', _multiPanelRiser!.mdp),
-                          const SizedBox(width: 6),
-                          _buildPanelChip('Floor 1: LP-1', 'LP-1', _multiPanelRiser!.lp1),
-                          const SizedBox(width: 6),
-                          _buildPanelChip('Floor 2: LP-2', 'LP-2', _multiPanelRiser!.lp2),
-                        ],
-                      ),
+          // Dynamic Multi-Panel Switcher Bar (MDP / Subpanels)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            color: const Color(0xFF141922),
+            child: Row(
+              children: [
+                const Icon(Icons.domain, color: BanaagTheme.primaryAmber, size: 18),
+                const SizedBox(width: 8),
+                const Text('PANEL:', style: TextStyle(color: BanaagTheme.textMuted, fontSize: 11, fontWeight: FontWeight.bold)),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        ..._panelsMap.entries.map((entry) {
+                          final label = entry.key == 'MDP' ? 'MDP (Main)' : 'Panel ${entry.key}';
+                          return Padding(
+                            padding: const EdgeInsets.only(right: 6.0),
+                            child: _buildPanelChip(label, entry.key, entry.value),
+                          );
+                        }),
+                        ActionChip(
+                          avatar: const Icon(Icons.add, size: 14, color: BanaagTheme.primaryAmber),
+                          label: const Text('+ Subpanel', style: TextStyle(fontSize: 11, color: BanaagTheme.primaryAmber, fontWeight: FontWeight.bold)),
+                          backgroundColor: Colors.white10,
+                          side: const BorderSide(color: BanaagTheme.primaryAmber, width: 0.8),
+                          onPressed: _showAddSubpanelDialog,
+                        ),
+                      ],
                     ),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
+          ),
           Expanded(
             child: TabBarView(
               controller: _tabController,
