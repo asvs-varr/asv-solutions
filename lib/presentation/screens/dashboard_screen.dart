@@ -403,6 +403,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     String? selectedBlueprintPath;
     String? selectedBlueprintFileName;
     int? selectedBlueprintFileSize;
+    bool isSubmitting = false;
 
     showDialog(
       context: context,
@@ -602,15 +603,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 backgroundColor: BanaagTheme.primaryAmber,
                 foregroundColor: Colors.black,
               ),
-              child: Text(
-                (intakeMode == 'BLUEPRINT_PHOTO' && selectedBlueprintPath != null)
-                    ? 'Next: Calibrate & Tag Rooms →'
-                    : 'Create Project',
-                style: const TextStyle(fontWeight: FontWeight.bold),
-              ),
-              onPressed: () {
-                if (titleController.text.trim().isEmpty) return;
-                final double contractAmt = double.tryParse(amountController.text.trim()) ?? 0.0;
+              onPressed: isSubmitting
+                  ? null
+                  : () {
+                      if (titleController.text.trim().isEmpty) return;
+                      setDialogState(() => isSubmitting = true);
+                      final double contractAmt = double.tryParse(amountController.text.trim()) ?? 0.0;
                 final newProject = Project(
                   id: 'PRJ-${DateTime.now().year}-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}',
                   title: titleController.text.trim(),
@@ -647,6 +645,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       );
                       repo.addProject(newProject);
                       setState(() {});
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          backgroundColor: BanaagTheme.surfaceCard,
+                          content: Row(
+                            children: [
+                              const Icon(Icons.check_circle, color: BanaagTheme.primaryAmber, size: 20),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text('✅ Project "${newProject.title}" created with ${scannedSpaces.length} spaces!'),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
                       Navigator.push(
                         context,
                         MaterialPageRoute(builder: (_) => WorkflowScreen(project: newProject)),
@@ -657,12 +669,38 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   // Fast creation: Save and go directly into project workflow
                   repo.addProject(newProject);
                   setState(() {});
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      backgroundColor: BanaagTheme.surfaceCard,
+                      content: Row(
+                        children: [
+                          const Icon(Icons.check_circle, color: BanaagTheme.primaryAmber, size: 20),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text('✅ Project "${newProject.title}" successfully created!'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
                   Navigator.push(
                     context,
                     MaterialPageRoute(builder: (_) => WorkflowScreen(project: newProject)),
                   );
                 }
               },
+              child: isSubmitting
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black),
+                    )
+                  : Text(
+                      (intakeMode == 'BLUEPRINT_PHOTO' && selectedBlueprintPath != null)
+                          ? 'Next: Calibrate & Tag Rooms →'
+                          : 'Create Project',
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
             ),
           ],
         ),

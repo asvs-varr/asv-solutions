@@ -44,6 +44,7 @@ class FloorPlanRoomIntakeModal extends StatefulWidget {
 
 class _FloorPlanRoomIntakeModalState extends State<FloorPlanRoomIntakeModal> {
   bool _isScanning = true;
+  bool _isSaving = false;
   List<RoomSpace> _rooms = [];
   double _calibratedLength = 9.0;
   double _calibratedWidth = 8.8;
@@ -483,14 +484,23 @@ class _FloorPlanRoomIntakeModalState extends State<FloorPlanRoomIntakeModal> {
                   foregroundColor: Colors.black,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
-                icon: const Icon(Icons.check_circle_outline, size: 20),
+                icon: _isSaving
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black),
+                      )
+                    : const Icon(Icons.check_circle_outline, size: 20),
                 label: Text(
-                  'Save ${_rooms.length} Spaces & Open Project (${_totalArea.toStringAsFixed(1)} m²)',
+                  _isSaving
+                      ? 'Saving Project & Generating Takeoff...'
+                      : 'Save ${_rooms.length} Spaces & Open Project (${_totalArea.toStringAsFixed(1)} m²)',
                   style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                 ),
-                onPressed: _rooms.isEmpty
+                onPressed: (_rooms.isEmpty || _isSaving)
                     ? null
                     : () {
+                        setState(() => _isSaving = true);
                         widget.onConfirmed(_rooms, _calibratedLength, _calibratedWidth);
                         Navigator.pop(context);
                       },
