@@ -170,8 +170,12 @@ class BomExcelExporter {
     }
 
     // Totals Row
-    sheet.cell(CellIndex.indexByColumnRow(columnIndex: 1, rowIndex: rowIndex)).value = TextCellValue('TOTAL CONNECTED LOAD:');
+    sheet.cell(CellIndex.indexByColumnRow(columnIndex: 1, rowIndex: rowIndex)).value = TextCellValue('TOTAL CONNECTED LOAD (VA):');
     sheet.cell(CellIndex.indexByColumnRow(columnIndex: 3, rowIndex: rowIndex)).value = DoubleCellValue(sldData.feeder.totalConnectedVA);
+    rowIndex++;
+
+    sheet.cell(CellIndex.indexByColumnRow(columnIndex: 1, rowIndex: rowIndex)).value = TextCellValue('NET COMPUTED DEMAND (PEC 2.20.3.3 & 4.30.2.4):');
+    sheet.cell(CellIndex.indexByColumnRow(columnIndex: 3, rowIndex: rowIndex)).value = DoubleCellValue(double.parse(sldData.feeder.netDemandVA.toStringAsFixed(1)));
     sheet.cell(CellIndex.indexByColumnRow(columnIndex: 4, rowIndex: rowIndex)).value = DoubleCellValue(double.parse(sldData.feeder.netCurrentAmps.toStringAsFixed(2)));
     rowIndex += 2;
 

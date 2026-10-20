@@ -82,6 +82,7 @@ class TakeoffEngine {
           wireSpliceAllowance += boxSpliceAllowanceMeters * 3;
           break;
         case 'LIGHT':
+        case 'FAN':
           octagonalBoxes++;
           wireSpliceAllowance += boxSpliceAllowanceMeters * 2;
           break;
@@ -97,22 +98,36 @@ class TakeoffEngine {
     final int pipesCount = (totalConduit / pipeLengthStandardMeters).ceil();
 
     // Standard 3-wire system (Phase + Neutral + Ground)
-    final double totalWireMeters = (totalConduit * 3.0) + wireSpliceAllowance;
+    final double totalWireMeters = double.parse(
+      ((totalConduit * 3.0) + wireSpliceAllowance).toStringAsFixed(1),
+    );
     final double rolls = totalWireMeters / rollLengthStandardMeters;
 
     // Standard support spacing: 1 clamp every 1.5 meters
     final int clamps = (totalConduit / 1.5).ceil() + (points.length * 2);
 
-    // Productivity estimate: 1 meter of rough-in conduit + wire pulling = ~0.25 labor hours
-    final double laborHours = (totalConduit * 0.25) + (points.length * 0.5);
+    // Unified Itemized Material & Labor Costs (100% synced with 3-Tab Excel BOM)
+    final double materialCost = (totalWireMeters * wirePricePerMeter) +
+        (35.0 * 95.0) + // Main Feeder Wire (35m @ PHP 95/m)
+        (pipesCount * pipeUnitPrice) +
+        (utilityBoxes * boxUnitPrice) +
+        (octagonalBoxes * 30.0) +
+        (clamps * 6.0) +
+        3800.0 + // Main Distribution Panelboard (MDP)
+        950.0 + // Copperweld Grounding Rod & Brass Clamp
+        650.0; // Miscellaneous Consumables
 
-    // Costs
-    final double materialCost = (pipesCount * pipeUnitPrice) +
-        (totalWireMeters * wirePricePerMeter) +
-        ((utilityBoxes + octagonalBoxes) * boxUnitPrice) +
-        (clamps * 12.0);
+    final double laborCost = (totalWireMeters * 8.0) +
+        (35.0 * 25.0) + // Feeder Wire Pulling Labor
+        (pipesCount * 35.0) +
+        (utilityBoxes * 15.0) +
+        (octagonalBoxes * 20.0) +
+        (clamps * 4.0) +
+        850.0 + // Panelboard Mounting & Termination
+        400.0 + // Grounding Electrode Driving & Bonding
+        200.0; // Consumables Application
 
-    final double laborCost = laborHours * ratePerLaborHour;
+    final double laborHours = laborCost / ratePerLaborHour;
 
     return TakeoffResult(
       horizontalConduitMeters: horizontalLength,

@@ -107,17 +107,17 @@ class IlluminanceGridEngine {
         rows = 2;
       }
     } else if (count == 3) {
-      if (safeLength >= safeWidth * 1.4) {
+      if (safeLength >= safeWidth) {
         cols = 3;
         rows = 1;
       } else {
-        cols = 3;
-        rows = 1;
+        cols = 1;
+        rows = 3;
       }
-    } else if (count == 4) {
+    } else if (count == 4 || count == 5) {
       cols = 2;
       rows = 2;
-    } else if (count <= 6) {
+    } else if (count == 6 || count == 7) {
       if (safeLength >= safeWidth) {
         cols = 3;
         rows = 2;
@@ -125,9 +125,7 @@ class IlluminanceGridEngine {
         cols = 2;
         rows = 3;
       }
-      count = 6;
-    } else {
-      // 8 or more fixtures
+    } else if (count == 8) {
       if (safeLength >= safeWidth) {
         cols = 4;
         rows = 2;
@@ -135,7 +133,12 @@ class IlluminanceGridEngine {
         cols = 2;
         rows = 4;
       }
-      count = 8;
+    } else if (count == 9) {
+      cols = 3;
+      rows = 3;
+    } else {
+      rows = math.sqrt(count * (safeWidth / safeLength)).round().clamp(2, 6);
+      cols = (count / rows).ceil();
     }
 
     // IESNA d/2 Spacing Rule:
@@ -148,17 +151,47 @@ class IlluminanceGridEngine {
 
     final List<FixturePlacement> placements = [];
     int idx = 1;
-    for (int r = 0; r < rows; r++) {
-      final double yPos = wallDistY + (r * spacingY);
-      for (int c = 0; c < cols; c++) {
-        final double xPos = wallDistX + (c * spacingX);
-        placements.add(FixturePlacement(
-          index: idx,
-          xMeters: xPos,
-          yMeters: yPos,
-          label: 'L$idx',
-        ));
-        idx++;
+
+    if (count == 5 || count == 7) {
+      // Symmetrical perimeter grid (4 or 6) + 1 central accent downlight (quincunx)
+      for (int r = 0; r < rows; r++) {
+        final double yPos = wallDistY + (r * spacingY);
+        for (int c = 0; c < cols; c++) {
+          final double xPos = wallDistX + (c * spacingX);
+          placements.add(FixturePlacement(
+            index: idx,
+            xMeters: xPos,
+            yMeters: yPos,
+            label: 'L$idx',
+          ));
+          idx++;
+        }
+      }
+      placements.add(FixturePlacement(
+        index: idx,
+        xMeters: safeLength / 2.0,
+        yMeters: safeWidth / 2.0,
+        label: 'L$idx',
+      ));
+    } else {
+      int remaining = count;
+      for (int r = 0; r < rows && remaining > 0; r++) {
+        final int rowsLeft = rows - r;
+        final int colsInRow = (remaining / rowsLeft).ceil();
+        final double rowSpacingX = safeLength / colsInRow;
+        final double rowWallDistX = rowSpacingX / 2.0;
+        final double yPos = wallDistY + (r * spacingY);
+        for (int c = 0; c < colsInRow && remaining > 0; c++) {
+          final double xPos = rowWallDistX + (c * rowSpacingX);
+          placements.add(FixturePlacement(
+            index: idx,
+            xMeters: xPos,
+            yMeters: yPos,
+            label: 'L$idx',
+          ));
+          idx++;
+          remaining--;
+        }
       }
     }
 

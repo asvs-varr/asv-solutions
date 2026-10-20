@@ -236,6 +236,7 @@ class _SingleLineDiagramScreenState extends State<SingleLineDiagramScreen> with 
                       conduitDescription: '25 mm Ø PVC',
                     ),
                   );
+                  mainData.recalculateFeeder();
 
                   ProjectRepository.instance.updateProject(widget.project);
                 });
@@ -490,6 +491,7 @@ class _SingleLineDiagramScreenState extends State<SingleLineDiagramScreen> with 
                   );
                   circuit.isUpsized = false;
                   circuit.upsizeReason = '';
+                  _sldData.recalculateFeeder();
                 });
                 Navigator.pop(ctx);
               },
@@ -517,6 +519,7 @@ class _SingleLineDiagramScreenState extends State<SingleLineDiagramScreen> with 
         conduitDescription: '20 mm Ø PVC',
         isSpare: false,
       ));
+      _sldData.recalculateFeeder();
     });
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('⚡ Added Circuit C${_sldData.branchCircuits.length}! Tap to configure parameters.')),

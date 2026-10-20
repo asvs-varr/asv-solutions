@@ -44,11 +44,10 @@ class FutureProofingEngine {
   static SolarPvSpec calculateSolarReadiness(double systemKw, {double nominalVoltage = 230.0}) {
     // Inverter AC output current = (P_kW * 1000) / V
     final double ratedCurrent = (systemKw * 1000.0) / nominalVoltage;
-    // PEC 6.90 continuous output requirement = 125% factor
-    final double continuousCurrent = ratedCurrent * 1.25;
 
-    final wire = PecEngine.sizeWireForCurrent(continuousCurrent, isContinuous: true);
-    final breaker = PecEngine.selectBreaker(continuousCurrent, wire.ampacity75C);
+    // PEC 6.90 continuous output requirement = 125% factor applied inside PecEngine
+    final wire = PecEngine.sizeWireForCurrent(ratedCurrent, isContinuous: true);
+    final breaker = PecEngine.selectBreaker(ratedCurrent, wire.ampacity75C);
 
     return SolarPvSpec(
       systemKw: systemKw,
@@ -66,8 +65,8 @@ class FutureProofingEngine {
     final double ratedCurrent = (powerKw * 1000.0) / nominalVoltage;
     final double continuousCurrent = ratedCurrent * 1.25;
 
-    final wire = PecEngine.sizeWireForCurrent(continuousCurrent, isContinuous: true);
-    final breaker = PecEngine.selectBreaker(continuousCurrent, wire.ampacity75C);
+    final wire = PecEngine.sizeWireForCurrent(ratedCurrent, isContinuous: true);
+    final breaker = PecEngine.selectBreaker(ratedCurrent, wire.ampacity75C);
     final conduit = PecEngine.recommendConduit(wireSpec: wire, conductorCount: 3);
 
     return EvChargerSpec(

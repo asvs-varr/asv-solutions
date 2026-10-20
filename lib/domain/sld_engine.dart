@@ -121,7 +121,7 @@ class SldFeederSpec {
 }
 
 class SingleLineDiagramData {
-  final SldFeederSpec feeder;
+  SldFeederSpec feeder;
   final List<SldBranchCircuit> branchCircuits;
   final String panelName; // e.g., "LP-1 (Main Lighting & Power Panel)"
   final String utilityProvider;
@@ -132,6 +132,11 @@ class SingleLineDiagramData {
     this.panelName = 'LP-1 (Main Distribution Panel)',
     this.utilityProvider = 'Meralco',
   });
+
+  /// Recomputes [feeder] dynamically whenever branch circuits are edited or added
+  void recalculateFeeder() {
+    feeder = SldEngine.computeFeederSpecFromCircuits(branchCircuits, utilityProvider);
+  }
 
   Map<String, dynamic> toJson() => {
     'feeder': feeder.toJson(),
@@ -153,16 +158,16 @@ class SingleLineDiagramData {
   /// Official PEC 2017 Basis & Citations for this specific Schedule of Loads calculation
   List<Map<String, String>> get pecEngineeringBasis => [
     {
-      'topic': 'Feeder Demand Factor',
-      'citation': 'PEC 2017 Table 2.20.3.3',
-      'formula': 'First 3,000 VA @ 100% Demand, Remainder of general lighting/receptacle load @ 35% Demand Factor.',
+      'topic': 'Feeder Demand Factor & Motor Allowance',
+      'citation': 'PEC 2017 Table 2.20.3.3 & Art 4.30.2.4',
+      'formula': 'General Lighting, Convenience & SABC: First 3,000 VA @ 100%, Remainder @ 35% + Dedicated Loads @ 100% + 25% of Largest Motor.',
       'computed': 'Total Connected: ${feeder.totalConnectedVA.toStringAsFixed(0)} VA ➔ Net Demand: ${feeder.netDemandVA.toStringAsFixed(0)} VA (${feeder.netCurrentAmps.toStringAsFixed(1)} A)',
     },
     {
       'topic': 'Main Feeder & Overcurrent Protection',
       'citation': 'PEC 2017 Art 2.15.1.2 & Art 2.15.1.3',
       'formula': 'Feeder conductors & MCB must have ampacity not less than 125% of continuous design load (I_design = I_net × 1.25).',
-      'computed': '${feeder.netCurrentAmps.toStringAsFixed(1)} A × 1.25 = ${(feeder.netCurrentAmps * 1.25).toStringAsFixed(1)} A ➔ Main Breaker: ${feeder.mainBreakerAmps} AT / 100 AF 2P',
+      'computed': '${feeder.netCurrentAmps.toStringAsFixed(1)} A × 1.25 = ${(feeder.netCurrentAmps * 1.25).toStringAsFixed(1)} A ➔ Main Breaker: ${feeder.mainBreakerAmps} AT / ${feeder.mainBreakerAmps <= 100 ? 100 : 225} AF 2P',
     },
     {
       'topic': 'Main Feeder Conductors & Raceway',
@@ -171,9 +176,9 @@ class SingleLineDiagramData {
       'computed': 'Conductors: ${feeder.feederWireDescription} sa loob ng ${feeder.conduitDescription}',
     },
     {
-      'topic': 'Grounding Electrode Conductor (GEC)',
-      'citation': 'PEC 2017 Table 2.50.3.17 & Art 2.50.3.8',
-      'formula': 'Minimum Grounding Electrode Conductor size based on largest ungrounded service-entrance conductor.',
+      'topic': 'Grounding Electrode & Equipment Grounding',
+      'citation': 'PEC 2017 Table 2.50.3.17 & Table 2.50.6.13',
+      'formula': 'Minimum Grounding Conductor size based on service-entrance conductor and main OCPD rating (8.0 mm² up to 100A; 14.0 mm² for 125A–200A).',
       'computed': feeder.groundingDescription,
     },
     {
@@ -310,32 +315,97 @@ class SldEngine {
     ));
 
     // 2. Compute Main Feeder & Service Entrance Specifications
-    final double totalConnectedVA = circuits.fold(0.0, (sum, c) => sum + c.loadVA);
+    final feeder = computeFeederSpecFromCircuits(circuits, project.utilityProvider);
+
+    return SingleLineDiagramData(
+      feeder: feeder,
+      branchCircuits: circuits,
+      panelName: 'LP-1 (Main Lighting & Power Panelboard)',
+      utilityProvider: project.utilityProvider,
+    );
+  }
+
+  /// Determines if a circuit falls under General Lighting, Convenience Receptacles, or Small Appliance / Laundry (PEC 2.20.3.3)
+  static bool _isGeneralLightingOrSmallAppliance(SldBranchCircuit c) {
+    if (c.isSpare) return false;
+    final d = c.description.toLowerCase();
+    if (d.startsWith('dedicated:') ||
+        d.contains('sub-feeder') ||
+        d.contains('acu') ||
+        d.contains('aircon') ||
+        d.contains('heater') ||
+        d.contains('pump') ||
+        d.contains('range') ||
+        d.contains('cooktop') ||
+        d.contains('dryer') ||
+        d.contains('ev ') ||
+        d.contains('charger') ||
+        d.contains('motor') ||
+        d.contains('welding')) {
+      return false;
+    }
+    return d.contains('lighting') ||
+        d.contains('convenience') ||
+        d.contains('small appliance') ||
+        d.contains('sabc') ||
+        d.contains('kitchen heavy appliance') ||
+        d.contains('receptacle') ||
+        d.contains('laundry');
+  }
+
+  /// Determines if a dedicated circuit is a motor-driven load (ACU, Pump, Motor) for PEC 4.30.2.4 (+25% largest motor)
+  static bool _isMotorOrHvacCircuit(SldBranchCircuit c) {
+    if (c.isSpare) return false;
+    final d = c.description.toLowerCase();
+    return d.contains('acu') ||
+        d.contains('aircon') ||
+        d.contains('pump') ||
+        d.contains('motor') ||
+        d.contains('compressor');
+  }
+
+  /// Computes exact PEC 2017 Feeder & Service Entrance Spec from a list of branch circuits
+  static SldFeederSpec computeFeederSpecFromCircuits(
+    List<SldBranchCircuit> circuits,
+    String utilityProvider,
+  ) {
+    final double totalConnectedVA = circuits
+        .where((c) => !c.isSpare)
+        .fold(0.0, (sum, c) => sum + c.loadVA);
 
     // Apply Exact PEC 2017 Table 2.20.3.3 Dwelling Unit Demand Factors:
-    // General Lighting & Small Appliance / General Purpose Outlets:
+    // General Lighting, Convenience Receptacles & Small Appliance (SABC) / Laundry:
     // - First 3,000 VA @ 100% Demand
     // - 3,001 to 120,000 VA @ 35% Demand
-    // Dedicated Motor / ACU Loads: 100% (plus 25% of largest motor per PEC 4.30.2.2)
     final double generalLightingAndOutletsVA = circuits
-        .where((c) => !c.isSpare && (c.description.contains('Lighting') || c.description.contains('Convenience')))
+        .where(_isGeneralLightingOrSmallAppliance)
         .fold(0.0, (sum, c) => sum + c.loadVA);
 
-    final double dedicatedLoadsVA = circuits
-        .where((c) => !c.isSpare && !c.description.contains('Lighting') && !c.description.contains('Convenience'))
-        .fold(0.0, (sum, c) => sum + c.loadVA);
+    final dedicatedCircuits = circuits
+        .where((c) => !c.isSpare && !_isGeneralLightingOrSmallAppliance(c))
+        .toList();
+
+    final double dedicatedLoadsVA = dedicatedCircuits.fold(0.0, (sum, c) => sum + c.loadVA);
+
+    // PEC 2017 Art 4.30.2.4 / Art 2.20.2.10: Add 25% of the largest motor load
+    double largestMotorVA = 0.0;
+    for (final c in dedicatedCircuits) {
+      if (_isMotorOrHvacCircuit(c) && c.loadVA > largestMotorVA) {
+        largestMotorVA = c.loadVA;
+      }
+    }
 
     double netGeneralVA = 0.0;
     if (generalLightingAndOutletsVA <= 3000.0) {
       netGeneralVA = generalLightingAndOutletsVA;
     } else {
-      netGeneralVA = 3000.0 + ((generalLightingAndOutletsVA - 3000.0) * 0.35); // PEC Table 2.20.3.3: 35%
+      netGeneralVA = 3000.0 + ((generalLightingAndOutletsVA - 3000.0) * 0.35);
     }
 
-    final double netDemandVA = netGeneralVA + dedicatedLoadsVA;
+    final double netDemandVA = netGeneralVA + dedicatedLoadsVA + (largestMotorVA * 0.25);
     final double netCurrentAmps = netDemandVA / 230.0;
 
-    // Sizing Main Breaker with 125% continuous margin
+    // Sizing Main Breaker with 125% continuous design margin (PEC Art 2.15.1.3)
     final double designMainAmps = netCurrentAmps * 1.25;
     int mainBreakerAmps = 60;
     for (final rating in [60, 75, 100, 125, 150, 175, 200]) {
@@ -345,7 +415,7 @@ class SldEngine {
       }
     }
 
-    // Determine Main Feeder Wire and Conduit
+    // Determine Main Feeder Wire, Conduit, and Grounding Conductor (PEC Table 3.10.2.6 & Table 2.50.6.13)
     String feederWire = '2 - 22 mm² THHN';
     String feederConduit = '25 mm Ø PVC';
     String groundWire = '1 - 8.0 mm² Bare/Insulated Cu';
@@ -353,34 +423,33 @@ class SldEngine {
     if (mainBreakerAmps <= 60) {
       feederWire = '2 - 22 mm² THHN';
       feederConduit = '25 mm Ø PVC';
+      groundWire = '1 - 8.0 mm² Bare/Insulated Cu';
     } else if (mainBreakerAmps <= 100) {
       feederWire = '2 - 30 mm² THHN';
       feederConduit = '32 mm Ø PVC';
+      groundWire = '1 - 8.0 mm² Bare/Insulated Cu';
     } else if (mainBreakerAmps <= 125) {
       feederWire = '2 - 38 mm² THHN';
       feederConduit = '40 mm Ø PVC';
+      groundWire = '1 - 14.0 mm² Bare/Insulated Cu';
     } else {
       feederWire = '2 - 50 mm² THHN';
       feederConduit = '50 mm Ø PVC';
+      groundWire = '1 - 14.0 mm² Bare/Insulated Cu';
     }
 
-    final feeder = SldFeederSpec(
+    final int frameAmps = mainBreakerAmps <= 100 ? 100 : 225;
+
+    return SldFeederSpec(
       totalConnectedVA: totalConnectedVA,
       netDemandVA: netDemandVA,
       netCurrentAmps: netCurrentAmps,
       mainBreakerAmps: mainBreakerAmps,
-      mainBreakerDescription: '$mainBreakerAmps AT, 100 AF, 2-Pole, 230V, 60Hz, 10kAIC MCB',
+      mainBreakerDescription: '$mainBreakerAmps AT, $frameAmps AF, 2-Pole, 230V, 60Hz, 10kAIC MCB',
       feederWireDescription: feederWire,
       groundingDescription: '$groundWire to 16mm Ø x 2.4m Copperweld Ground Rod',
       conduitDescription: feederConduit,
-      serviceDropDescription: '230V, 1-Phase, 2-Wire, 60Hz AC Service Drop (${project.utilityProvider})',
-    );
-
-    return SingleLineDiagramData(
-      feeder: feeder,
-      branchCircuits: circuits,
-      panelName: 'LP-1 (Main Lighting & Power Panelboard)',
-      utilityProvider: project.utilityProvider,
+      serviceDropDescription: '230V, 1-Phase, 2-Wire, 60Hz AC Service Drop ($utilityProvider)',
     );
   }
 
@@ -541,11 +610,11 @@ class SldEngine {
         description: 'Dedicated: 2.0HP Inverter ACU (Master)',
         loadVA: 1950.0,
         loadCurrentAmps: 8.48,
-        breakerRatingAmps: 30,
-        wireSizeDescription: '2 - 5.5 mm² THHN + 1 - 5.5 mm² Ground',
+        breakerRatingAmps: 20,
+        wireSizeDescription: '2 - 3.5 mm² THHN + 1 - 3.5 mm² Ground',
         conduitDescription: '20 mm Ø PVC',
         measuredRunMeters: 22.0,
-        voltageDropPercent: 0.67,
+        voltageDropPercent: 1.05,
       ),
       SldBranchCircuit(
         circuitNumber: 6,
@@ -584,21 +653,7 @@ class SldEngine {
       ),
     ];
 
-    final double totalVA = defaultBranches.fold(0.0, (sum, c) => sum + c.loadVA);
-    final double netVA = 3000.0 + ((totalVA - 3000.0) * 0.40);
-    final double netAmps = netVA / 230.0;
-
-    final feeder = SldFeederSpec(
-      totalConnectedVA: totalVA,
-      netDemandVA: netVA,
-      netCurrentAmps: netAmps,
-      mainBreakerAmps: 60,
-      mainBreakerDescription: '60 AT, 100 AF, 2-Pole, 230V, 60Hz, 10kAIC MCB',
-      feederWireDescription: '2 - 22 mm² THHN',
-      groundingDescription: '1 - 8.0 mm² Cu to 16mm Ø x 2.4m Ground Rod',
-      conduitDescription: '25 mm Ø PVC',
-      serviceDropDescription: '230V, 1-Phase, 2-Wire, 60Hz AC Service Drop ($utility)',
-    );
+    final feeder = computeFeederSpecFromCircuits(defaultBranches, utility);
 
     return SingleLineDiagramData(
       feeder: feeder,

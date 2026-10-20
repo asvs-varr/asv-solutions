@@ -385,6 +385,29 @@ class BlueprintPdfExporter {
   static pw.Widget _buildFeederComputationBlock(SingleLineDiagramData sldData) {
     final double netAmps = sldData.feeder.netCurrentAmps;
     final double continuousAmps = netAmps * 1.25;
+    final int frameAmps = sldData.feeder.mainBreakerAmps <= 100 ? 100 : 225;
+
+    // Parse actual feeder wire size (mm2) from sldData.feeder.feederWireDescription
+    final wireMatch = RegExp(r'([0-9.]+)\s*mm').firstMatch(sldData.feeder.feederWireDescription);
+    final double feederWireMm2 = double.tryParse(wireMatch?.group(1) ?? '22.0') ?? 22.0;
+    final PecWireSpec feederSpec = PecEngine.wireSpecs.firstWhere(
+      (w) => w.sizeMm2 >= feederWireMm2,
+      orElse: () => PecEngine.wireSpecs.last,
+    );
+
+    // Compute actual main feeder voltage drop (standard 15.0m service entrance run)
+    final double feederVd = PecEngine.computeVoltageDropPercent(
+      loadCurrentAmps: netAmps,
+      oneWayLengthMeters: 15.0,
+      wireSpec: feederSpec,
+    );
+
+    // Compute worst active branch circuit voltage drop
+    final double maxBranchVd = sldData.branchCircuits
+        .where((c) => !c.isSpare)
+        .fold(0.0, (max, c) => c.voltageDropPercent > max ? c.voltageDropPercent : max);
+    final String branchStatus = maxBranchVd <= 3.0 ? 'PASS' : 'UPSIZE REQ';
+    final double totalSysVd = feederVd + maxBranchVd;
 
     return pw.Container(
       decoration: pw.BoxDecoration(
@@ -396,23 +419,23 @@ class BlueprintPdfExporter {
         crossAxisAlignment: pw.CrossAxisAlignment.start,
         children: [
           _telemetryCol('FEEDER AMPACITY SIZING (PEC 2.15)', [
-            'Total Connected Load: ${sldData.feeder.totalConnectedVA.toStringAsFixed(0)} VA',
+            'Total Connected Load: ${sldData.feeder.totalConnectedVA.toStringAsFixed(0)} VA (Net: ${sldData.feeder.netDemandVA.toStringAsFixed(0)} VA)',
             'Full Load Current (I_net): ${netAmps.toStringAsFixed(1)} A @ 230V',
             'Continuous Factor: 125% Continuous Duty Factor',
             'Minimum Feeder Ampacity: ${continuousAmps.toStringAsFixed(1)} A Required',
-            'Selected Conductor: 2 - 14.0 mm2 THHN Cu (Ampacity: 75A)',
+            'Selected Conductor: ${sldData.feeder.feederWireDescription.replaceAll('²', '2')} Cu (Ampacity: ${feederSpec.ampacity75C}A @ 75C)',
           ]),
           pw.SizedBox(width: 8),
           _telemetryCol('MAIN OVERCURRENT PROTECTION (PEC 2.40)', [
-            'Main Breaker: ${sldData.feeder.mainBreakerAmps} AT / 100 AF, 2-Pole, 230V',
+            'Main Breaker: ${sldData.feeder.mainBreakerAmps} AT / $frameAmps AF, 2-Pole, 230V',
             'Interrupting Capacity: 10 kAIC Minimum RMS Symmetrical',
             'Trip Mechanism: Molded Case Thermal-Magnetic Inversed Time',
             'Enclosure Standard: NEMA-1 Surface Mounted Steel Cabinet',
-            'Neutral Bus: 100A Insulated Solid Neutral Terminal Bar',
+            'Neutral Bus: ${frameAmps}A Insulated Solid Neutral Terminal Bar',
           ]),
           pw.SizedBox(width: 8),
           _telemetryCol('EQUIPMENT GROUNDING SYSTEM (PEC 2.50)', [
-            'Grounding Conductor (GEC): 1 - 8.0 mm2 Bare Solid Copper Wire',
+            'Grounding Conductor (GEC): ${sldData.feeder.groundingDescription.replaceAll('²', '2').replaceAll('Ø', 'DIA')}',
             'Grounding Electrode: 16mm DIA x 2.4m Driven Copperweld Rod',
             'Ground Resistance Limit: Maximum 25 Ohms to Earth (PEC 2.50.3.17)',
             'Ground Bus: Solid Copper Grounding Terminal Bar Bonded to Box',
@@ -420,11 +443,11 @@ class BlueprintPdfExporter {
           ]),
           pw.SizedBox(width: 8),
           _telemetryCol('VOLTAGE DROP LIMITS & VERIFICATION (PEC 2.10.1.19)', [
-            'Maximum Branch Circuit Drop: <= 3.0% (Worst Branch: PASS)',
-            'Maximum Main Feeder Drop: <= 2.0% (Calculated: 0.45%)',
-            'Combined Total System Drop: <= 5.0% (Feeder + Branch Combined)',
+            'Maximum Branch Circuit Drop: <= 3.0% (Worst Branch: ${maxBranchVd.toStringAsFixed(2)}% - $branchStatus)',
+            'Maximum Main Feeder Drop: <= 2.0% (Calculated @ 15m: ${feederVd.toStringAsFixed(2)}%)',
+            'Combined Total System Drop: <= 5.0% (Total: ${totalSysVd.toStringAsFixed(2)}% Feeder + Branch)',
             'Calculation Basis: VD = (2 x L x I x R) / 1000 at 75 deg C Copper',
-            'Compliance Status: 100% PEC 2017 PART 1 COMPLIANT',
+            'Compliance Status: ${totalSysVd <= 5.0 && maxBranchVd <= 3.0 ? "100% PEC 2017 PART 1 COMPLIANT" : "REQUIRES CONDUCTOR UPSIZING"}',
           ]),
         ],
       ),

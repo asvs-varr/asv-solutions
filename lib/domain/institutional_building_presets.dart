@@ -157,7 +157,7 @@ class MultiPanelInstitutionalRiser {
 
     // 3. Compute Main Distribution Panel (MDP)
     final double totalConnectedVA = sldLp1.feeder.totalConnectedVA + sldLp2.feeder.totalConnectedVA;
-    // Institutional Diversity Factor between floors: 85%
+    // Institutional Inter-Floor Feeder Diversity Factor between LP-1 and LP-2: 90% (0.90)
     final double netDemandVA = (sldLp1.feeder.netDemandVA + sldLp2.feeder.netDemandVA) * 0.90;
     final double netCurrentAmps = netDemandVA / 230.0;
     final double designMainAmps = netCurrentAmps * 1.25;
@@ -170,13 +170,17 @@ class MultiPanelInstitutionalRiser {
       }
     }
 
-    String mdpWire = '2 - 50 mm² THHN';
+    String mdpWire = '2 - 50 mm² THHN'; // 150A @ 75°C
     String mdpConduit = '50 mm Ø RSC';
     String mdpGround = '1 - 14.0 mm² Bare Cu';
     if (mdpMainBreaker > 200) {
-      mdpWire = '2 - 80 mm² THHN';
+      mdpWire = '2 - 100 mm² THHN'; // 230A @ 75°C
       mdpConduit = '65 mm Ø RSC';
       mdpGround = '1 - 22.0 mm² Bare Cu';
+    } else if (mdpMainBreaker > 150) {
+      mdpWire = '2 - 80 mm² THHN'; // 200A @ 75°C
+      mdpConduit = '65 mm Ø RSC';
+      mdpGround = '1 - 14.0 mm² Bare Cu';
     }
 
     final mdpFeeder = SldFeederSpec(
