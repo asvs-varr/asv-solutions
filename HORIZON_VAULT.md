@@ -13,7 +13,7 @@
 | **[PARTNER-BLOCKED]** | 3 | Official B2B Supplier Agreements / Autodesk AutoCAD APIs |
 | **[HARDWARE-BLOCKED]** | 2 | Physical Metering Instruments (Bluetooth Megger, Thermal Camera) |
 | **[LEGAL-BLOCKED]** | 1 | PRC Accredited CPE / Official Meralco Utility Portal API |
-| **[UX/PRODUCT-EXPANSION]** | 3 | Multi-Brand BOM Matrix, Homeowner Mode & Glossary, Multi-Panel UI |
+| **[UX/PRODUCT-EXPANSION]** | 4 | Multi-Brand BOM Matrix, Homeowner Mode, Multi-Panel UI, Built-in PEC Codebook |
 | **[ELECTRICAL-EXPANSION]** | 1 | Three-Phase Commercial & Industrial Systems (400V/230V Wye & 230V Delta) |
 
 ---
@@ -268,6 +268,28 @@
        - **Dedicated Circuit / Home Run** (*Sariling linya ng kuryente diretso sa panelboard para sa malalakas kumain gaya ng Aircon at Water Heater*)
        - **Voltage Drop** (*Paghina ng boltahe kapag sobrang haba o sobrang nipis ng wire*)
        - **Conduit (PVC / EMT)** (*Tubong proteksyon ng wire sa loob ng pader o kisame*)
+
+---
+
+### [HRZ-018] Built-in 1,165-Page Verbatim PEC 2017 Knowledge Base, Offline FTS5 Codebook & AI/Rule Code Assistant ("Tanungan ng Bayan")
+- **Status**: ⏳ READY TO UNBLOCK (100% Offline-Capable Feature!)
+- **Blocker Category**: `[UX/PRODUCT-EXPANSION]`
+- **Strategic / Business Impact**: 🏆 Game-Changer (Transforms BANAAG from an engineering tool into the Definitive Philippine Electrical Code Authority in every Electrician & Engineer's pocket)
+- **Technical Effort**: Medium
+- **Why It Was Deferred Initially**: Dati ay nakapokus tayo sa primary calculation tables ng `pec_engine.dart` (`Table 3.10.2.6(B)(16)`, `Sec. 2.40.1.4(D)`, Chapter 10 conduit tables). Ngayong nasa workspace na ang kumpletong 1,165-page `PEC Part 1 2017.pdf`, maaari na itong i-extract at i-index ng buo nang walang external dependency o API cost!
+- **Actionable Unblocking Steps**:
+  1. **Extraction & Indexing Pipeline**:
+     - Gumamit ng Python extraction script para i-parse ang `PEC Part 1 2017.pdf` per Chapter (1 to 10), Article, Section, at Table.
+     - I-compile ito sa isang lightweight offline **SQLite database na may Full-Text Search (FTS5)** o compressed JSON dictionary (~4MB hanggang 8MB lang ang bigat).
+  2. **Dedicated "PEC 2017 Navigator & Codebook" Screen**:
+     - Interactive Table of Contents na may search bar na sumasala ng keywords (e.g. "grounding rod", "conduit fill", "GFCI", "clearance").
+     - Fast bookmarks at copy-citation button para sa field inspection reports sa LGU/OBO.
+  3. **"Ask PEC" / In-App Rule Assistant ("Tanungan ng Bayan")**:
+     - Search / Question bar na nagba-bracket ng inquiry (e.g. "Ilang mm² ang wire sa 30A?") at nagbibigay ng direct verbatim snippet + Table citation.
+  4. **Contextual In-App Deep Links**:
+     - Pag-tap sa kahit anong calculation card sa SLD o Calculator, may "📖 Read PEC Sec. X.XX.X" button na magbubukas ng verbatim code provision sa slide-over bottom sheet.
+- **Detailed Architectural Notes**:
+  - Walang internet o LLM token cost na kailangan. Lahat ay mabilis at gagana 100% offline sa liblib na construction site gamit ang SQLite FTS5 engine.
 
 ---
 
