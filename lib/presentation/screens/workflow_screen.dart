@@ -1,5 +1,6 @@
 // BANAAG 7-Stage Workflow Screen with Pre-Cover Rough-In Photo Gate & Megger Log
 
+import 'dart:io';
 import 'package:flutter/material.dart';
 import '../../domain/models.dart';
 import '../../data/project_repository.dart';
@@ -10,6 +11,8 @@ import '../widgets/project_management_dialogs.dart';
 import '../widgets/dxf_export_guide_dialog.dart';
 import '../widgets/site_inspection_dialog.dart';
 import '../widgets/utility_service_drop_dialog.dart';
+import '../widgets/floor_plan_room_intake_modal.dart';
+import 'package:image_picker/image_picker.dart';
 import 'plan_canvas_screen.dart';
 
 class WorkflowScreen extends StatefulWidget {
@@ -84,6 +87,11 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
         ),
         actions: [
           IconButton(
+            icon: const Icon(Icons.document_scanner_outlined, color: Colors.cyanAccent),
+            tooltip: 'Scan Floor Plan & Rooms (ML Kit)',
+            onPressed: _openFloorPlanScanner,
+          ),
+          IconButton(
             icon: const Icon(Icons.edit_outlined, color: BanaagTheme.primaryAmber),
             tooltip: 'Edit Project Info',
             onPressed: () {
@@ -108,6 +116,8 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
             onSelected: (val) {
               if (val == 'dxf_guide') {
                 DxfExportGuideDialog.show(context);
+              } else if (val == 'scan_plan') {
+                _openFloorPlanScanner();
               } else if (val == 'archive') {
                 ProjectManagementDialogs.toggleArchiveProject(
                   context,
@@ -127,6 +137,16 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
               }
             },
             itemBuilder: (ctx) => [
+              const PopupMenuItem(
+                value: 'scan_plan',
+                child: Row(
+                  children: [
+                    Icon(Icons.document_scanner_outlined, color: Colors.cyanAccent, size: 20),
+                    SizedBox(width: 8),
+                    Text('Scan Floor Plan (ML Kit)'),
+                  ],
+                ),
+              ),
               const PopupMenuItem(
                 value: 'dxf_guide',
                 child: Row(
@@ -443,6 +463,33 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
                   borderRadius: BorderRadius.circular(4),
                 ),
                 child: const Text('OPEN TALLY ➔', style: TextStyle(color: BanaagTheme.primaryAmber, fontSize: 10, fontWeight: FontWeight.bold)),
+              ),
+            ),
+          if ((item.id == 'c_takeoff' || item.id == 'p_takeoff') && !isLocked)
+            Padding(
+              padding: const EdgeInsets.only(top: 4.0),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.cyanAccent.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: const Text('OPEN CANVAS ➔', style: TextStyle(color: Colors.cyanAccent, fontSize: 10, fontWeight: FontWeight.bold)),
+                  ),
+                  if (_project.blueprintImagePath != null && _project.blueprintImagePath!.isNotEmpty) ...[
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: BanaagTheme.primaryAmber.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: const Text('RE-SCAN PLAN 🔍', style: TextStyle(color: BanaagTheme.primaryAmber, fontSize: 10, fontWeight: FontWeight.bold)),
+                    ),
+                  ],
+                ],
               ),
             ),
           if (item.id == 'c2' && !isLocked && !item.isCompleted)
@@ -800,4 +847,46 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
       ),
     );
   }
+
+  Future<void> _openFloorPlanScanner() async {
+    String? path = _project.blueprintImagePath;
+
+    if (path == null || path.isEmpty || !File(path).existsSync()) {
+      // Prompt user to pick/capture a floor plan photo first
+      final picker = ImagePicker();
+      final XFile? image = await picker.pickImage(source: ImageSource.gallery);
+      if (image == null) return;
+      path = image.path;
+      _project.blueprintImagePath = path;
+      ProjectRepository.instance.updateProject(_project);
+    }
+
+    if (!mounted) return;
+
+    FloorPlanRoomIntakeModal.show(
+      context,
+      blueprintPath: path,
+      projectTitle: _project.title,
+      onConfirmed: (scannedSpaces, lengthM, widthM) {
+        setState(() {
+          _project.spaces = scannedSpaces;
+          _project.blueprintImagePath = path;
+          _project.roomGeometry = RoomGeometry(
+            roomType: 'RECTANGULAR',
+            leftWallMeters: lengthM,
+            totalWidthMeters: widthM,
+          );
+          ProjectRepository.instance.updateProject(_project);
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('✅ Na-scan ang ${scannedSpaces.length} kwarto! Na-update na ang Load Tally.'),
+            backgroundColor: BanaagTheme.successGreen,
+          ),
+        );
+      },
+    );
+  }
 }
+
