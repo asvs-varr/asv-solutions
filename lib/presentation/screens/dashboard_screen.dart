@@ -13,6 +13,7 @@ import 'future_proofing_screen.dart';
 import 'banaag_pro_screen.dart';
 import '../widgets/project_management_dialogs.dart';
 import '../widgets/dev_ticket_modal.dart';
+import '../widgets/floor_plan_room_intake_modal.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -601,7 +602,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 backgroundColor: BanaagTheme.primaryAmber,
                 foregroundColor: Colors.black,
               ),
-              child: const Text('Create Project', style: TextStyle(fontWeight: FontWeight.bold)),
+              child: Text(
+                (intakeMode == 'BLUEPRINT_PHOTO' && selectedBlueprintPath != null)
+                    ? 'Next: Calibrate & Tag Rooms →'
+                    : 'Create Project',
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
               onPressed: () {
                 if (titleController.text.trim().isEmpty) return;
                 final double contractAmt = double.tryParse(amountController.text.trim()) ?? 0.0;
@@ -621,25 +627,41 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   createdAt: DateTime.now(),
                 );
 
-                repo.addProject(newProject);
                 Navigator.pop(ctx);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('⚡ New project "${newProject.title}" successfully created (${newProject.intakeMode})!'),
-                    action: selectedBlueprintPath != null
-                        ? SnackBarAction(
-                            label: 'OPEN CANVAS',
-                            textColor: BanaagTheme.primaryAmber,
-                            onPressed: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(builder: (_) => PlanCanvasScreen(project: newProject)),
-                              );
-                            },
-                          )
-                        : null,
-                  ),
-                );
+
+                if (intakeMode == 'BLUEPRINT_PHOTO' && selectedBlueprintPath != null) {
+                  // Step 2: Open Floor Plan Calibration & Room Intake Modal
+                  FloorPlanRoomIntakeModal.show(
+                    context,
+                    blueprintPath: selectedBlueprintPath!,
+                    projectTitle: newProject.title,
+                    onConfirmed: (scannedSpaces, lengthM, widthM) {
+                      newProject.spaces = scannedSpaces;
+                      newProject.roomGeometry = RoomGeometry(
+                        roomType: 'RECTANGULAR',
+                        leftWallMeters: widthM,
+                        totalWidthMeters: lengthM,
+                        cutoutWidthMeters: 0,
+                        cutoutDepthMeters: 0,
+                        rightWallMeters: widthM,
+                      );
+                      repo.addProject(newProject);
+                      setState(() {});
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => WorkflowScreen(project: newProject)),
+                      );
+                    },
+                  );
+                } else {
+                  // Fast creation: Save and go directly into project workflow
+                  repo.addProject(newProject);
+                  setState(() {});
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => WorkflowScreen(project: newProject)),
+                  );
+                }
               },
             ),
           ],
