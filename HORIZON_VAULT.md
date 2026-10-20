@@ -14,6 +14,7 @@
 | **[HARDWARE-BLOCKED]** | 2 | Physical Metering Instruments (Bluetooth Megger, Thermal Camera) |
 | **[LEGAL-BLOCKED]** | 1 | PRC Accredited CPE / Official Meralco Utility Portal API |
 | **[UX/ARCHITECTURAL-EXPANSION]** | 1 | Multi-Panel Interactive UI & Dynamic Riser Schematics |
+| **[ELECTRICAL-EXPANSION]** | 1 | Three-Phase Commercial & Industrial Systems (400V/230V Wye & 230V Delta) |
 
 ---
 
@@ -222,5 +223,24 @@
 
 ---
 
+### [HRZ-013] Three-Phase Commercial & Industrial Systems Engine (400V/230V Wye & 230V Delta)
+- **Status**: ⏳ ARCHITECTURE READY / UNBLOCKING CANDIDATE
+- **Blocker Category**: `[ELECTRICAL-EXPANSION]`
+- **Strategic / Business Impact**: 🏆 Game-Changer (Unlocks factories, warehouses, restaurants, 3-phase commercial fit-outs, and high-end residential estates)
+- **Technical Effort**: Medium
+- **Why It's Deferred Today**: Ang kasalukuyang BANAAG core engine (`pec_engine.dart`, `sld_engine.dart`) ay naka-optimize para sa Single-Phase 2-Wire 230V ($I = \text{VA}/230$, $V_d = 2LIR$).
+- **Actionable Unblocking Steps**:
+  1. Magdagdag ng `phaseConfiguration` field sa `Project` model (`1P_230V`, `3P_400V_WYE`, `3P_230V_DELTA`).
+  2. I-update ang `PecEngine`:
+     - Three-phase balanced current: $I = \frac{\text{VA}}{\sqrt{3} \times V_L}$
+     - Three-phase voltage drop: $V_d = \sqrt{3} \times L \times I \times R$
+  3. Palawakin ang Smart Phase Balancer mula dual-phase ($A, B$) patungong tri-phase ($A, B, C$) na may unbalance percentage checker ($<10\%$).
+  4. Suportahan ang 3-pole & 4-pole main circuit breakers at 4-wire ($3\Phi + 1N + 1G$) feeder wire sizing sa Single-Line Diagram.
+- **Detailed Architectural Notes**:
+  - Alinsunod sa Philippine Electrical Code (PEC 2017) Article 2.20 (Branch-Circuit, Feeder, and Service Load Calculations) at Article 3.10.
+
+---
+
 *Laging panatilihing updated ang file na ito gamit ang `/horizon` tuwing may bagong situational development o unblocked feature!*
+
 
