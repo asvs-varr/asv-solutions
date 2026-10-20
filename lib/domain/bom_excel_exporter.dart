@@ -142,8 +142,8 @@ class BomExcelExporter {
       '3D Run (m)',
       'Voltage Drop (%)',
       'VD Status',
-      'Wire Specification (PEC Table 3.10.2.6)',
-      'Conduit Size (Ch. 9 Table 1)',
+      'Wire Specification (PEC Table 3.10.2.6(B)(16))',
+      'Conduit Size (PEC Ch. 10 Table 10.1.1.4)',
       'Remarks',
     ];
 
@@ -209,7 +209,7 @@ class BomExcelExporter {
     final bomItems = [
       {
         'desc': 'THHN / THWN-2 Copper Wire (Branch Circuits)',
-        'spec': '3.5 mm² (#10 AWG) Lead-Free Pure Copper, 90°C',
+        'spec': '3.5 mm² (#12 AWG) Lead-Free Pure Copper, 90°C (PEC Table 3.10.2.6(B)(16))',
         'qty': takeoff.totalThhnWireMeters,
         'unit': 'meters',
         'matRate': 28.0,
@@ -225,7 +225,7 @@ class BomExcelExporter {
       },
       {
         'desc': 'uPVC Electrical Conduit Pipe (20mm Ø)',
-        'spec': 'Thick-wall, Flame retardant, 3.0 meters/pc',
+        'spec': 'Thick-wall Schedule 40, Flame retardant, 3.0 meters/pc (PEC Art. 3.52)',
         'qty': takeoff.totalPvcPipesPcs.toDouble(),
         'unit': 'pcs',
         'matRate': 95.0,
@@ -249,7 +249,7 @@ class BomExcelExporter {
       },
       {
         'desc': 'Conduit Clamps & Support Straps (20mm)',
-        'spec': 'PVC 1-hole strap @ 1.0m maximum interval',
+        'spec': 'PVC 1-hole strap @ 900mm (0.9m) max interval & within 900mm of box (PEC Table 3.52.2.21)',
         'qty': takeoff.conduitClampsCount.toDouble(),
         'unit': 'pcs',
         'matRate': 6.0,

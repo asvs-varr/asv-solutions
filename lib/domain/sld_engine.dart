@@ -159,38 +159,38 @@ class SingleLineDiagramData {
   List<Map<String, String>> get pecEngineeringBasis => [
     {
       'topic': 'Feeder Demand Factor & Motor Allowance',
-      'citation': 'PEC 2017 Table 2.20.3.3 & Art 4.30.2.4',
-      'formula': 'General Lighting, Convenience & SABC: First 3,000 VA @ 100%, Remainder @ 35% + Dedicated Loads @ 100% + 25% of Largest Motor.',
+      'citation': 'PEC 2017 Table 2.20.3.3 (Page 56), Table 2.20.3.16 (Page 58) & Sec. 4.30.2.4 (Page 349)',
+      'formula': 'General Lighting, Convenience & SABC: First 3,000 VA @ 100%, Remainder @ 35% + Household Range <=12kW @ 80% + Other Dedicated Loads @ 100% + 25% of Largest Motor.',
       'computed': 'Total Connected: ${feeder.totalConnectedVA.toStringAsFixed(0)} VA ➔ Net Demand: ${feeder.netDemandVA.toStringAsFixed(0)} VA (${feeder.netCurrentAmps.toStringAsFixed(1)} A)',
     },
     {
       'topic': 'Main Feeder & Overcurrent Protection',
-      'citation': 'PEC 2017 Art 2.15.1.2 & Art 2.15.1.3',
+      'citation': 'PEC 2017 Sec. 2.15.1.2, Sec. 2.15.1.3 (Pages 50–51) & Table 2.40.1.6(A) (Page 86)',
       'formula': 'Feeder conductors & MCB must have ampacity not less than 125% of continuous design load (I_design = I_net × 1.25).',
-      'computed': '${feeder.netCurrentAmps.toStringAsFixed(1)} A × 1.25 = ${(feeder.netCurrentAmps * 1.25).toStringAsFixed(1)} A ➔ Main Breaker: ${feeder.mainBreakerAmps} AT / ${feeder.mainBreakerAmps <= 100 ? 100 : 225} AF 2P',
+      'computed': '${feeder.netCurrentAmps.toStringAsFixed(1)} A × 1.25 = ${(feeder.netCurrentAmps * 1.25).toStringAsFixed(1)} A ➔ Main Breaker: ${feeder.mainBreakerAmps} AT / ${feeder.mainBreakerAmps <= 100 ? 100 : (feeder.mainBreakerAmps <= 225 ? 225 : 400)} AF 2P',
     },
     {
       'topic': 'Main Feeder Conductors & Raceway',
-      'citation': 'PEC 2017 Table 3.10.2.6 & Chapter 9 Table 1',
-      'formula': 'Copper THHN/THWN-2 allowable ampacity at 75°C terminal rating with maximum 40% conduit fill limit for >=3 wires.',
+      'citation': 'PEC 2017 Table 3.10.2.6(B)(16) (Page 174) & Table 10.1.1.1 / 10.1.1.4 (Pages 932 & 935)',
+      'formula': 'Copper THHN/THWN-2 allowable ampacity at 75°C terminal rating (Sec. 1.10.1.14(C)) with maximum 40% conduit fill limit for >=3 wires.',
       'computed': 'Conductors: ${feeder.feederWireDescription} sa loob ng ${feeder.conduitDescription}',
     },
     {
       'topic': 'Grounding Electrode & Equipment Grounding',
-      'citation': 'PEC 2017 Table 2.50.3.17 & Table 2.50.6.13',
-      'formula': 'Minimum Grounding Conductor size based on service-entrance conductor and main OCPD rating (8.0 mm² up to 100A; 14.0 mm² for 125A–200A).',
+      'citation': 'PEC 2017 Table 2.50.3.17 (Page 113) & Table 2.50.6.13 (Page 124)',
+      'formula': 'Minimum EGC/GEC size based on service-entrance conductor and OCPD rating (8.0 mm² up to 100A; 14.0 mm² for 110A–200A; max 14.0 mm² on driven ground rod per Sec. 2.50.3.17(A)).',
       'computed': feeder.groundingDescription,
     },
     {
       'topic': 'Branch Circuit Voltage Drop Limit (3.0% Max)',
-      'citation': 'PEC 2017 Art 2.10.2.1 FPN No. 4 & Art 2.15.1.2(a) FPN No. 2',
-      'formula': '%VD = (2 × L_run × I_load × R_wire / 1000 / 230) × 100%. Max allowable: 3% for branch circuit, 5% total overall system.',
-      'computed': 'Lahat ng branch circuits ay sinusukat gamit ang 3D Manhattan Run (panel drop + horizontal run + device drop + 150mm splice). Ang mga lagpas sa 3.0% ay awtomatikong ina-upsize sa kasunod na standard wire size.',
+      'citation': 'PEC 2017 Sec. 2.10.2.2(A) FPN No. 4 (Page 42) & Sec. 2.15.1.2(A)(1) FPN No. 2 (Page 50)',
+      'formula': '%VD = (2 × L_run × I_load × R_wire / 1000 / 230) × 100%. Max allowable: 3.0% for branch circuit, 5.0% total overall system.',
+      'computed': 'Lahat ng branch circuits ay sinusukat gamit ang 3D Manhattan Run (panel drop + horizontal run + device drop + 150mm splice per Sec. 3.0.1.14). Ang mga lagpas sa 3.0% ay awtomatikong ina-upsize sa kasunod na standard wire size.',
     },
     {
       'topic': 'Spare Circuit Provision',
-      'citation': 'PEC 2017 Art 4.8.1.13',
-      'formula': 'Mandatory spare overcurrent devices for panelboard future load expansion without rewiring enclosure.',
+      'citation': 'PEC 2017 Sec. 4.8.2.7 & Sec. 2.10.1.11',
+      'formula': 'Spare overcurrent devices for panelboard future load expansion without rewiring enclosure.',
       'computed': 'Kasama ang 2 Spare Breakers (20A at 30A 2P) sa active schedule.',
     },
   ];
@@ -364,6 +364,16 @@ class SldEngine {
         d.contains('compressor');
   }
 
+  /// Determines if a dedicated circuit is a household electric range/cooking unit (>1.75 kW) eligible for PEC Table 2.20.3.16 (Page 58) Demand Factor
+  static bool _isHouseholdRangeOrCooktop(SldBranchCircuit c) {
+    if (c.isSpare || c.loadVA <= 1750.0) return false;
+    final d = c.description.toLowerCase();
+    return (d.contains('range') && !d.contains('hood')) ||
+        d.contains('cooktop') ||
+        d.contains('cooking unit') ||
+        d.contains('induction');
+  }
+
   /// Computes exact PEC 2017 Feeder & Service Entrance Spec from a list of branch circuits
   static SldFeederSpec computeFeederSpecFromCircuits(
     List<SldBranchCircuit> circuits,
@@ -373,10 +383,11 @@ class SldEngine {
         .where((c) => !c.isSpare)
         .fold(0.0, (sum, c) => sum + c.loadVA);
 
-    // Apply Exact PEC 2017 Table 2.20.3.3 Dwelling Unit Demand Factors:
+    // Apply Exact PEC 2017 Table 2.20.3.3 (Page 56) Dwelling Unit Demand Factors:
     // General Lighting, Convenience Receptacles & Small Appliance (SABC) / Laundry:
     // - First 3,000 VA @ 100% Demand
     // - 3,001 to 120,000 VA @ 35% Demand
+    // - Remainder over 120,000 VA @ 25% Demand
     final double generalLightingAndOutletsVA = circuits
         .where(_isGeneralLightingOrSmallAppliance)
         .fold(0.0, (sum, c) => sum + c.loadVA);
@@ -385,9 +396,18 @@ class SldEngine {
         .where((c) => !c.isSpare && !_isGeneralLightingOrSmallAppliance(c))
         .toList();
 
-    final double dedicatedLoadsVA = dedicatedCircuits.fold(0.0, (sum, c) => sum + c.loadVA);
+    // Apply PEC 2017 Table 2.20.3.16 (Page 58) & Appendix D Examples D2/D3 (Pages 1072-1073):
+    // Household Electric Range / Cooking Units (>1,750 VA up to 12,000 VA): 80% Demand Factor
+    double dedicatedLoadsVA = 0.0;
+    for (final c in dedicatedCircuits) {
+      if (_isHouseholdRangeOrCooktop(c) && c.loadVA <= 12000.0) {
+        dedicatedLoadsVA += c.loadVA * 0.80;
+      } else {
+        dedicatedLoadsVA += c.loadVA;
+      }
+    }
 
-    // PEC 2017 Art 4.30.2.4 / Art 2.20.2.10: Add 25% of the largest motor load
+    // PEC 2017 Sec. 4.30.2.4 (Page 349) / Sec. 2.20.3.11: Add 25% of the largest motor load
     double largestMotorVA = 0.0;
     for (final c in dedicatedCircuits) {
       if (_isMotorOrHvacCircuit(c) && c.loadVA > largestMotorVA) {
@@ -398,17 +418,19 @@ class SldEngine {
     double netGeneralVA = 0.0;
     if (generalLightingAndOutletsVA <= 3000.0) {
       netGeneralVA = generalLightingAndOutletsVA;
-    } else {
+    } else if (generalLightingAndOutletsVA <= 120000.0) {
       netGeneralVA = 3000.0 + ((generalLightingAndOutletsVA - 3000.0) * 0.35);
+    } else {
+      netGeneralVA = 3000.0 + (117000.0 * 0.35) + ((generalLightingAndOutletsVA - 120000.0) * 0.25);
     }
 
     final double netDemandVA = netGeneralVA + dedicatedLoadsVA + (largestMotorVA * 0.25);
     final double netCurrentAmps = netDemandVA / 230.0;
 
-    // Sizing Main Breaker with 125% continuous design margin (PEC Sec. 2.15.1.3 & Table 2.40.1.6(A))
+    // Sizing Main Breaker with 125% continuous design margin (PEC Sec. 2.15.1.3 & Table 2.40.1.6(A), Page 86)
     final double designMainAmps = netCurrentAmps * 1.25;
     int mainBreakerAmps = 60;
-    for (final rating in [60, 70, 80, 90, 100, 110, 125, 150, 175, 200, 225, 250, 300]) {
+    for (final rating in [60, 70, 80, 90, 100, 110, 125, 150, 175, 200, 225, 250, 300, 350, 400]) {
       if (rating >= designMainAmps) {
         mainBreakerAmps = rating;
         break;
@@ -449,13 +471,21 @@ class SldEngine {
       feederWire = '2 - 100 mm² THHN'; // 220 A @ 75°C
       feederConduit = '50 mm Ø PVC';
       groundWire = '1 - 14.0 mm² Bare/Insulated Cu';
-    } else {
+    } else if (mainBreakerAmps <= 250) {
       feederWire = '2 - 125 mm² THHN'; // 255 A @ 75°C
       feederConduit = '65 mm Ø PVC';
       groundWire = '1 - 22.0 mm² Bare/Insulated Cu';
+    } else if (mainBreakerAmps <= 300) {
+      feederWire = '2 - 200 mm² THHN'; // 325 A @ 75°C
+      feederConduit = '80 mm Ø PVC';
+      groundWire = '1 - 22.0 mm² Bare/Insulated Cu';
+    } else {
+      feederWire = '2 - 250 mm² THHN'; // 375 A @ 75°C
+      feederConduit = '80 mm Ø PVC';
+      groundWire = '1 - 30.0 mm² Bare/Insulated Cu';
     }
 
-    final int frameAmps = mainBreakerAmps <= 100 ? 100 : 225;
+    final int frameAmps = mainBreakerAmps <= 100 ? 100 : (mainBreakerAmps <= 225 ? 225 : 400);
 
     return SldFeederSpec(
       totalConnectedVA: totalConnectedVA,
@@ -479,40 +509,29 @@ class SldEngine {
     double? runMeters,
   }) {
     final double amps = va / 230.0;
-    int breaker = isLighting ? 15 : 20;
 
-    // Dedicated equipment sizing
-    if (isDedicated) {
-      if (amps > 24) {
-        breaker = 40;
-      } else if (amps > 16) {
-        breaker = 30;
-      } else {
-        breaker = 20;
-      }
-    }
+    // Size initial conductor and breaker strictly via Verbatim PEC 2017 PecEngine
+    // (Enforces 125% continuous factor, Table 3.10.2.6(B)(16) 75°C ampacities, and Sec. 2.40.1.4(D) small conductor caps)
+    PecWireSpec currentWireSpec = PecEngine.sizeWireForCurrent(
+      amps,
+      isContinuous: true,
+      isLighting: isLighting,
+    );
+    int breaker = PecEngine.selectBreaker(
+      amps,
+      currentWireSpec.ampacity75C,
+      isContinuous: true,
+      wireSizeMm2: currentWireSpec.sizeMm2,
+    );
 
-    // Baseline minimum PEC wire size
-    double baseWireMm2 = 3.5;
-    if (breaker == 15) {
-      baseWireMm2 = 2.0;
-    } else if (breaker == 20) {
-      baseWireMm2 = 3.5;
-    } else if (breaker == 30) {
-      baseWireMm2 = 5.5;
-    } else if (breaker >= 40) {
-      baseWireMm2 = 8.0;
+    // Ensure general convenience outlets are at least 20A / 3.5 mm²
+    if (!isLighting && !isDedicated && breaker < 20) {
+      breaker = 20;
     }
 
     // Compute or default 3D Manhattan Run length
-    // (Panel drop 1.8m + horizontal run + device drop 0.3m/1.2m + 0.15m splice)
+    // (Panel drop 1.8m + horizontal run + device drop 0.3m/1.2m + 0.15m splice per PEC Sec. 3.0.1.14)
     final double effectiveRunMeters = runMeters ?? (isDedicated ? 18.0 : (12.0 + (circuitNumber * 2.5)));
-
-    // Initial Voltage Drop with base wire
-    PecWireSpec currentWireSpec = PecEngine.wireSpecs.firstWhere(
-      (w) => w.sizeMm2 >= baseWireMm2,
-      orElse: () => PecEngine.wireSpecs.first,
-    );
 
     double vdPercent = PecEngine.computeVoltageDropPercent(
       loadCurrentAmps: amps,
@@ -523,7 +542,7 @@ class SldEngine {
     bool isUpsized = false;
     String upsizeReason = '';
 
-    // PEC Rule Art 2.10.2.1 FPN No. 4: Maximum 3.0% voltage drop on branch circuits
+    // PEC Rule Sec. 2.10.2.2(A) FPN No. 4 (Page 42): Maximum 3.0% voltage drop on branch circuits
     if (vdPercent > 3.0 && amps > 0) {
       final double initialVd = vdPercent;
       final double initialWire = currentWireSpec.sizeMm2;
@@ -547,16 +566,20 @@ class SldEngine {
       }
     }
 
-    // Determine Ground wire & Conduit based on PEC Table 2.50.6.13 breaker rating
+    // Determine Ground wire & Conduit based on PEC Table 2.50.6.13 (Page 124) & Table 10.1.1.4 (Page 935)
     final double egcMm2 = PecEngine.getMinimumEquipmentGroundingConductorMm2(breaker);
-    final String groundWireSize = '${egcMm2.toStringAsFixed(1).replaceAll('.0', '')} mm²';
+    final String groundWireSize = '${egcMm2 < 22 ? egcMm2.toStringAsFixed(1) : egcMm2.toStringAsFixed(0)} mm²';
+    final PecConduitSpec recConduit = PecEngine.recommendConduit(
+      wireSpec: currentWireSpec,
+      conductorCount: 3,
+      minMetricDesignatorMm: 20,
+    );
+    final String conduit = '${recConduit.metricDesignatorMm} mm Ø PVC';
 
-    String conduit = '20 mm Ø PVC';
-    if (currentWireSpec.sizeMm2 >= 8.0) {
-      conduit = '25 mm Ø PVC';
-    }
-
-    final String wireDesc = '2 - ${currentWireSpec.sizeMm2.toStringAsFixed(1).replaceAll('.0', '')} mm² THHN + 1 - $groundWireSize Ground';
+    final String phaseWireSize = currentWireSpec.sizeMm2 < 22
+        ? currentWireSpec.sizeMm2.toStringAsFixed(1)
+        : currentWireSpec.sizeMm2.toStringAsFixed(0);
+    final String wireDesc = '2 - $phaseWireSize mm² THHN + 1 - $groundWireSize Ground';
 
     return SldBranchCircuit(
       circuitNumber: circuitNumber,

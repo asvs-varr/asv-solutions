@@ -96,7 +96,7 @@ class BlueprintPdfExporter {
                               style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10, color: cadDark),
                             ),
                             pw.Text(
-                              'BRANCH VOLTAGE DROP LIMIT: <= 3.0% (PEC ART 2.10.1.19) | FEEDER LIMIT: <= 2.0% (PEC ART 2.15.1.2)',
+                              'BRANCH VOLTAGE DROP LIMIT: <= 3.0% (PEC SEC. 2.10.2.2(A) FPN 4) | FEEDER LIMIT: <= 2.0% (PEC SEC. 2.15.1.2)',
                               style: const pw.TextStyle(fontSize: 8, color: cadMuted),
                             ),
                           ],
@@ -207,7 +207,7 @@ class BlueprintPdfExporter {
                                   ),
                                   pw.SizedBox(height: 2),
                                   pw.Expanded(
-                                    child: _buildVicinityMapBox(project),
+                                    child: _buildVicinityMapBox(project, sldData),
                                   ),
                                 ],
                               ),
@@ -442,7 +442,7 @@ class BlueprintPdfExporter {
             'Inspection Well: Concrete Test Well with Removable Cover Plate',
           ]),
           pw.SizedBox(width: 8),
-          _telemetryCol('VOLTAGE DROP LIMITS & VERIFICATION (PEC 2.10.1.19)', [
+          _telemetryCol('VOLTAGE DROP LIMITS & VERIFICATION (PEC 2.10.2.2(A) FPN 4)', [
             'Maximum Branch Circuit Drop: <= 3.0% (Worst Branch: ${maxBranchVd.toStringAsFixed(2)}% - $branchStatus)',
             'Maximum Main Feeder Drop: <= 2.0% (Calculated @ 15m: ${feederVd.toStringAsFixed(2)}%)',
             'Combined Total System Drop: <= 5.0% (Total: ${totalSysVd.toStringAsFixed(2)}% Feeder + Branch)',
@@ -483,6 +483,7 @@ class BlueprintPdfExporter {
   // ===========================================================================
   static pw.Widget _buildVectorSldBox(SingleLineDiagramData sldData) {
     const double busbarSpacing = 58.0;
+    final int busbarAmps = sldData.feeder.mainBreakerAmps <= 100 ? 100 : (sldData.feeder.mainBreakerAmps <= 225 ? 225 : 400);
 
     return pw.Container(
       decoration: pw.BoxDecoration(
@@ -636,7 +637,7 @@ class BlueprintPdfExporter {
                 ),
                 pw.SizedBox(width: 10),
                 pw.Text(
-                  'NEMA-1 SURFACE MOUNTED | 100A MAIN COPPER BUSBAR | 230V 1-PH 2-WIRE + GND',
+                  'NEMA-1 SURFACE MOUNTED | ${busbarAmps}A MAIN COPPER BUSBAR | 230V 1-PH 2-WIRE + GND',
                   style: const pw.TextStyle(color: cadMuted, fontSize: 8),
                 ),
               ],
@@ -693,7 +694,7 @@ class BlueprintPdfExporter {
                     pw.Padding(
                       padding: const pw.EdgeInsets.only(right: 4),
                       child: pw.Text(
-                        '1 - 8.0 mm2 Bare Cu to\n16mm DIA x 2.4m Ground Rod\n(R <= 25 Ohms)',
+                        '${sldData.feeder.groundingDescription.replaceAll('mm²', 'mm2').replaceAll('Ø', 'DIA')}\n(R <= 25 Ohms, PEC 2.50.3.7)',
                         textAlign: pw.TextAlign.right,
                         style: const pw.TextStyle(color: cadMuted, fontSize: 7),
                       ),
@@ -884,14 +885,14 @@ class BlueprintPdfExporter {
     final specs = [
       '1. CODES & STANDARDS: All electrical works shall strictly comply with the Philippine Electrical Code (PEC 2017 Part 1), National Building Code of the Philippines, and regulations of the local electric utility and City Building Official.',
       '2. SERVICE VOLTAGE: Service entrance voltage shall be 230 Volts AC, Single-Phase, 2-Wire, 60 Hz with solid copper equipment grounding conductor.',
-      '3. CONDUCTORS: All conductors shall be 99.9% electrolytic copper, 600V rated THHN/THWN-2 insulation. Minimum wire size shall be 2.0 mm2 (#14 AWG) for lighting and 3.5 mm2 (#12 AWG) for convenience outlets.',
-      '4. RACEWAYS & CONDUITS: Raceways shall be thick-wall unplasticized polyvinyl chloride (uPVC PNS 14) or Electrical Metallic Tubing (EMT) secured with clamps at not more than 1.0 meter intervals and within 0.3m of each box.',
+      '3. CONDUCTORS: All conductors shall be 99.9% electrolytic copper, 600V rated THHN/THWN-2 insulation (PEC Table 3.10.2.6(B)(16)). Minimum wire size shall be 2.0 mm2 (#14 AWG, max 15A OCPD) for lighting and 3.5 mm2 (#12 AWG, max 20A OCPD) for convenience outlets (PEC Sec. 2.40.1.4(D)).',
+      '4. RACEWAYS & CONDUITS: Raceways shall be Schedule 40 unplasticized polyvinyl chloride (uPVC) or EMT secured with clamps at not more than 900 mm (0.9 m) intervals for 15-25 mm PVC and within 900 mm (0.9 m) of each box (PEC Sec. 3.52.2.21 & Table 3.52.2.21).',
       '5. MOUNTING HEIGHTS: Wall switches: 1.37m AFF; Convenience outlets: 0.30m AFF; Counter outlets: 1.05m AFF; Panelboard top: 1.80m AFF; kWh meter center: 1.52m AFF.',
-      '6. VOLTAGE DROP LIMITS: Feeder voltage drop shall not exceed 2.0%; branch circuit voltage drop shall not exceed 3.0%; combined system voltage drop shall not exceed 5.0% (PEC 2.10.1.19 / 2.15.1.2).',
-      '7. GROUNDING SYSTEM: Provide 16mm dia x 2.4m copper-clad steel ground rod driven in inspection pit. Ground resistance shall not exceed 25 ohms. Equipment grounding conductor shall be green insulated copper.',
-      '8. BOXES & FITTINGS: All junction and utility boxes shall be pressed galvanized steel gauge 16 with approved cover plates. Provide minimum 150mm (6") free conductor splice leads (PEC 3.0.1.14).',
-      '9. TESTING & COMMISSIONING: Perform insulation resistance test (Megger 500V min 50 Megohms) and earth ground resistance test before final energization. Submit formal test certificates to building official.',
-      '10. SUPERVISION: All electrical installations shall be executed under the direct supervision of a duly licensed Professional Electrical Engineer (PEE) or Registered Electrical Engineer (REE).',
+      '6. VOLTAGE DROP LIMITS: Feeder voltage drop shall not exceed 2.0%; branch circuit voltage drop shall not exceed 3.0%; combined system voltage drop shall not exceed 5.0% (PEC Sec. 2.10.2.2(A) FPN No. 4 & Sec. 2.15.1.2(A)(1) FPN No. 2).',
+      '7. GROUNDING SYSTEM: Provide 16mm dia x 2.4m copper-clad steel ground rod driven in inspection pit. Ground resistance shall not exceed 25 ohms (PEC Sec. 2.50.3.7). Equipment grounding conductor shall comply with PEC Table 2.50.6.13.',
+      '8. BOXES & FITTINGS: All junction and utility boxes shall have approved cover plates. Provide minimum 150mm (6") free conductor splice leads at each outlet, junction, and switch point (PEC Sec. 3.0.1.14).',
+      '9. TESTING & COMMISSIONING: Perform insulation resistance test (Megger 500V DC >= 1.0 Megohm minimum per PEC / IEEE 43) and earth ground resistance test (<= 25 Ohms) before final energization.',
+      '10. SUPERVISION: All electrical installations shall be executed under the direct supervision of a duly licensed Professional Electrical Engineer (PEE) or Registered Electrical Engineer (REE) per RA 7920.',
     ];
 
     return pw.Column(
@@ -908,7 +909,12 @@ class BlueprintPdfExporter {
   // ===========================================================================
   // SECTION 6: SITE ELECTRICAL SERVICE CONNECTION & VICINITY PLAN (WHITE PAPER)
   // ===========================================================================
-  static pw.Widget _buildVicinityMapBox(Project project) {
+  static pw.Widget _buildVicinityMapBox(Project project, SingleLineDiagramData sldData) {
+    final String poleTag = project.utilityServiceDrop?.poleNumberTag ?? 'SIN-4821';
+    final double spanMeters = project.utilityServiceDrop?.distanceToPoleMeters ?? 15.0;
+    final String utilityName = sldData.utilityProvider.toUpperCase();
+    final String feederWireClean = sldData.feeder.feederWireDescription.replaceAll('mm²', 'mm2');
+
     return pw.Container(
       decoration: pw.BoxDecoration(
         border: pw.Border.all(color: cadBlack, width: 0.8),
@@ -943,7 +949,7 @@ class BlueprintPdfExporter {
                       mainAxisAlignment: pw.MainAxisAlignment.spaceAround,
                       crossAxisAlignment: pw.CrossAxisAlignment.center,
                       children: [
-                        // Meralco Distribution Pole
+                        // Distribution Pole
                         pw.Column(
                           mainAxisAlignment: pw.MainAxisAlignment.center,
                           children: [
@@ -959,7 +965,7 @@ class BlueprintPdfExporter {
                               child: pw.Text('P', style: pw.TextStyle(color: cadAmber, fontWeight: pw.FontWeight.bold, fontSize: 9)),
                             ),
                             pw.SizedBox(height: 2),
-                            pw.Text('MERALCO\nPOLE #2308', textAlign: pw.TextAlign.center, style: const pw.TextStyle(color: cadDark, fontSize: 6.2)),
+                            pw.Text('$utilityName\nPOLE $poleTag', textAlign: pw.TextAlign.center, style: const pw.TextStyle(color: cadDark, fontSize: 6.2)),
                           ],
                         ),
 
@@ -968,11 +974,11 @@ class BlueprintPdfExporter {
                           child: pw.Column(
                             mainAxisAlignment: pw.MainAxisAlignment.center,
                             children: [
-                              pw.Text('OVERHEAD SERVICE DROP (12.5m SPAN)', style: const pw.TextStyle(color: cadDark, fontSize: 6.5)),
+                              pw.Text('OVERHEAD SERVICE DROP (${spanMeters.toStringAsFixed(1)}m SPAN)', style: const pw.TextStyle(color: cadDark, fontSize: 6.5)),
                               pw.SizedBox(height: 2),
                               pw.Container(height: 1.8, color: cadAmber),
                               pw.SizedBox(height: 2),
-                              pw.Text('2 - 14.0 mm2 THHN Cu + TRIPLEX NEUTRAL', style: const pw.TextStyle(color: cadMuted, fontSize: 6.2)),
+                              pw.Text('$feederWireClean Cu + MESSENGER NEUTRAL', style: const pw.TextStyle(color: cadMuted, fontSize: 6.2)),
                             ],
                           ),
                         ),
@@ -1018,7 +1024,7 @@ class BlueprintPdfExporter {
                 _vicinityText('ADDRESS:', project.siteAddress),
                 _vicinityText('CLIENT:', project.clientName),
                 _vicinityText('ROAD R.O.W.:', '10.00 METER ROAD RIGHT-OF-WAY'),
-                _vicinityText('POWER DIST.:', 'MERALCO 230V 1-PH SECONDARY RACK'),
+                _vicinityText('POWER DIST.:', '$utilityName 230V 1-PH SECONDARY RACK'),
               ],
             ),
           ),

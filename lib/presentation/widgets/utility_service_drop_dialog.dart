@@ -230,8 +230,8 @@ class _UtilityServiceDropDialogState extends State<UtilityServiceDropDialog> {
               title: const Text('Crosses Public Street / Roadway?', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
               subtitle: Text(
                 _crossesRoadway
-                    ? 'PEC Art 2.30.2.4: Minimum 5.5m (18ft) vertical road clearance required over vehicular traffic.'
-                    : 'PEC Art 2.30.2.4: Minimum 4.5m (15ft) vertical clearance for residential driveways and footpaths.',
+                    ? 'PEC 2017 Sec. 2.30.2.3(B)(4) (Page 73): Minimum 5,500 mm (5.5m) vertical clearance over public streets & truck traffic.'
+                    : 'PEC 2017 Sec. 2.30.2.3(B)(2)-(3) (Page 73): Minimum 3,700 mm (3.7m) PEC / 4,500 mm (4.5m) DU clearance over residential driveways.',
                 style: const TextStyle(fontSize: 11, color: BanaagTheme.textMuted),
               ),
               value: _crossesRoadway,

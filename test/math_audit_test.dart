@@ -382,5 +382,77 @@ void main() {
       expect(heaterCircuit.wireSizeDescription, contains('3.5 mm² THHN'));
       expect(heaterCircuit.breakerRatingAmps, equals(20));
     });
+
+    test('12. Second-Level Deep Audit: SldEngine (>40A EV Charger, Table 2.20.3.16 80% Range Demand Factor) & TakeoffEngine (Table 3.52.2.21 900mm PVC Support)', () {
+      final projectWithHeavyLoads = Project(
+        id: 'test-heavy-loads',
+        title: 'Heavy Load & PVC Support Audit',
+        clientName: 'Client',
+        clientContact: '000',
+        siteAddress: 'Address',
+        contractAmount: 0,
+        createdAt: DateTime.now(),
+        spaces: [],
+        applianceLoads: [
+          ApplianceItem(
+            id: 'ev1',
+            name: 'EV Charger (Level 2 - 7.4kW)',
+            roomCategory: 'Outdoor',
+            ratingVA: 7400,
+            quantity: 1,
+            isDedicatedCircuit: true,
+            isLighting: false,
+            circuitNumber: 1,
+          ),
+          ApplianceItem(
+            id: 'range1',
+            name: 'Electric Range / Induction (10kW)',
+            roomCategory: 'Kitchen',
+            ratingVA: 10000,
+            quantity: 1,
+            isDedicatedCircuit: true,
+            isLighting: false,
+            circuitNumber: 2,
+          ),
+        ],
+        phases: [],
+      );
+
+      final sld = SldEngine.generateFromProject(projectWithHeavyLoads);
+
+      // 1. EV Charger (7,400 VA / 230V = 32.17A; 125% = 40.22A):
+      // Must NOT be capped at 40A breaker; must select 50A AT on 8.0 mm² THHN
+      final evBranch = sld.branchCircuits.firstWhere((b) => b.description.contains('EV Charger'));
+      expect(evBranch.breakerRatingAmps, equals(50));
+      expect(evBranch.wireSizeDescription, contains('8.0 mm² THHN'));
+
+      // 2. Electric Range (10,000 VA):
+      // Default minimum Lighting (850 VA) + Convenience Outlets (1,440 VA) = 2,290 VA (@ 100%)
+      // + EV Charger (7,400 VA @ 100%) + Range (10,000 VA @ 80% per PEC Table 2.20.3.16 = 8,000 VA)
+      // Total Connected = 19,690 VA; Net Demand = 17,690 VA (saved 2,000 VA via Table 2.20.3.16!)
+      expect(sld.feeder.totalConnectedVA, closeTo(19690.0, 0.01));
+      expect(sld.feeder.netDemandVA, closeTo(17690.0, 0.01));
+
+      // Verify full schedule passes PecSafetyAuditor with 0 critical hazards
+      final audit = PecSafetyAuditor.auditSchedule(sld);
+      expect(audit.criticalHazardCount, equals(0));
+      expect(audit.assurancePercent, equals(100.0));
+
+      // 3. TakeoffEngine PVC Clamp Support Spacing (PEC Sec. 3.52.2.21(A) & Table 3.52.2.21):
+      // Must use 900 mm (0.9 m) max interval + 2 box termination clamps per route
+      final takeoff = TakeoffEngine.calculate(
+        points: [
+          CanvasPoint(id: 'p1', type: 'PANEL', label: 'LP', x: 0, y: 0),
+          CanvasPoint(id: 'p2', type: 'OUTLET_DUPLEX', label: 'CO1', x: 5, y: 0),
+        ],
+        routes: [
+          ConduitRoute(id: 'rt1', fromPointId: 'p1', toPointId: 'p2', measuredLengthMeters: 9.0),
+        ],
+      );
+      // 9.0m horizontal + 1.8m panel drop + 0.3m outlet drop = 11.1m total conduit
+      // (11.1 / 0.9).ceil() + (2 points * 2 termination clamps) = 13 + 4 = 17 clamps
+      expect(takeoff.totalConduitMeters, closeTo(11.1, 0.01));
+      expect(takeoff.conduitClampsCount, equals(17));
+    });
   });
 }

@@ -103,8 +103,9 @@ class TakeoffEngine {
     );
     final double rolls = totalWireMeters / rollLengthStandardMeters;
 
-    // Standard support spacing: 1 clamp every 1.5 meters
-    final int clamps = (totalConduit / 1.5).ceil() + (points.length * 2);
+    // Verbatim PEC 2017 Sec. 3.52.2.21(A) & Table 3.52.2.21 (Page 231):
+    // 15-25 mm Rigid PVC Conduit max support spacing = 900 mm (0.9 m) + fastened within 900 mm of each box/termination
+    final int clamps = (totalConduit / 0.9).ceil() + (points.length * 2);
 
     // Unified Itemized Material & Labor Costs (100% synced with 3-Tab Excel BOM)
     final double materialCost = (totalWireMeters * wirePricePerMeter) +

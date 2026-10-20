@@ -298,7 +298,7 @@ class SiteStructureAssessment {
 class UtilityServiceDropAssessment {
   final String poleNumberTag; // SIN / Pole tag, e.g. "SIN-10492" or "M-4821"
   final double distanceToPoleMeters; // Estimated service drop span
-  final bool crossesRoadway; // If crossing street/highway, PEC Art 2.30.2.4 requires 5.5m clearance
+  final bool crossesRoadway; // If crossing street/highway, PEC Sec. 2.30.2.3(B)(4) requires 5,500 mm (5.5m) clearance
   final String serviceEntranceType; // 'Overhead Masthead / Weatherhead' vs 'Underground Service Lateral'
   final String utilityProvider; // Meralco, CANORECO, CASURECO, etc.
   final String notes;
@@ -312,16 +312,19 @@ class UtilityServiceDropAssessment {
     this.notes = '',
   });
 
-  // Business Logic & PEC Checks
+  // Business Logic & Verbatim PEC 2017 Sec. 2.30.2.3(B) (Pages 72-73) Checks:
+  // - Sec. 2.30.2.3(B)(4): 5,500 mm (5.5m) over public streets, alleys, roads, and truck parking
+  // - Sec. 2.30.2.3(B)(2)-(3): 3,700 mm (3.7m) PEC minimum over residential driveways <=300V to ground (4,500 mm / 4.5m DU standard / >300V)
   bool get requiresIntermediatePole => distanceToPoleMeters > 30.0;
   double get requiredVerticalClearanceMeters => crossesRoadway ? 5.5 : 4.5;
+  double get pecMinimumResidentialClearanceMeters => crossesRoadway ? 5.5 : 3.7;
   double get estimatedDuplexWireMeters => distanceToPoleMeters + 3.0; // +3m drip loop & masthead allowance
 
   String get pecComplianceNote {
     if (requiresIntermediatePole) {
-      return '⚠️ BABALA (PEC & DU Standards): Ang ${distanceToPoleMeters.toStringAsFixed(1)}m ay lagpas sa 30m maximum service span. Kinakailangan magtayo ng secondary intermediate pole (inter-pole) para hindi sumayad ang wire.';
+      return '⚠️ BABALA (PEC Sec. 2.30.2.3 & DU Standards): Ang ${distanceToPoleMeters.toStringAsFixed(1)}m ay lagpas sa 30m maximum service span. Kinakailangan magtayo ng secondary intermediate pole (inter-pole) para hindi sumayad ang wire.';
     }
-    return '✅ PEC Compliant: Pasok sa 30m maximum span limit (Clearance: ${requiredVerticalClearanceMeters.toStringAsFixed(1)}m ${crossesRoadway ? 'Tawid-Kalsada' : 'Driveway'}).';
+    return '✅ PEC 2017 Sec. 2.30.2.3(B) Compliant (Page 73): Pasok sa 30m span limit (Clearance: ${requiredVerticalClearanceMeters.toStringAsFixed(1)}m DU / ${pecMinimumResidentialClearanceMeters.toStringAsFixed(1)}m PEC min ${crossesRoadway ? 'Tawid-Kalsada' : 'Residential Driveway'}).';
   }
 
   Map<String, dynamic> toJson() => {
