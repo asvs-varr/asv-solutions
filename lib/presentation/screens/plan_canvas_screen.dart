@@ -31,6 +31,8 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
   bool _isUnderlayVisible = true;
   final double _underlayOpacity = 0.65;
   String? _blueprintPath;
+  bool _showLabels = true;
+  CanvasPoint? _selectedPoint;
 
   bool get _hasBlueprintFile =>
       _blueprintPath != null && _blueprintPath!.isNotEmpty && File(_blueprintPath!).existsSync();
@@ -47,11 +49,11 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
       _autoGenerateFromAppliances(widget.project!.applianceLoads);
     } else {
       _points = [
-        CanvasPoint(id: 'pt-1', type: 'PANEL', label: 'Main Panel (LP-1)', x: 60, y: 150),
-        CanvasPoint(id: 'pt-2', type: 'SWITCH_1G', label: '1G Switch Living', x: 160, y: 150),
-        CanvasPoint(id: 'pt-3', type: 'LIGHT', label: 'LED Drop Light', x: 260, y: 150),
-        CanvasPoint(id: 'pt-4', type: 'OUTLET_DUPLEX', label: 'Duplex CO Master', x: 160, y: 260),
-        CanvasPoint(id: 'pt-5', type: 'ACU', label: '2.0HP Inverter ACU', x: 280, y: 260),
+        CanvasPoint(id: 'pt-1', type: 'PANEL', label: 'MDP', x: 60, y: 150),
+        CanvasPoint(id: 'pt-2', type: 'SWITCH_1G', label: 'SW-1', x: 160, y: 150),
+        CanvasPoint(id: 'pt-3', type: 'LIGHT', label: 'L-1', x: 260, y: 150),
+        CanvasPoint(id: 'pt-4', type: 'OUTLET_DUPLEX', label: 'CO-1', x: 160, y: 260),
+        CanvasPoint(id: 'pt-5', type: 'ACU', label: 'ACU-1', x: 280, y: 260),
       ];
       _routes = [
         ConduitRoute(id: 'rt-1', fromPointId: 'pt-1', toPointId: 'pt-2', measuredLengthMeters: 4.5),
@@ -62,32 +64,51 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
     }
   }
 
+  String _getShorthandLabel(String pointType, String originalName, int index) {
+    if (pointType == 'PANEL') return 'MDP';
+    if (pointType == 'ACU') return 'ACU-$index';
+    if (pointType == 'LIGHT') return 'L-$index';
+    if (pointType == 'SWITCH_1G') return 'S1-$index';
+    if (pointType == 'OUTLET_DUPLEX') {
+      final lower = originalName.toLowerCase();
+      if (lower.contains('gfci') || lower.contains('shaver') || lower.contains('bath')) return 'GFCI-$index';
+      if (lower.contains('ref') || lower.contains('refrigerator')) return 'REF-$index';
+      if (lower.contains('wash') || lower.contains('laundry')) return 'WM-$index';
+      if (lower.contains('range') || lower.contains('cook') || lower.contains('induction')) return 'RO-$index';
+      return 'CO-$index';
+    }
+    return 'D-$index';
+  }
+
   void _autoGenerateFromAppliances(List<ApplianceItem> appliances) {
     _points = [
-      CanvasPoint(id: 'pt-panel', type: 'PANEL', label: 'Main Panel (LP-1)', x: 60, y: 150),
+      CanvasPoint(id: 'pt-panel', type: 'PANEL', label: 'MDP', x: 80, y: 140),
     ];
     _routes = [];
 
-    double curX = 160.0;
-    double curY = 100.0;
+    // Auto-spread nicely inside available area
+    double curX = 180.0;
+    double curY = 140.0;
     int index = 1;
 
     for (final app in appliances) {
       for (int i = 0; i < app.quantity; i++) {
         final id = 'pt-$index';
         String pointType = 'OUTLET_DUPLEX';
-        if (app.name.toLowerCase().contains('aircon')) {
+        if (app.name.toLowerCase().contains('aircon') || app.name.toLowerCase().contains('acu')) {
           pointType = 'ACU';
-        } else if (app.name.toLowerCase().contains('light') || app.name.toLowerCase().contains('fan')) {
+        } else if (app.name.toLowerCase().contains('light') || app.name.toLowerCase().contains('fan') || app.name.toLowerCase().contains('luminaire') || app.name.toLowerCase().contains('led')) {
           pointType = 'LIGHT';
         } else if (app.name.toLowerCase().contains('switch')) {
           pointType = 'SWITCH_1G';
         }
 
+        final compactLabel = _getShorthandLabel(pointType, app.name, index);
+
         _points.add(CanvasPoint(
           id: id,
           type: pointType,
-          label: '${app.name} #${i + 1}',
+          label: compactLabel,
           x: curX,
           y: curY,
           circuitNumber: app.isDedicatedCircuit ? index : 1,
@@ -102,23 +123,143 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
           measuredLengthMeters: app.isDedicatedCircuit ? 8.5 : 4.0,
         ));
 
-        curX += 90.0;
-        if (curX > 320.0) {
-          curX = 140.0;
-          curY += 75.0;
+        curX += 95.0;
+        if (curX > 400.0) {
+          curX = 180.0;
+          curY += 85.0;
         }
         index++;
       }
     }
   }
 
+  void _handleCanvasTap(TapUpDetails details) {
+    // Check if tapping an existing point (within 24px radius)
+    final tapX = details.localPosition.dx;
+    final tapY = details.localPosition.dy;
+
+    CanvasPoint? tappedPt;
+    for (final pt in _points.reversed) {
+      final dist = (Offset(pt.x, pt.y) - Offset(tapX, tapY)).distance;
+      if (dist <= 24.0) {
+        tappedPt = pt;
+        break;
+      }
+    }
+
+    if (tappedPt != null) {
+      setState(() {
+        _selectedPoint = tappedPt;
+      });
+      _showPointInspectionSheet(tappedPt);
+      return;
+    }
+
+    // Otherwise add new device if empty space tapped
+    _addPointAt(details);
+  }
+
+  void _showPointInspectionSheet(CanvasPoint pt) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: BanaagTheme.surfaceCard,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(18.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: CanvasPainter.getColorForType(pt.type).withValues(alpha: 0.2),
+                      shape: BoxShape.circle,
+                      border: Border.all(color: CanvasPainter.getColorForType(pt.type), width: 1.5),
+                    ),
+                    child: Center(
+                      child: Text(
+                        pt.label,
+                        style: TextStyle(
+                          color: CanvasPainter.getColorForType(pt.type),
+                          fontWeight: FontWeight.bold,
+                          fontSize: 10,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '${pt.type.replaceAll('_', ' ')} (${pt.label})',
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white),
+                        ),
+                        Text(
+                          'Coordinates: X: ${pt.x.toStringAsFixed(0)}px, Y: ${pt.y.toStringAsFixed(0)}px • Branch Ckt #${pt.circuitNumber}',
+                          style: const TextStyle(fontSize: 11, color: BanaagTheme.textMuted),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline, color: BanaagTheme.alertRed),
+                    tooltip: 'Remove Point',
+                    onPressed: () {
+                      setState(() {
+                        _points.removeWhere((p) => p.id == pt.id);
+                        _routes.removeWhere((r) => r.fromPointId == pt.id || r.toPointId == pt.id);
+                        _selectedPoint = null;
+                        if (widget.project != null) {
+                          widget.project!.canvasPoints = _points;
+                          widget.project!.conduitRoutes = _routes;
+                          ProjectRepository.instance.updateProject(widget.project!);
+                        }
+                      });
+                      Navigator.pop(ctx);
+                    },
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              const Divider(color: Colors.white12),
+              const SizedBox(height: 6),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'PEC Wiring Method: 20 mm Ø PVC • 2 - 3.5 mm² THHN',
+                    style: const TextStyle(fontSize: 11, color: BanaagTheme.primaryAmber),
+                  ),
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: const Text('Close', style: TextStyle(color: Colors.white70)),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   void _addPointAt(TapUpDetails details) {
     setState(() {
       final newId = 'pt-${_points.length + 1}';
+      final compactLabel = _getShorthandLabel(_selectedTool, _selectedTool, _points.length + 1);
       _points.add(CanvasPoint(
         id: newId,
         type: _selectedTool,
-        label: 'Device ${_points.length + 1}',
+        label: compactLabel,
         x: details.localPosition.dx,
         y: details.localPosition.dy,
       ));
@@ -141,7 +282,7 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('📐 Plan Canvas & Auto-Takeoff'),
+        title: const Text('📐 Plan Canvas & Takeoff'),
         actions: [
           // 1. Quick Room Dimensions Generator
           IconButton(
@@ -294,11 +435,23 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                 DxfExportGuideDialog.show(context);
               } else if (val == 'toggle_underlay') {
                 setState(() => _isUnderlayVisible = !_isUnderlayVisible);
+              } else if (val == 'toggle_labels') {
+                setState(() => _showLabels = !_showLabels);
               } else if (val == 'pick_underlay') {
                 _pickNewUnderlay();
               }
             },
             itemBuilder: (ctx) => [
+              PopupMenuItem(
+                value: 'toggle_labels',
+                child: Row(
+                  children: [
+                    Icon(_showLabels ? Icons.label_off_outlined : Icons.label_outlined, color: BanaagTheme.primaryAmber, size: 18),
+                    const SizedBox(width: 10),
+                    Text(_showLabels ? 'Hide Device Badges' : 'Show Device Badges', style: const TextStyle(color: Colors.white, fontSize: 13)),
+                  ],
+                ),
+              ),
               if (_hasBlueprintFile)
                 PopupMenuItem(
                   value: 'toggle_underlay',
@@ -410,7 +563,7 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
           // Interactive 2D Grid Canvas with Blueprint Floor Plan Underlay
           Expanded(
             child: GestureDetector(
-              onTapUp: _addPointAt,
+              onTapUp: _handleCanvasTap,
               child: Container(
                 color: const Color(0xFF16191F),
                 child: Stack(
@@ -438,6 +591,8 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                         routes: _routes,
                         roomGeometry: _roomGeometry,
                         isHeatmap: _isHeatmapVisible,
+                        showLabels: _showLabels,
+                        selectedPoint: _selectedPoint,
                       ),
                       child: Container(),
                     ),
@@ -610,12 +765,16 @@ class CanvasPainter extends CustomPainter {
   final List<ConduitRoute> routes;
   final RoomGeometry? roomGeometry;
   final bool isHeatmap;
+  final bool showLabels;
+  final CanvasPoint? selectedPoint;
 
   CanvasPainter({
     required this.points,
     required this.routes,
     this.roomGeometry,
     this.isHeatmap = false,
+    this.showLabels = true,
+    this.selectedPoint,
   });
 
   @override
@@ -670,33 +829,67 @@ class CanvasPainter extends CustomPainter {
 
     // Draw Points
     for (final pt in points) {
-      final pointPaint = Paint()..color = _getColorForType(pt.type);
-      canvas.drawCircle(Offset(pt.x, pt.y), 12, pointPaint);
+      final isSel = selectedPoint?.id == pt.id;
+      final pointPaint = Paint()..color = getColorForType(pt.type);
+
+      // Selection halo
+      if (isSel) {
+        canvas.drawCircle(
+          Offset(pt.x, pt.y),
+          17,
+          Paint()
+            ..color = BanaagTheme.primaryAmber.withValues(alpha: 0.35)
+            ..style = PaintingStyle.fill,
+        );
+      }
+
+      canvas.drawCircle(Offset(pt.x, pt.y), isSel ? 13 : 11, pointPaint);
 
       // Border
       canvas.drawCircle(
         Offset(pt.x, pt.y),
-        12,
+        isSel ? 13 : 11,
         Paint()
-          ..color = Colors.white
+          ..color = isSel ? BanaagTheme.primaryAmber : Colors.white
           ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.5,
+          ..strokeWidth = isSel ? 2.5 : 1.5,
       );
 
-      // Label (compact display to avoid overlapping)
-      final displayLabel = pt.label.contains('(') ? pt.label.split('(').first.trim() : pt.label;
-      final textSpan = TextSpan(
-        text: displayLabel,
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 9,
-          fontWeight: FontWeight.bold,
-          backgroundColor: Color(0xCC161922),
-        ),
-      );
-      final textPainter = TextPainter(text: textSpan, textDirection: TextDirection.ltr);
-      textPainter.layout();
-      textPainter.paint(canvas, Offset(pt.x - (textPainter.width / 2), pt.y + 14));
+      // Compact Badge Label
+      if (showLabels) {
+        final displayLabel = pt.label.length > 8 ? pt.label.substring(0, 8) : pt.label;
+        final textSpan = TextSpan(
+          text: displayLabel,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 8.5,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.2,
+          ),
+        );
+        final textPainter = TextPainter(text: textSpan, textDirection: TextDirection.ltr);
+        textPainter.layout();
+
+        final bgRect = RRect.fromRectAndRadius(
+          Rect.fromLTWH(
+            pt.x - (textPainter.width / 2) - 4,
+            pt.y + 13,
+            textPainter.width + 8,
+            textPainter.height + 3,
+          ),
+          const Radius.circular(4),
+        );
+
+        final bgPaint = Paint()..color = const Color(0xEE11151E);
+        final borderPaint = Paint()
+          ..color = isSel ? BanaagTheme.primaryAmber : Colors.white24
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 0.8;
+
+        canvas.drawRRect(bgRect, bgPaint);
+        canvas.drawRRect(bgRect, borderPaint);
+        textPainter.paint(canvas, Offset(pt.x - (textPainter.width / 2), pt.y + 14.5));
+      }
     }
   }
 
@@ -772,7 +965,7 @@ class CanvasPainter extends CustomPainter {
     painter.paint(canvas, Offset(x, y));
   }
 
-  Color _getColorForType(String type) {
+  static Color getColorForType(String type) {
     switch (type) {
       case 'PANEL':
         return Colors.redAccent;

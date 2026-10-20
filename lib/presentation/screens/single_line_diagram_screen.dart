@@ -172,7 +172,7 @@ class _SingleLineDiagramScreenState extends State<SingleLineDiagramScreen> with 
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Alinsunod sa PEC 2017 Article 2.15 & 4.08, magtatalaga ng dedicated sub-feeder breaker mula sa Main Panel papunta sa bagong subpanel na ito.',
+              'In accordance with PEC 2017 Article 2.15 & 4.08, a dedicated sub-feeder overcurrent protection device (OCPD) will be routed from the Main Distribution Panel to supply this subpanel.',
               style: TextStyle(color: BanaagTheme.textMuted, fontSize: 12, height: 1.3),
             ),
             const SizedBox(height: 14),
@@ -780,23 +780,23 @@ class _SingleLineDiagramScreenState extends State<SingleLineDiagramScreen> with 
   final TransformationController _transformController = TransformationController();
 
   Widget _buildSchematicView() {
-    final canvasWidth = 960.0;
-    final canvasHeight = 280.0 + (_sldData.branchCircuits.length * 84.0);
+    final canvasWidth = 760.0;
+    final canvasHeight = 240.0 + (_sldData.branchCircuits.length * 84.0);
     return Stack(
       children: [
         InteractiveViewer(
           transformationController: _transformController,
           constrained: false,
-          boundaryMargin: const EdgeInsets.all(120.0),
-          minScale: 0.3,
-          maxScale: 4.0,
+          boundaryMargin: const EdgeInsets.all(80.0),
+          minScale: 0.25,
+          maxScale: 3.5,
           child: Container(
             width: canvasWidth,
             height: canvasHeight,
-            padding: const EdgeInsets.all(32.0),
+            padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 24.0),
             color: const Color(0xFF0D1117), // Blueprint dark CAD canvas
             child: CustomPaint(
-              size: Size(canvasWidth - 64, canvasHeight - 64),
+              size: Size(canvasWidth - 40, canvasHeight - 48),
               painter: SldSchematicPainter(
                 sldData: _sldData,
                 onCircuitTap: _editCircuit,
@@ -806,11 +806,11 @@ class _SingleLineDiagramScreenState extends State<SingleLineDiagramScreen> with 
         ),
         // Floating Zoom & Reset Toolbar
         Positioned(
-          top: 14,
-          right: 14,
+          top: 12,
+          right: 12,
           child: Container(
             decoration: BoxDecoration(
-              color: const Color(0xFF1B2028).withValues(alpha: 0.90),
+              color: const Color(0xFF1B2028).withValues(alpha: 0.92),
               borderRadius: BorderRadius.circular(10),
               border: Border.all(color: Colors.white24),
               boxShadow: [
@@ -830,15 +830,22 @@ class _SingleLineDiagramScreenState extends State<SingleLineDiagramScreen> with 
                   onPressed: () {
                     final Matrix4 current = _transformController.value;
                     // ignore: deprecated_member_use
-                    _transformController.value = current.clone()..scale(0.85, 0.85);
+                    _transformController.value = current.clone()..scale(0.80, 0.80);
                   },
                 ),
                 Container(width: 1, height: 20, color: Colors.white12),
-                IconButton(
-                  icon: const Icon(Icons.center_focus_strong, color: BanaagTheme.primaryAmber, size: 20),
-                  tooltip: 'Fit Canvas / Reset View',
+                TextButton.icon(
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    minimumSize: Size.zero,
+                  ),
+                  icon: const Icon(Icons.fit_screen, color: BanaagTheme.primaryAmber, size: 16),
+                  label: const Text('FIT', style: TextStyle(color: BanaagTheme.primaryAmber, fontSize: 11, fontWeight: FontWeight.bold)),
                   onPressed: () {
-                    _transformController.value = Matrix4.identity();
+                    final screenWidth = MediaQuery.of(context).size.width;
+                    final targetScale = (screenWidth / 780.0).clamp(0.40, 1.0);
+                    // ignore: deprecated_member_use
+                    _transformController.value = Matrix4.identity()..scale(targetScale, targetScale);
                   },
                 ),
                 Container(width: 1, height: 20, color: Colors.white12),
@@ -848,7 +855,7 @@ class _SingleLineDiagramScreenState extends State<SingleLineDiagramScreen> with 
                   onPressed: () {
                     final Matrix4 current = _transformController.value;
                     // ignore: deprecated_member_use
-                    _transformController.value = current.clone()..scale(1.20, 1.20);
+                    _transformController.value = current.clone()..scale(1.25, 1.25);
                   },
                 ),
               ],
