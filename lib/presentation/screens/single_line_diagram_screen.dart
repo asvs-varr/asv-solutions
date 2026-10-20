@@ -242,7 +242,7 @@ class _SingleLineDiagramScreenState extends State<SingleLineDiagramScreen> with 
                 Navigator.pop(ctx);
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
-                    content: Text('⚡ Naidagdag ang Subpanel $tag! Naka-link na ang sub-feeder sa Main Panel.'),
+                    content: Text('⚡ Subpanel $tag added successfully! Sub-feeder linked to Main Distribution Panel.'),
                     backgroundColor: BanaagTheme.successGreen,
                   ),
                 );
@@ -519,7 +519,7 @@ class _SingleLineDiagramScreenState extends State<SingleLineDiagramScreen> with 
       ));
     });
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('⚡ Added Circuit C${_sldData.branchCircuits.length}! Pindutin para i-customize.')),
+      SnackBar(content: Text('⚡ Added Circuit C${_sldData.branchCircuits.length}! Tap to configure parameters.')),
     );
   }
 

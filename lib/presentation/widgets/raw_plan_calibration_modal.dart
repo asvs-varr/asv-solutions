@@ -254,20 +254,20 @@ class _RawPlanCalibrationModalState extends State<RawPlanCalibrationModal> {
               ),
               const SizedBox(height: 6),
               const Text(
-                'I-set ang totoong sukat ng kwarto mula sa dalawang kilalang pader upang ma-scale nang eksakto ang wiring runs.',
+                'Set the verified room dimensions from known boundary walls to establish precise CAD/vector scaling for branch circuit raceways.',
                 style: TextStyle(fontSize: 11, color: BanaagTheme.textMuted, height: 1.3),
               ),
               const SizedBox(height: 12),
               Row(
                 children: [
                   Expanded(
-                    child: _dimensionField('Haba / Length (Meters)', _calibratedLengthMeters.toString(), (val) {
+                    child: _dimensionField('Length (Meters)', _calibratedLengthMeters.toString(), (val) {
                       setState(() => _calibratedLengthMeters = double.tryParse(val) ?? 8.0);
                     }),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
-                    child: _dimensionField('Lapad / Width (Meters)', _calibratedWidthMeters.toString(), (val) {
+                    child: _dimensionField('Width (Meters)', _calibratedWidthMeters.toString(), (val) {
                       setState(() => _calibratedWidthMeters = double.tryParse(val) ?? 6.0);
                     }),
                   ),
@@ -277,7 +277,7 @@ class _RawPlanCalibrationModalState extends State<RawPlanCalibrationModal> {
               Row(
                 children: [
                   Expanded(
-                    child: _dimensionField('Taas ng Kisame (Meters)', _ceilingHeightMeters.toString(), (val) {
+                    child: _dimensionField('Ceiling Height (Meters)', _ceilingHeightMeters.toString(), (val) {
                       setState(() => _ceilingHeightMeters = double.tryParse(val) ?? 2.7);
                     }),
                   ),
@@ -286,7 +286,7 @@ class _RawPlanCalibrationModalState extends State<RawPlanCalibrationModal> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('Uri ng Kwarto (PEC)', style: TextStyle(color: BanaagTheme.textMuted, fontSize: 11)),
+                        const Text('Space / Room Type (PEC)', style: TextStyle(color: BanaagTheme.textMuted, fontSize: 11)),
                         const SizedBox(height: 6),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
@@ -382,7 +382,7 @@ class _RawPlanCalibrationModalState extends State<RawPlanCalibrationModal> {
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             ),
             icon: const Icon(Icons.flash_on, size: 20),
-            label: const Text('ILAGAY ANG PEC ELECTRICAL LAYOUT SA CANVAS', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+            label: const Text('APPLY PEC ELECTRICAL LAYOUT TO CANVAS', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
             onPressed: () {
               final result = PecAutoPlacementEngine.generateLayout(
                 lengthMeters: _calibratedLengthMeters,
@@ -425,11 +425,11 @@ class _RawPlanCalibrationModalState extends State<RawPlanCalibrationModal> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Subukan ang CAD Ingestion Scenario:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.white70)),
+              const Text('Select CAD Ingestion Scenario:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.white70)),
               const SizedBox(height: 8),
-              _radioChoice('messy_student', 'Messy / Student File (Lahat sa "Layer 0", walang electrical layers)', Icons.warning_amber),
-              _radioChoice('semi_compliant', 'Semi-Compliant (May ACU/CO text tags pero hindi standard ang layer)', Icons.rule),
-              _radioChoice('fully_compliant', '100% Industry Standard (May E-LITE, E-POWR, A-WALL layers)', Icons.verified),
+              _radioChoice('messy_student', 'Messy / Non-standard Drawing (All entities on "Layer 0", missing electrical layers)', Icons.warning_amber),
+              _radioChoice('semi_compliant', 'Semi-Compliant (Has ACU/CO text tags on non-standard layers)', Icons.rule),
+              _radioChoice('fully_compliant', '100% Industry Standard (Standard E-LITE, E-POWR, A-WALL layers)', Icons.verified),
             ],
           ),
         ),
@@ -496,7 +496,7 @@ class _RawPlanCalibrationModalState extends State<RawPlanCalibrationModal> {
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             ),
             icon: const Icon(Icons.input_rounded, size: 20),
-            label: const Text('ILAGAY ANG NA-FILTER NA CAD PLAN SA CANVAS', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+            label: const Text('APPLY FILTERED CAD PLAN TO CANVAS', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
             onPressed: () {
               final geom = RoomGeometry(
                 leftWallMeters: parseResult.boundingHeightMeters.clamp(4.0, 25.0),

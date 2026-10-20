@@ -2,13 +2,13 @@
 // Enforces standard color identification for branch circuits, feeders, switch legs, and grounding.
 
 enum ConductorFunction {
-  line1('Line 1 (Phase A / Ungrounded)', 'Black', 0xFF212121, 'Pangunahing live/hot wire para sa single-phase at three-phase distribution.'),
-  line2('Line 2 (Phase B / Ungrounded)', 'Red', 0xFFE53935, 'Pangalawang live/hot wire sa 230V 1-phase 2-wire o 3-phase circuits.'),
-  line3('Line 3 (Phase C / Ungrounded)', 'Blue', 0xFF1E88E5, 'Pangatlong live wire sa 3-phase industrial/commercial installations.'),
-  neutral('Neutral (Grounded Conductor)', 'White / Light Gray', 0xFFECEFF1, 'Mandatory grounded conductor identification alinsunod sa PEC 2.0.1.6.'),
-  ground('Equipment Grounding (EGC)', 'Green / Green with Yellow Stripe', 0xFF43A047, 'Proteksyon laban sa ground fault at kuryente alinsunod sa PEC 2.50.6.10.'),
-  switchLeg('Switch Leg (Return to Light)', 'Yellow', 0xFFFDD835, 'Wire mula sa saklay/switch papunta sa lighting fixture luminaire.'),
-  traveler('3-Way / 4-Way Travelers', 'Orange / Yellow', 0xFFFB8C00, 'Interconnecting lines sa pagitan ng multi-location switches (PEC 4.4.1.2).');
+  line1('Line 1 (Phase A / Ungrounded)', 'Black', 0xFF212121, 'Primary ungrounded phase conductor for single-phase and three-phase distribution.'),
+  line2('Line 2 (Phase B / Ungrounded)', 'Red', 0xFFE53935, 'Secondary ungrounded phase conductor for 230V 1-phase 2-wire or 3-phase circuits.'),
+  line3('Line 3 (Phase C / Ungrounded)', 'Blue', 0xFF1E88E5, 'Tertiary ungrounded phase conductor for 3-phase commercial and industrial systems.'),
+  neutral('Neutral (Grounded Conductor)', 'White / Light Gray', 0xFFECEFF1, 'Mandatory grounded conductor identification in compliance with PEC Art 2.0.1.6.'),
+  ground('Equipment Grounding Conductor (EGC)', 'Green / Green with Yellow Stripe', 0xFF43A047, 'Equipment grounding protection against ground-fault shock hazard per PEC Art 2.50.6.10.'),
+  switchLeg('Switch Leg (Return to Luminaire)', 'Yellow', 0xFFFDD835, 'Switched phase conductor routed from control switch to luminaire ballast/driver.'),
+  traveler('3-Way / 4-Way Travelers', 'Orange / Yellow', 0xFFFB8C00, 'Interconnecting switch travelers between multi-location control devices (PEC Art 4.4.1.2).');
 
   final String label;
   final String colorName;
@@ -46,7 +46,7 @@ class WiringColorCodingEngine {
         ConductorFunction.ground,
       ],
       pecCitation: 'PEC 2017 Art 2.0.1.6 & Art 2.50.6.10',
-      explanation: 'Karaniwang serbisyo sa Pilipinas (Meralco/Coops). Parehong may 115V to ground (total 230V line-to-line), kaya Black (Line 1) at Red (Line 2) ang ginagamit kasama ang Green para sa grounding.',
+      explanation: 'Standard Philippine distribution system (Meralco/Electric Cooperatives). Both legs carry ~115V to ground (230V line-to-line), designated Black (Line 1) and Red (Line 2) with Green Equipment Grounding Conductor.',
     ),
     PecColorCodeRule(
       circuitType: '230V 1-Phase with Neutral (Modern Distribution Transformers)',
@@ -57,7 +57,7 @@ class WiringColorCodingEngine {
         ConductorFunction.ground,
       ],
       pecCitation: 'PEC 2017 Art 2.0.1.6 & Art 3.10.1.12',
-      explanation: 'Kapag ang serbisyo ay may nakalaang Neutral conductor: Black (Line 1 / Hot), White (Neutral), at Green (Ground). Bawal gamitin ang puti o berde bilang ungrounded live conductor.',
+      explanation: 'For systems supplied with a grounded neutral conductor: Black (Line 1 / Hot), White (Neutral), and Green (Ground). White or green insulation is prohibited on ungrounded phase conductors.',
     ),
     PecColorCodeRule(
       circuitType: 'Lighting Branch & Switch Control Loop',
@@ -69,7 +69,7 @@ class WiringColorCodingEngine {
         ConductorFunction.ground,
       ],
       pecCitation: 'PEC 2017 Art 4.4.1.2 & Art 2.10.1.5',
-      explanation: 'Hot feed sa switch (Black), Switch leg patungo sa ilaw (Yellow), at Travelers para sa 3-way/4-way switches (Orange o Blue) upang madaling i-troubleshoot ng electrician.',
+      explanation: 'Continuous ungrounded phase feed to switch (Black), switch leg to luminaire load (Yellow), and travelers for 3-way/4-way switching circuits (Orange/Blue) for field maintenance safety.',
     ),
     PecColorCodeRule(
       circuitType: '230V/400V 3-Phase 4-Wire Wye Commercial/Industrial',
@@ -82,7 +82,7 @@ class WiringColorCodingEngine {
         ConductorFunction.ground,
       ],
       pecCitation: 'PEC 2017 Art 2.10.1.5(C) & Table 3.10.2.6',
-      explanation: 'Phase A = Black, Phase B = Red, Phase C = Blue, Neutral = White/Gray, Ground = Green. Kinakailangan ang permanent markings sa bawat panelboard.',
+      explanation: 'Phase A = Black, Phase B = Red, Phase C = Blue, Neutral = White/Gray, Ground = Green. Permanent phase marking is mandatory at all panelboards and disconnects.',
     ),
   ];
 

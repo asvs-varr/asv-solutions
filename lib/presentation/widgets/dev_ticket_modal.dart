@@ -86,7 +86,7 @@ class _DevTicketModalContentState extends State<DevTicketModalContent> {
     final title = _titleController.text.trim();
     if (title.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Mangyaring ilagay ang Title ng Dev Ticket')),
+        const SnackBar(content: Text('Please enter a Title for the Engineering Dev Ticket')),
       );
       return;
     }
@@ -114,7 +114,7 @@ class _DevTicketModalContentState extends State<DevTicketModalContent> {
       });
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('✅ Dev Ticket naitala sa local queue!'),
+          content: Text('✅ Dev Ticket recorded in local engineering queue!'),
           backgroundColor: BanaagTheme.successGreen,
         ),
       );
@@ -272,7 +272,7 @@ class _DevTicketModalContentState extends State<DevTicketModalContent> {
           controller: _titleController,
           decoration: InputDecoration(
             labelText: 'Ticket Title',
-            hintText: 'e.g. Maling breaker size sa ACU circuit...',
+            hintText: 'e.g., Incorrect OCPD breaker rating for ACU feeder...',
             filled: true,
             fillColor: BanaagTheme.surfaceCard,
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
@@ -285,8 +285,8 @@ class _DevTicketModalContentState extends State<DevTicketModalContent> {
           controller: _descController,
           maxLines: 3,
           decoration: InputDecoration(
-            labelText: 'Description / Reproduction steps (Optional)',
-            hintText: 'Detalye ng kailangang baguhin o ayusin...',
+            labelText: 'Description / Technical Scope (Optional)',
+            hintText: 'Technical details of required modification, PEC rule basis, or bug reproduction...',
             filled: true,
             fillColor: BanaagTheme.surfaceCard,
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
@@ -322,7 +322,7 @@ class _DevTicketModalContentState extends State<DevTicketModalContent> {
       return const Padding(
         padding: EdgeInsets.symmetric(vertical: 32),
         child: Center(
-          child: Text('Walang nakabinbing dev tickets.', style: TextStyle(color: BanaagTheme.textMuted)),
+          child: Text('No pending engineering dev tickets found.', style: TextStyle(color: BanaagTheme.textMuted)),
         ),
       );
     }

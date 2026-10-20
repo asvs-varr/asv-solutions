@@ -87,7 +87,7 @@ class ProjectRepository {
           checklist.addAll([
             PhaseCheckItem(id: 'r1', title: 'Chipping and conduit raceway installation complete'),
             PhaseCheckItem(id: 'r2', title: 'Minimum 150mm wire allowance left at all junction/utility boxes'),
-            PhaseCheckItem(id: 'r3', title: 'MANDATORY PRE-COVER PHOTO SIGN-OFF: Pader & Kisame verified before mason pour'),
+            PhaseCheckItem(id: 'r3', title: 'MANDATORY PRE-COVER PHOTO SIGN-OFF: Masonry walls & ceiling raceways verified before concrete pour'),
           ]);
           break;
         case ProjectPhaseType.trimOut:

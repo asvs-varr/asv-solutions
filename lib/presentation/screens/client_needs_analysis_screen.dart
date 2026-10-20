@@ -1055,25 +1055,25 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
               acuSpec = {
                 'hp': '0.75 HP Inverter ACU (Compact)',
                 'va': 750.0,
-                'note': 'Swak para sa maliit na kwarto (≤10 m²) para hindi over-specs o mag-short cycle',
+                'note': 'Optimal for compact spaces (≤10 m²) to prevent short-cycling and excessive starting inrush',
               };
             } else if (area <= 16.0) {
               acuSpec = {
                 'hp': '1.0 HP Inverter ACU',
                 'va': 950.0,
-                'note': 'Standard sizing para sa 11-16 m² na silid alinsunod sa cooling load',
+                'note': 'Standard branch circuit sizing for 11-16 m² spaces based on nominal thermal load',
               };
             } else if (area <= 23.0) {
               acuSpec = {
                 'hp': '1.5 HP Inverter ACU',
                 'va': 1650.0,
-                'note': 'Inirerekomenda para sa 17-23 m² Master Bedroom o malaking kwarto',
+                'note': 'Recommended branch feeder for 17-23 m² Master Bedroom or expansive living zones',
               };
             } else if (area <= 32.0) {
               acuSpec = {
                 'hp': '2.0 HP Inverter Split ACU',
                 'va': 1950.0,
-                'note': 'Sapat para sa 24-32 m² Living & Dining area',
+                'note': 'Adequate for 24-32 m² Living & Dining open floor plan layouts',
               };
             } else {
               acuSpec = {
@@ -1157,7 +1157,7 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
                   'isLighting': false,
                   'isDedicated': false,
                   'citation': 'PEC 2017 Art 2.10.3.3',
-                  'rule': 'Receptacle spacing rule (walang punto sa pader na higit 1.8m mula sa saksakan)',
+                  'rule': 'Receptacle spacing rule (no point along wall line greater than 1.8m from an outlet)',
                   'icon': Icons.power,
                 },
                 {
@@ -1168,7 +1168,7 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
                   'isLighting': false,
                   'isDedicated': false,
                   'citation': 'PEC 2017 Art 3.14.2.13(B) & Art 4.22.2.9',
-                  'rule': 'Mandatory Fan-Rated Heavy Duty Octagonal Box (suporta hanggang 16-32 kg vibration load)',
+                  'rule': 'Mandatory Fan-Rated Heavy Duty Octagonal Box (supports 16-32 kg dynamic vibration load)',
                   'icon': Icons.mode_fan_off_outlined,
                 },
                 {
@@ -1551,7 +1551,7 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                '⚡ Matagumpay na nailagay ang ${items.length} PEC appliances & citations sa $spaceName!',
+                '⚡ Applied ${items.length} PEC-compliant appliances & citations to $spaceName!',
                 style: const TextStyle(color: Colors.white, fontSize: 12),
               ),
             ),
@@ -1863,7 +1863,7 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
                               ),
                               const SizedBox(height: 2),
                               const Text(
-                                'Piliin ang appliances & outlets na sabay-sabay ipapasok sa kwarto:',
+                                'Select appliances & convenience outlets to batch allocate to this space:',
                                 style: TextStyle(color: BanaagTheme.textMuted, fontSize: 11),
                               ),
                             ],
@@ -1890,7 +1890,7 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
                       child: TextField(
                         style: const TextStyle(fontSize: 13),
                         decoration: InputDecoration(
-                          hintText: 'Maghanap ng appliance o outlet...',
+                          hintText: 'Search appliance, outlet, or lighting load...',
                           hintStyle: const TextStyle(color: BanaagTheme.textMuted, fontSize: 12),
                           prefixIcon: const Icon(Icons.search, size: 18, color: BanaagTheme.primaryAmber),
                           suffixIcon: searchQuery.isNotEmpty
@@ -2132,7 +2132,7 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
                           ),
                           icon: const Icon(Icons.check, size: 18),
                           label: Text(
-                            totalSelectedCount > 0 ? 'Ilagay sa Kwarto ($totalSelectedCount)' : 'Wala pang napili',
+                            totalSelectedCount > 0 ? 'Add to Space ($totalSelectedCount)' : 'No Items Selected',
                             style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                           ),
                           onPressed: totalSelectedCount == 0
@@ -2156,7 +2156,7 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(
                                       backgroundColor: BanaagTheme.successGreen,
-                                      content: Text('✅ $totalSelectedCount items naidagdag sa "$_activeSpaceName"!'),
+                                      content: Text('✅ $totalSelectedCount items added to "$_activeSpaceName"!'),
                                     ),
                                   );
                                 },
@@ -2370,7 +2370,7 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
                       children: [
                         const Icon(Icons.inbox_outlined, size: 48, color: Colors.white24),
                         const SizedBox(height: 12),
-                        Text('Walang nakalistang karga sa $_activeSpaceName.', style: const TextStyle(color: BanaagTheme.textMuted, fontSize: 13)),
+                        Text('No electrical loads assigned to $_activeSpaceName yet.', style: const TextStyle(color: BanaagTheme.textMuted, fontSize: 13)),
                         const SizedBox(height: 16),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.center,
@@ -2446,7 +2446,7 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
                               const Icon(Icons.lightbulb_outline, size: 18, color: BanaagTheme.textMuted),
                               const SizedBox(width: 10),
                               const Expanded(
-                                child: Text('Walang nakatalagang ilaw. I-tap ang "+ Add Light" para magdagdag.',
+                                child: Text('No lighting luminaires assigned yet. Tap "+ Add Light" to configure.',
                                     style: TextStyle(color: BanaagTheme.textMuted, fontSize: 11)),
                               ),
                             ],
@@ -2480,7 +2480,7 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
                               const Icon(Icons.power_outlined, size: 18, color: BanaagTheme.textMuted),
                               const SizedBox(width: 10),
                               const Expanded(
-                                child: Text('Walang outlets/appliances. Mag-add gamit ang Quick Presets o Custom Item.',
+                                child: Text('No convenience receptacles or dedicated equipment assigned. Tap "+ Add Outlet / Appliance" to configure.',
                                     style: TextStyle(color: BanaagTheme.textMuted, fontSize: 11)),
                               ),
                             ],
@@ -2875,7 +2875,7 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Pumili ng Panelboard Branch Circuit Number para sa kargang ito:',
+              const Text('Select Panelboard Branch Circuit OCPD designation for this load:',
                   style: TextStyle(color: BanaagTheme.textMuted, fontSize: 12)),
               const SizedBox(height: 12),
               Wrap(

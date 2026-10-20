@@ -90,7 +90,7 @@ class _BanaagProScreenState extends State<BanaagProScreen> {
                   const SizedBox(height: 12),
                   const Text('Contractor Prestige & Cloud Suite', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
                   const SizedBox(height: 4),
-                  const Text('Lahat ng PEC tools at project features ay 100% LIBRE. Ang PRO subscription ay para sa cosmetic branding, specialized visual themes, at unlimited cloud storage.',
+                  const Text('All PEC engineering tools, calculations, and compliance features are 100% FREE. The PRO subscription unlocks contractor letterhead branding, high-contrast jobsite themes, and cloud backup storage.',
                       style: TextStyle(color: BanaagTheme.textMuted, fontSize: 12)),
                   if (_securityEngine.activeToken != null) ...[
                     const SizedBox(height: 8),
@@ -123,7 +123,7 @@ class _BanaagProScreenState extends State<BanaagProScreen> {
             // Feature 1: Custom Proposal Letterhead & Branding
             const Text('1. Client Proposal Custom Branding', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
             const SizedBox(height: 6),
-            const Text('Tinatanggal ang "Powered by BANAAG" watermark at pinapalitan ng sarili mong kumpanya logo at letterhead sa lahat ng PDF quotations at As-built certificates.',
+            const Text('Replaces the "Powered by BANAAG" watermark with your company logo, official engineering credentials, and custom letterhead on all PDF quotations and As-Built drawings.',
                 style: TextStyle(color: BanaagTheme.textMuted, fontSize: 12)),
             const SizedBox(height: 12),
             Card(
@@ -169,9 +169,9 @@ class _BanaagProScreenState extends State<BanaagProScreen> {
             const SizedBox(height: 24),
 
             // Feature 2: Specialized Visual Themes
-            const Text('2. Specialized Field Themes', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            const Text('2. High-Visibility Jobsite Themes', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
             const SizedBox(height: 6),
-            const Text('Pumili ng high-contrast themes para madaling basahin sa ilalim ng matinding araw o minimalist themes para sa presentation sa opisina.',
+            const Text('Choose high-contrast themes optimized for direct outdoor glare during rough-in inspections or clean minimalist themes for executive client presentations.',
                 style: TextStyle(color: BanaagTheme.textMuted, fontSize: 12)),
             const SizedBox(height: 12),
             Card(
@@ -202,7 +202,7 @@ class _BanaagProScreenState extends State<BanaagProScreen> {
             // Feature 3: Unlimited Cloud Backup & Multi-Device Sync
             const Text('3. Multi-Device & Cloud Sync (Supabase PostgreSQL)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
             const SizedBox(height: 6),
-            const Text('Awtomatikong bina-backup ang lahat ng pre-cover photos, megger logs, at floor plans sa cloud para ma-access sa laptop o bagong cellphone.',
+            const Text('Automatically back up all pre-cover QA inspection photos, megger test certificates, and floor plans to cloud storage accessible across devices.',
                 style: TextStyle(color: BanaagTheme.textMuted, fontSize: 12)),
             const SizedBox(height: 12),
             Card(
@@ -263,7 +263,7 @@ class _BanaagProScreenState extends State<BanaagProScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Ilagay ang iyong Libreng Supabase Project URL at Anon Key para mag-auto backup ang lahat ng mga projects sa cloud.',
+              'Enter your project Supabase URL and Anon Key to enable automated cloud backups across all engineering projects.',
               style: TextStyle(fontSize: 12, color: BanaagTheme.textMuted),
             ),
             const SizedBox(height: 14),

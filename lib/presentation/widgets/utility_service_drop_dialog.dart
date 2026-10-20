@@ -223,15 +223,15 @@ class _UtilityServiceDropDialogState extends State<UtilityServiceDropDialog> {
             ),
             const SizedBox(height: 12),
 
-            // Tawid-Kalsada Switch (Roadway Crossing)
+            // Roadway Crossing Switch
             SwitchListTile(
               dense: true,
               contentPadding: EdgeInsets.zero,
-              title: const Text('Tatawid ba sa Kalsada / Public Street?', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+              title: const Text('Crosses Public Street / Roadway?', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
               subtitle: Text(
                 _crossesRoadway
-                    ? 'PEC Art 2.30.2.4: Minimum 5.5m (18ft) vertical road clearance para sa vehicular traffic.'
-                    : 'PEC Art 2.30.2.4: 4.5m (15ft) vertical clearance para sa residential driveway/yard.',
+                    ? 'PEC Art 2.30.2.4: Minimum 5.5m (18ft) vertical road clearance required over vehicular traffic.'
+                    : 'PEC Art 2.30.2.4: Minimum 4.5m (15ft) vertical clearance for residential driveways and footpaths.',
                 style: const TextStyle(fontSize: 11, color: BanaagTheme.textMuted),
               ),
               value: _crossesRoadway,
@@ -321,7 +321,7 @@ class _UtilityServiceDropDialogState extends State<UtilityServiceDropDialog> {
               maxLines: 2,
               decoration: InputDecoration(
                 labelText: 'Field Notes & Landmarking',
-                hintText: 'Hal: Katapat ng Tindahan ni Aling Nena, may nakakabit na transformer.',
+                hintText: 'e.g., Transformer pole directly opposite Lot 12; overhead secondary rack intact.',
                 hintStyle: const TextStyle(fontSize: 11, color: BanaagTheme.textMuted),
                 filled: true,
                 fillColor: BanaagTheme.surfaceCard,

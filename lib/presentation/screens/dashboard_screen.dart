@@ -483,22 +483,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 const Align(
                   alignment: Alignment.centerLeft,
                   child: Text(
-                    'Pumili ng Project Intake Mode (Batay sa sitwasyon sa Site):',
+                    'Select Project Intake Mode (Based on Jobsite Availability):',
                     style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: BanaagTheme.primaryAmber),
                   ),
                 ),
                 const SizedBox(height: 8),
                 _buildIntakeModeCard(
-                  title: '🗣️ Fast Site Interview Mode',
-                  subtitle: 'Walang plano / Maliit na bahay. Mabilisang interview sa may-ari; kusa nang magsu-suggest ang PEC package.',
+                  title: '🗣️ Rapid Site Assessment & Interview',
+                  subtitle: 'No architectural drawings / Small residential unit. Interactive client interview; automated PEC branch circuit recommendations.',
                   modeKey: 'SITE_INTERVIEW',
                   currentMode: intakeMode,
                   onSelect: (m) => setDialogState(() => intakeMode = m),
                 ),
                 const SizedBox(height: 6),
                 _buildIntakeModeCard(
-                  title: '📸 Blueprint Picture Calibration',
-                  subtitle: 'May dalang papel na plano. Kunan ng camera sa site at i-tag ang kwarto gamit ang Type Box.',
+                  title: '📸 Blueprint Photo & Plan Takeoff',
+                  subtitle: 'Physical paper blueprint available. Capture on-site or upload image to extract room boundaries & dimensional scaling.',
                   modeKey: 'BLUEPRINT_PHOTO',
                   currentMode: intakeMode,
                   onSelect: (m) => setDialogState(() => intakeMode = m),
@@ -583,8 +583,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ],
                 const SizedBox(height: 6),
                 _buildIntakeModeCard(
-                  title: '📐 AutoCAD .DXF Direct Import',
-                  subtitle: 'May CAD file mula sa arkitekto. 1-click auto-detect ng pader, text, at electrical layout.',
+                  title: '📐 AutoCAD .DXF Vector Import',
+                  subtitle: 'Architectural CAD drawing available. Automated layer parsing for walls, room boundaries, and electrical fixtures.',
                   modeKey: 'AUTOCAD_DXF',
                   currentMode: intakeMode,
                   onSelect: (m) => setDialogState(() => intakeMode = m),

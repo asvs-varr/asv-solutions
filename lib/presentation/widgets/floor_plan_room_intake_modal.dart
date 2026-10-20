@@ -112,13 +112,13 @@ class _FloorPlanRoomIntakeModalState extends State<FloorPlanRoomIntakeModal> {
           children: [
             TextField(
               controller: nameCtrl,
-              decoration: const InputDecoration(labelText: 'Pangalan ng Kwarto'),
+              decoration: const InputDecoration(labelText: 'Space / Room Name'),
             ),
             const SizedBox(height: 12),
             TextField(
               controller: sqmCtrl,
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(labelText: 'Sukat (m² / sq.m)'),
+              decoration: const InputDecoration(labelText: 'Floor Area (m² / sq.m)'),
             ),
           ],
         ),
@@ -224,7 +224,7 @@ class _FloorPlanRoomIntakeModalState extends State<FloorPlanRoomIntakeModal> {
                         const CircularProgressIndicator(color: BanaagTheme.primaryAmber),
                         const SizedBox(height: 16),
                         const Text(
-                          'Sina-scan ang mga kwarto at sukat (m²)...',
+                          'Detecting room boundaries and dimensions (m²)...',
                           style: TextStyle(color: Colors.white70, fontSize: 13),
                         ),
                         const SizedBox(height: 6),
@@ -285,17 +285,17 @@ class _FloorPlanRoomIntakeModalState extends State<FloorPlanRoomIntakeModal> {
                                     ),
                                     const SizedBox(height: 4),
                                     Text(
-                                      '${_rooms.length} Kwarto ang natukoy',
+                                      '${_rooms.length} Spaces Identified',
                                       style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.white),
                                     ),
                                     const SizedBox(height: 2),
                                     Text(
-                                      'Kabuuang Sukat: ${_totalArea.toStringAsFixed(1)} m²',
+                                      'Total Floor Area: ${_totalArea.toStringAsFixed(1)} m²',
                                       style: const TextStyle(fontSize: 12, color: BanaagTheme.primaryAmber),
                                     ),
                                     const SizedBox(height: 6),
                                     const Text(
-                                      'I-tap ang kwarto para i-edit o magdagdag gamit ang chips sa ibaba.',
+                                      'Tap any space to edit or add new spaces using the action chips below.',
                                       style: TextStyle(fontSize: 10, color: BanaagTheme.textMuted),
                                     ),
                                   ],
@@ -396,7 +396,7 @@ class _FloorPlanRoomIntakeModalState extends State<FloorPlanRoomIntakeModal> {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           const Text(
-                            'Mga Kwarto para sa Load Tally:',
+                            'Spaces Configured for PEC Load Schedule:',
                             style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.white),
                           ),
                           Text(

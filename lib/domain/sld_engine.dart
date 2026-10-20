@@ -155,7 +155,7 @@ class SingleLineDiagramData {
     {
       'topic': 'Feeder Demand Factor',
       'citation': 'PEC 2017 Table 2.20.3.3',
-      'formula': 'Unang 3,000 VA @ 100% Demand, Natitirang karga @ 35%-40% Residential Demand Factor.',
+      'formula': 'First 3,000 VA @ 100% Demand, Remainder of general lighting/receptacle load @ 35% Demand Factor.',
       'computed': 'Total Connected: ${feeder.totalConnectedVA.toStringAsFixed(0)} VA ➔ Net Demand: ${feeder.netDemandVA.toStringAsFixed(0)} VA (${feeder.netCurrentAmps.toStringAsFixed(1)} A)',
     },
     {

@@ -44,38 +44,38 @@ class _SiteInspectionAssessmentDialogState extends State<SiteInspectionAssessmen
   final List<Map<String, dynamic>> _structureOptions = [
     {
       'title': 'Concrete / CHB Masonry',
-      'subtitle': 'Pader na hollow block o ibinuhos na poste at beam',
+      'subtitle': 'Concrete hollow block (CHB) walls, poured concrete columns and beams',
       'icon': Icons.foundation,
-      'raceway': 'Schedule 40 Thick-Wall uPVC Pipe (Chipping & Embedment)',
-      'box': 'Deep PVC Utility & Junction Box with Solvent Cement',
-      'fastener': 'Masonry Tox #6/#8 + Stainless Steel Wood/Tox Screws',
+      'raceway': 'Schedule 40 Thick-Wall uPVC Conduit (Chipping & Concrete Embedment)',
+      'box': 'Deep PVC Utility & Junction Box with Solvent Cement Welds',
+      'fastener': 'Masonry Expansion Anchors #6/#8 + Stainless Steel Fasteners',
       'codeRef': 'PEC 2017 Art 3.52: Rigid Polyvinyl Chloride Conduit (Type PVC)'
     },
     {
       'title': 'Timber / Wood Frame',
-      'subtitle': 'Kahoy na kisame, trusses, o kahoy na partition walls',
+      'subtitle': 'Timber trusses, wood ceiling joists, or wood partition framing',
       'icon': Icons.park,
-      'raceway': 'Electrical Metallic Tubing (EMT) o Metal Clad (MC) Cable',
-      'box': 'Galvanized Octagonal/Deep Metal Box (with ground screw)',
-      'fastener': 'Wood Screws / Lag Screws with One-Hole Steel Straps',
+      'raceway': 'Electrical Metallic Tubing (EMT) or Metal Clad (MC) Armored Cable',
+      'box': 'Galvanized Octagonal/Square Steel Box (Mandatory Ground Screw)',
+      'fastener': 'Heavy-duty Wood Screws with Single-Hole Steel Conduit Straps',
       'codeRef': 'PEC 2017 Art 3.58 & Art 3.30: Metal Raceways in Combustible Framing'
     },
     {
       'title': 'Light Steel Frame / Drywall',
-      'subtitle': 'Furring channels, stud partitions, o hardiflex ceiling',
+      'subtitle': 'Metal studs, C-furring ceiling channels, or fiber-cement partitions',
       'icon': Icons.grid_view,
-      'raceway': 'Flexible Metallic Conduit (FMC) o EMT na may Bushings',
-      'box': 'Handy Metal Box na may Conduit Bushings at Locknuts',
-      'fastener': 'Wafer Head Metal-to-Metal Drill Screws',
+      'raceway': 'Flexible Metallic Conduit (FMC) or EMT with Insulating Bushings',
+      'box': 'Pressed Steel Utility Box with Locknuts and Anti-Short Bushings',
+      'fastener': 'Wafer-Head Self-Drilling Tek Screws',
       'codeRef': 'PEC 2017 Art 3.48 & Art 3.0.1.4: Protection Against Physical Damage'
     },
     {
       'title': 'Exposed Industrial Ceiling',
-      'subtitle': 'Bukas na bubong, steel trusses, slab soffit (Loft style)',
+      'subtitle': 'Unfinished roof framing, open web steel joists, or exposed slab soffit',
       'icon': Icons.roofing,
-      'raceway': 'Intermediate Metal Conduit (IMC) o Hot-Dip Galvanized EMT',
-      'box': 'Cast Metal Conduit Bodies (LB, LL, T) with Gasketed Covers',
-      'fastener': 'Beam Clamps, Threaded Rods, Unistrut Channels & Caddy Clips',
+      'raceway': 'Intermediate Metal Conduit (IMC) or Hot-Dip Galvanized EMT',
+      'box': 'Malleable Iron / Cast Aluminum Conduit Bodies (LB, LL, T) with Gasketed Covers',
+      'fastener': 'Beam Clamps, Threaded Rods, Unistrut Channels & Spring Nuts',
       'codeRef': 'PEC 2017 Art 3.42 & Art 3.14: Boxes and Fittings for Exposed Rerouting'
     },
   ];
@@ -386,7 +386,7 @@ class _SiteInspectionAssessmentDialogState extends State<SiteInspectionAssessmen
                       decoration: InputDecoration(
                         labelText: 'Site Observation Notes (Optional)',
                         labelStyle: const TextStyle(color: BanaagTheme.textMuted, fontSize: 12),
-                        hintText: 'e.g. Makapal ang plaster, kailangan ng 1-1/2" tox; ceiling is exposed steel trusses.',
+                        hintText: 'e.g., Heavy plaster finish requires 1-1/2" expansion anchors; exposed open-web steel trusses at ceiling.',
                         hintStyle: const TextStyle(color: Colors.grey, fontSize: 12),
                         filled: true,
                         fillColor: BanaagTheme.surfaceCard,

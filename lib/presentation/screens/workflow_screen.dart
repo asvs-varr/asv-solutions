@@ -881,7 +881,7 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
 
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('✅ Na-scan ang ${scannedSpaces.length} kwarto! Na-update na ang Load Tally.'),
+            content: Text('✅ Identified ${scannedSpaces.length} spaces! Load tally & branch circuit takeoff updated.'),
             backgroundColor: BanaagTheme.successGreen,
           ),
         );
