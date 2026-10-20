@@ -2,6 +2,7 @@
 
 import 'package:flutter/material.dart';
 import '../../domain/pec_engine.dart';
+import '../../domain/wiring_color_engine.dart';
 import '../theme/banaag_theme.dart';
 
 class PecCalculatorScreen extends StatefulWidget {
@@ -36,7 +37,7 @@ class _PecCalculatorScreenState extends State<PecCalculatorScreen> with SingleTi
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
     _recalculate();
   }
 
@@ -59,8 +60,9 @@ class _PecCalculatorScreenState extends State<PecCalculatorScreen> with SingleTi
           labelColor: BanaagTheme.primaryAmber,
           unselectedLabelColor: BanaagTheme.textMuted,
           tabs: const [
-            Tab(text: 'Sizing & Conduit Fill'),
-            Tab(text: 'Smart Phase Balancer'),
+            Tab(text: 'Sizing & Fill'),
+            Tab(text: 'Phase Balancer'),
+            Tab(text: 'Color Coding 🎨'),
           ],
         ),
       ),
@@ -69,6 +71,7 @@ class _PecCalculatorScreenState extends State<PecCalculatorScreen> with SingleTi
         children: [
           _buildSizingTab(),
           _buildPhaseBalancerTab(),
+          _buildColorCodingTab(),
         ],
       ),
     );
@@ -489,6 +492,149 @@ class _PecCalculatorScreenState extends State<PecCalculatorScreen> with SingleTi
           const SizedBox(height: 4),
           Text('${circuit['loadVA']} VA  (${(circuit['loadVA'] / 230.0).toStringAsFixed(1)}A)',
               style: const TextStyle(color: BanaagTheme.primaryAmber, fontSize: 11, fontWeight: FontWeight.bold)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildColorCodingTab() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Banner Notice
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: BanaagTheme.primaryAmber.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: BanaagTheme.primaryAmber.withValues(alpha: 0.3)),
+            ),
+            child: const Row(
+              children: [
+                Icon(Icons.palette_outlined, color: BanaagTheme.primaryAmber, size: 24),
+                SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Philippine Electrical Code (PEC 2017) Color Standards',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.white),
+                      ),
+                      Text(
+                        'Article 2.0.1.6 & Article 2.50.6.10: Tamang identification ng Live, Grounded (Neutral), at Grounding conductors.',
+                        style: TextStyle(fontSize: 11, color: BanaagTheme.textMuted),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // Standard Color Swatch Legend
+          const Text('Standard Conductor Identification:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+          const SizedBox(height: 10),
+          ...ConductorFunction.values.map((cond) {
+            return Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: BanaagTheme.surfaceCard,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: BanaagTheme.surfaceCardBorder),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 24,
+                    height: 24,
+                    decoration: BoxDecoration(
+                      color: Color(cond.colorHex),
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white30, width: 1.5),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(cond.label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.white)),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: Color(cond.colorHex).withValues(alpha: 0.2),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                cond.colorName,
+                                style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Text(cond.description, style: const TextStyle(fontSize: 11, color: BanaagTheme.textMuted)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
+          const SizedBox(height: 16),
+
+          // Circuit Wiring Rules List
+          const Text('PEC Installation Scenarios & Application:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+          const SizedBox(height: 10),
+          ...WiringColorCodingEngine.standardRules.map((rule) {
+            return Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1E2430),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: BanaagTheme.surfaceCardBorder),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(rule.circuitType, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: BanaagTheme.primaryAmber)),
+                  const SizedBox(height: 4),
+                  Text('System: ${rule.systemVoltage}', style: const TextStyle(fontSize: 11, color: Colors.white70)),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: rule.conductors.map((c) {
+                      return Chip(
+                        avatar: CircleAvatar(
+                          backgroundColor: Color(c.colorHex),
+                          radius: 6,
+                        ),
+                        label: Text('${c.colorName} (${c.label.split(" ").first})', style: const TextStyle(fontSize: 10)),
+                        backgroundColor: BanaagTheme.surfaceCard,
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(rule.explanation, style: const TextStyle(fontSize: 11, color: BanaagTheme.textMuted)),
+                  const SizedBox(height: 6),
+                  Text('📖 ${rule.pecCitation}', style: const TextStyle(fontSize: 10, color: BanaagTheme.successGreen, fontWeight: FontWeight.bold)),
+                ],
+              ),
+            );
+          }),
         ],
       ),
     );

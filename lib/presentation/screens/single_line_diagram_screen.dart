@@ -1,10 +1,17 @@
 // BANAAG Single-Line Diagram (SLD) & Schedule of Loads Interactive Screen
 // Interactive Schematic CAD Diagram, Schedule of Loads Matrix, and Manual Override Mode
 
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 import '../../domain/models.dart';
 import '../../domain/sld_engine.dart';
 import '../../domain/pec_engine.dart';
+import '../../domain/takeoff_engine.dart';
+import '../../domain/institutional_building_presets.dart';
+import '../../domain/bom_excel_exporter.dart';
+import '../../domain/blueprint_pdf_exporter.dart';
 import '../../data/project_repository.dart';
 import '../theme/banaag_theme.dart';
 
@@ -21,11 +28,28 @@ class _SingleLineDiagramScreenState extends State<SingleLineDiagramScreen> with 
   late SingleLineDiagramData _sldData;
   bool _isApproved = false;
 
+  MultiPanelInstitutionalRiser? _multiPanelRiser;
+  String _activePanelKey = 'MAIN'; // 'MDP', 'LP-1', 'LP-2'
+
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
-    _sldData = SldEngine.generateFromProject(widget.project);
+    
+    // Check if project is institutional or default
+    final isInstitutional = widget.project.title.toLowerCase().contains('institutional') ||
+        widget.project.title.toLowerCase().contains('college') ||
+        widget.project.title.toLowerCase().contains('school') ||
+        widget.project.spaces.any((s) => s.name.contains('Classroom') || s.name.contains('Demonstration') || s.name.contains('Faculty'));
+
+    if (isInstitutional) {
+      final preset = InstitutionalBuildingPreset.sanLorenzoRuizCollege();
+      _multiPanelRiser = MultiPanelInstitutionalRiser.compute(preset, utility: widget.project.utilityProvider);
+      _sldData = _multiPanelRiser!.mdp;
+      _activePanelKey = 'MDP';
+    } else {
+      _sldData = SldEngine.generateFromProject(widget.project);
+    }
 
     // Check if p1 checklist item is already completed
     final p2 = widget.project.phases.firstWhere(
@@ -286,6 +310,19 @@ class _SingleLineDiagramScreenState extends State<SingleLineDiagramScreen> with 
                   circuit.breakerRatingAmps = breaker;
                   circuit.wireSizeDescription = wire;
                   circuit.conduitDescription = conduit;
+
+                  // Recompute Voltage Drop with edited parameters
+                  final spec = PecEngine.wireSpecs.firstWhere(
+                    (w) => w.sizeMm2 >= selectedWireMm2,
+                    orElse: () => PecEngine.wireSpecs.first,
+                  );
+                  circuit.voltageDropPercent = PecEngine.computeVoltageDropPercent(
+                    loadCurrentAmps: circuit.loadCurrentAmps,
+                    oneWayLengthMeters: circuit.measuredRunMeters,
+                    wireSpec: spec,
+                  );
+                  circuit.isUpsized = false;
+                  circuit.upsizeReason = '';
                 });
                 Navigator.pop(ctx);
               },
@@ -319,6 +356,94 @@ class _SingleLineDiagramScreenState extends State<SingleLineDiagramScreen> with 
     );
   }
 
+  Future<void> _exportExcelBom() async {
+    try {
+      final takeoff = TakeoffEngine.calculate(
+        points: widget.project.canvasPoints,
+        routes: widget.project.conduitRoutes,
+      );
+
+      final bytes = BomExcelExporter.generateWorkbook(
+        project: widget.project,
+        sldData: _sldData,
+        takeoff: takeoff,
+      );
+
+      final tempDir = await getTemporaryDirectory();
+      final sanitizedTitle = widget.project.title.replaceAll(RegExp(r'[^a-zA-Z0-9_\-]'), '_');
+      final file = File('${tempDir.path}/${sanitizedTitle}_BOM_and_Schedule_of_Loads.xlsx');
+      await file.writeAsBytes(bytes);
+
+      await SharePlus.instance.share(
+        ShareParams(
+          files: [XFile(file.path)],
+          text: '📊 BANAAG Multi-Tab Excel BOM & Schedule of Loads Export: ${widget.project.title}\nCompliant with PEC 2017 Part 1.',
+          subject: '${widget.project.title} - Excel BOM & Sched of Loads',
+        ),
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('📊 3-Tab Excel Workbook generated successfully! (.xlsx)'),
+            backgroundColor: BanaagTheme.successGreen,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Excel Export Error: $e'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _exportBlueprintPdf() async {
+    try {
+      final bytes = await BlueprintPdfExporter.generateBlueprintPdf(
+        project: widget.project,
+        sldData: _sldData,
+        sheetNumber: 'E-1',
+        sheetTitle: 'SINGLE-LINE DIAGRAM & SCHEDULE OF LOADS',
+      );
+
+      final tempDir = await getTemporaryDirectory();
+      final sanitizedTitle = widget.project.title.replaceAll(RegExp(r'[^a-zA-Z0-9_\-]'), '_');
+      final file = File('${tempDir.path}/${sanitizedTitle}_Sheet_E1_Blueprint.pdf');
+      await file.writeAsBytes(bytes);
+
+      await SharePlus.instance.share(
+        ShareParams(
+          files: [XFile(file.path)],
+          text: '📐 BANAAG Blueprint Vector PDF Export (Sheet E-1): ${widget.project.title}\nCompliant with PEC 2017 Part 1 & Title Block Specs.',
+          subject: '${widget.project.title} - Sheet E-1 Blueprint PDF',
+        ),
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('⚡ Sheet E-1 Blueprint PDF generated! Ready for PEE Seal & Permitting.'),
+            backgroundColor: BanaagTheme.successGreen,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('PDF Export Error: $e'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -342,6 +467,16 @@ class _SingleLineDiagramScreenState extends State<SingleLineDiagramScreen> with 
         ),
         actions: [
           IconButton(
+            icon: const Icon(Icons.table_view_outlined, color: Colors.greenAccent),
+            tooltip: 'Export Excel BOM & Sched of Loads (.xlsx)',
+            onPressed: _exportExcelBom,
+          ),
+          IconButton(
+            icon: const Icon(Icons.picture_as_pdf_outlined, color: Colors.cyanAccent),
+            tooltip: 'Export Blueprint PDF Sheet E-1 (A1/20x30)',
+            onPressed: _exportBlueprintPdf,
+          ),
+          IconButton(
             icon: const Icon(Icons.add_circle_outline, color: BanaagTheme.primaryAmber),
             tooltip: 'Add Branch Circuit',
             onPressed: _addNewCircuit,
@@ -356,67 +491,195 @@ class _SingleLineDiagramScreenState extends State<SingleLineDiagramScreen> with 
           ),
         ],
       ),
-      body: TabBarView(
-        controller: _tabController,
+      body: Column(
         children: [
-          _buildSchematicView(),
-          _buildScheduleOfLoadsView(),
-        ],
-      ),
-      bottomNavigationBar: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        color: const Color(0xFF1B2028),
-        child: Row(
-          children: [
-            Expanded(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
+          if (_multiPanelRiser != null)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              color: const Color(0xFF141922),
+              child: Row(
                 children: [
-                  Text(
-                    'Main MCB: ${_sldData.feeder.mainBreakerAmps}A 2P • Total: ${_sldData.feeder.totalConnectedVA.toStringAsFixed(0)} VA',
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.white),
-                  ),
-                  Text(
-                    'Feeder: ${_sldData.feeder.feederWireDescription} in ${_sldData.feeder.conduitDescription}',
-                    style: const TextStyle(fontSize: 10, color: BanaagTheme.textMuted),
+                  const Icon(Icons.domain, color: BanaagTheme.primaryAmber, size: 18),
+                  const SizedBox(width: 8),
+                  const Text('Riser:', style: TextStyle(color: BanaagTheme.textMuted, fontSize: 11, fontWeight: FontWeight.bold)),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          _buildPanelChip('MDP (Main)', 'MDP', _multiPanelRiser!.mdp),
+                          const SizedBox(width: 6),
+                          _buildPanelChip('Floor 1: LP-1', 'LP-1', _multiPanelRiser!.lp1),
+                          const SizedBox(width: 6),
+                          _buildPanelChip('Floor 2: LP-2', 'LP-2', _multiPanelRiser!.lp2),
+                        ],
+                      ),
+                    ),
                   ),
                 ],
               ),
             ),
-            ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: _isApproved ? BanaagTheme.successGreen : BanaagTheme.primaryAmber,
-                foregroundColor: Colors.black,
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-              ),
-              icon: Icon(_isApproved ? Icons.check : Icons.done_all, size: 16),
-              label: Text(_isApproved ? 'APPROVED ✅' : 'APPROVE SLD', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
-              onPressed: _markApproved,
+          Expanded(
+            child: TabBarView(
+              controller: _tabController,
+              children: [
+                _buildSchematicView(),
+                _buildScheduleOfLoadsView(),
+              ],
             ),
-          ],
+          ),
+        ],
+      ),
+      bottomNavigationBar: SafeArea(
+        top: false,
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          decoration: const BoxDecoration(
+            color: Color(0xFF1B2028),
+            border: Border(top: BorderSide(color: BanaagTheme.surfaceCardBorder, width: 1)),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Main MCB: ${_sldData.feeder.mainBreakerAmps}A 2P • Total: ${_sldData.feeder.totalConnectedVA.toStringAsFixed(0)} VA',
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.white),
+                    ),
+                    Text(
+                      'Feeder: ${_sldData.feeder.feederWireDescription} in ${_sldData.feeder.conduitDescription}',
+                      style: const TextStyle(fontSize: 10, color: BanaagTheme.textMuted),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _isApproved ? BanaagTheme.successGreen : BanaagTheme.primaryAmber,
+                  foregroundColor: Colors.black,
+                  minimumSize: Size.zero,
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+                icon: Icon(_isApproved ? Icons.check : Icons.done_all, size: 16),
+                label: Text(_isApproved ? 'APPROVED ✅' : 'APPROVE SLD', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                onPressed: _markApproved,
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
+  Widget _buildPanelChip(String label, String key, SingleLineDiagramData data) {
+    final isSelected = _activePanelKey == key;
+    return ChoiceChip(
+      label: Text(label),
+      selected: isSelected,
+      selectedColor: BanaagTheme.primaryAmber,
+      backgroundColor: Colors.white10,
+      labelStyle: TextStyle(
+        color: isSelected ? Colors.black : Colors.white70,
+        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+        fontSize: 11,
+      ),
+      onSelected: (val) {
+        if (val) {
+          setState(() {
+            _activePanelKey = key;
+            _sldData = data;
+          });
+        }
+      },
+    );
+  }
+
+  final TransformationController _transformController = TransformationController();
+
   Widget _buildSchematicView() {
-    return InteractiveViewer(
-      constrained: false,
-      minScale: 0.6,
-      maxScale: 2.5,
-      child: Container(
-        padding: const EdgeInsets.all(24.0),
-        color: const Color(0xFF12151B),
-        child: CustomPaint(
-          size: Size(540, 180 + (_sldData.branchCircuits.length * 68.0)),
-          painter: SldSchematicPainter(
-            sldData: _sldData,
-            onCircuitTap: _editCircuit,
+    final canvasWidth = 960.0;
+    final canvasHeight = 280.0 + (_sldData.branchCircuits.length * 84.0);
+    return Stack(
+      children: [
+        InteractiveViewer(
+          transformationController: _transformController,
+          constrained: false,
+          boundaryMargin: const EdgeInsets.all(120.0),
+          minScale: 0.3,
+          maxScale: 4.0,
+          child: Container(
+            width: canvasWidth,
+            height: canvasHeight,
+            padding: const EdgeInsets.all(32.0),
+            color: const Color(0xFF0D1117), // Blueprint dark CAD canvas
+            child: CustomPaint(
+              size: Size(canvasWidth - 64, canvasHeight - 64),
+              painter: SldSchematicPainter(
+                sldData: _sldData,
+                onCircuitTap: _editCircuit,
+              ),
+            ),
           ),
         ),
-      ),
+        // Floating Zoom & Reset Toolbar
+        Positioned(
+          top: 14,
+          right: 14,
+          child: Container(
+            decoration: BoxDecoration(
+              color: const Color(0xFF1B2028).withValues(alpha: 0.90),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: Colors.white24),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.4),
+                  blurRadius: 8,
+                  offset: const Offset(0, 3),
+                ),
+              ],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.zoom_out, color: Colors.white, size: 20),
+                  tooltip: 'Zoom Out',
+                  onPressed: () {
+                    final Matrix4 current = _transformController.value;
+                    // ignore: deprecated_member_use
+                    _transformController.value = current.clone()..scale(0.85, 0.85);
+                  },
+                ),
+                Container(width: 1, height: 20, color: Colors.white12),
+                IconButton(
+                  icon: const Icon(Icons.center_focus_strong, color: BanaagTheme.primaryAmber, size: 20),
+                  tooltip: 'Fit Canvas / Reset View',
+                  onPressed: () {
+                    _transformController.value = Matrix4.identity();
+                  },
+                ),
+                Container(width: 1, height: 20, color: Colors.white12),
+                IconButton(
+                  icon: const Icon(Icons.zoom_in, color: Colors.white, size: 20),
+                  tooltip: 'Zoom In',
+                  onPressed: () {
+                    final Matrix4 current = _transformController.value;
+                    // ignore: deprecated_member_use
+                    _transformController.value = current.clone()..scale(1.20, 1.20);
+                  },
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -466,36 +729,107 @@ class _SingleLineDiagramScreenState extends State<SingleLineDiagramScreen> with 
           // Circuits table
           ...List.generate(_sldData.branchCircuits.length, (idx) {
             final c = _sldData.branchCircuits[idx];
+            final bool isVdPass = c.voltageDropPercent <= 3.0;
+            final Color vdColor = c.isUpsized
+                ? BanaagTheme.primaryAmber
+                : (isVdPass ? BanaagTheme.successGreen : BanaagTheme.alertRed);
+
             return Container(
               margin: const EdgeInsets.only(bottom: 8.0),
               decoration: BoxDecoration(
                 color: c.isSpare ? Colors.white.withValues(alpha: 0.03) : BanaagTheme.surfaceCard,
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: c.isSpare ? Colors.white12 : BanaagTheme.surfaceCardBorder),
+                border: Border.all(
+                  color: c.isUpsized
+                      ? BanaagTheme.primaryAmber.withValues(alpha: 0.5)
+                      : (c.isSpare ? Colors.white12 : BanaagTheme.surfaceCardBorder),
+                ),
               ),
               child: ListTile(
                 dense: true,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 leading: CircleAvatar(
                   backgroundColor: c.isSpare ? Colors.grey.shade800 : BanaagTheme.primaryAmber.withValues(alpha: 0.2),
                   child: Text('C${c.circuitNumber}', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: c.isSpare ? Colors.white54 : BanaagTheme.primaryAmber)),
                 ),
-                title: Text(
-                  c.description,
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: c.isSpare ? BanaagTheme.textMuted : Colors.white),
+                title: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        c.description,
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: c.isSpare ? BanaagTheme.textMuted : Colors.white),
+                      ),
+                    ),
+                    if (!c.isSpare) ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: vdColor.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(color: vdColor.withValues(alpha: 0.6)),
+                        ),
+                        child: Text(
+                          c.isUpsized
+                              ? 'VD: ${c.voltageDropPercent.toStringAsFixed(1)}% [UPSIZED]'
+                              : 'VD: ${c.voltageDropPercent.toStringAsFixed(1)}% [PASS]',
+                          style: TextStyle(
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.bold,
+                            color: vdColor,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
                 subtitle: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const SizedBox(height: 2),
+                    const SizedBox(height: 3),
                     Text(
                       '${c.loadVA.toStringAsFixed(0)} VA @ 230V • ${c.loadCurrentAmps.toStringAsFixed(2)}A • ${c.breakerRatingAmps}A 2P Breaker',
                       style: const TextStyle(fontSize: 11, color: BanaagTheme.textMuted),
                     ),
-                    Text(
-                      'Wire: ${c.wireSizeDescription} in ${c.conduitDescription}',
-                      style: const TextStyle(fontSize: 10, color: BanaagTheme.primaryAmber),
+                    const SizedBox(height: 1),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'Wire: ${c.wireSizeDescription} in ${c.conduitDescription}',
+                            style: const TextStyle(fontSize: 10, color: BanaagTheme.primaryAmber),
+                          ),
+                        ),
+                        if (!c.isSpare)
+                          Text(
+                            '3D Run: ${c.measuredRunMeters.toStringAsFixed(1)}m',
+                            style: const TextStyle(fontSize: 10, color: Colors.white60, fontStyle: FontStyle.italic),
+                          ),
+                      ],
                     ),
+                    if (c.isUpsized && c.upsizeReason.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: BanaagTheme.primaryAmber.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Icon(Icons.bolt, size: 12, color: BanaagTheme.primaryAmber),
+                            const SizedBox(width: 4),
+                            Expanded(
+                              child: Text(
+                                c.upsizeReason,
+                                style: const TextStyle(fontSize: 9.5, color: BanaagTheme.primaryAmber, height: 1.2),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ],
                 ),
                 trailing: IconButton(
@@ -625,94 +959,125 @@ class SldSchematicPainter extends CustomPainter {
       ..strokeWidth = 2.0
       ..style = PaintingStyle.stroke;
 
-    final textStyle = const TextStyle(color: Colors.white, fontSize: 11, fontFamily: 'monospace');
-    final amberStyle = const TextStyle(color: BanaagTheme.primaryAmber, fontSize: 11, fontWeight: FontWeight.bold, fontFamily: 'monospace');
-    final mutedStyle = const TextStyle(color: BanaagTheme.textMuted, fontSize: 10, fontFamily: 'monospace');
+    final textStyle = const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600, fontFamily: 'monospace');
+    final amberStyle = const TextStyle(color: BanaagTheme.primaryAmber, fontSize: 13, fontWeight: FontWeight.bold, fontFamily: 'monospace');
+    final mutedStyle = const TextStyle(color: BanaagTheme.textMuted, fontSize: 11, fontFamily: 'monospace');
+
+    // Draw Subtle Engineering CAD Grid
+    final gridPaint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.03)
+      ..strokeWidth = 1.0;
+    for (double x = 0; x < size.width; x += 40.0) {
+      canvas.drawLine(Offset(x, 0), Offset(x, size.height), gridPaint);
+    }
+    for (double y = 0; y < size.height; y += 40.0) {
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
+    }
 
     // 1. Service Drop (Top)
-    const double centerX = 160.0;
-    double curY = 30.0;
+    const double centerX = 220.0;
+    double curY = 36.0;
 
-    _drawText(canvas, 'OVERHEAD SERVICE DROP (${sldData.utilityProvider})', 20, curY - 18, amberStyle);
-    _drawText(canvas, '230V, 1-PHASE, 2-WIRE, 60 Hz', 20, curY - 4, mutedStyle);
+    _drawText(canvas, '⚡ OVERHEAD SERVICE ENTRANCE (${sldData.utilityProvider})', 30, curY - 20, amberStyle);
+    _drawText(canvas, '230V AC, 1-PHASE, 2-WIRE, 60 Hz • PEC COMPLIANT', 30, curY - 4, mutedStyle);
 
-    canvas.drawLine(const Offset(centerX, 20), Offset(centerX, curY + 20), linePaint);
-    curY += 20;
+    canvas.drawLine(const Offset(centerX, 20), Offset(centerX, curY + 28), linePaint);
+    curY += 28;
 
     // 2. Kilowatt-Hour Meter (Circle)
-    final meterCenter = Offset(centerX, curY + 25);
+    final meterCenter = Offset(centerX, curY + 30);
     final meterPaint = Paint()
       ..color = const Color(0xFF1E2430)
       ..style = PaintingStyle.fill;
-    canvas.drawCircle(meterCenter, 22, meterPaint);
-    canvas.drawCircle(meterCenter, 22, linePaint);
-    _drawText(canvas, 'kWh', meterCenter.dx - 10, meterCenter.dy - 6, amberStyle);
-    _drawText(canvas, 'METER', meterCenter.dx + 30, meterCenter.dy - 6, textStyle);
+    canvas.drawCircle(meterCenter, 26, meterPaint);
+    canvas.drawCircle(meterCenter, 26, linePaint);
+    _drawText(canvas, 'kWh', meterCenter.dx - 12, meterCenter.dy - 7, amberStyle);
+    _drawText(canvas, 'REVENUE METER', meterCenter.dx + 38, meterCenter.dy - 7, textStyle);
 
-    curY += 47;
-    canvas.drawLine(Offset(centerX, curY), Offset(centerX, curY + 25), linePaint);
-    curY += 25;
+    curY += 56;
+    canvas.drawLine(Offset(centerX, curY), Offset(centerX, curY + 28), linePaint);
+    curY += 28;
 
     // 3. Main Circuit Breaker (MCB) Box
-    final mcbRect = Rect.fromCenter(center: Offset(centerX, curY + 20), width: 70, height: 36);
+    final mcbRect = Rect.fromCenter(center: Offset(centerX, curY + 22), width: 84, height: 44);
     canvas.drawRect(mcbRect, Paint()..color = const Color(0xFF232A36));
     canvas.drawRect(mcbRect, Paint()..color = BanaagTheme.primaryAmber..style = PaintingStyle.stroke..strokeWidth = 2);
-    _drawText(canvas, '${sldData.feeder.mainBreakerAmps}A', mcbRect.center.dx - 12, mcbRect.center.dy - 6, amberStyle);
+    _drawText(canvas, '${sldData.feeder.mainBreakerAmps}A', mcbRect.center.dx - 16, mcbRect.center.dy - 7, amberStyle);
 
     // Feeder labels
-    _drawText(canvas, 'MAIN CB: ${sldData.feeder.mainBreakerDescription}', centerX + 45, mcbRect.top + 2, textStyle);
-    _drawText(canvas, 'FEEDER: ${sldData.feeder.feederWireDescription} in ${sldData.feeder.conduitDescription}', centerX + 45, mcbRect.top + 16, mutedStyle);
+    _drawText(canvas, 'MAIN CB: ${sldData.feeder.mainBreakerDescription}', centerX + 56, mcbRect.top + 4, textStyle);
+    _drawText(canvas, 'FEEDER: ${sldData.feeder.feederWireDescription} in ${sldData.feeder.conduitDescription}', centerX + 56, mcbRect.top + 22, mutedStyle);
 
-    curY += 38;
-    canvas.drawLine(Offset(centerX, curY), Offset(centerX, curY + 25), linePaint);
-    curY += 25;
+    curY += 44;
+    canvas.drawLine(Offset(centerX, curY), Offset(centerX, curY + 28), linePaint);
+    curY += 28;
 
     // 4. Main Panelboard LP-1 Vertical Busbar
     final double busbarTop = curY;
-    final double busbarHeight = sldData.branchCircuits.length * 62.0;
+    final double busbarSpacing = 78.0;
+    final double busbarHeight = sldData.branchCircuits.length * busbarSpacing;
     final double busbarBottom = busbarTop + busbarHeight;
 
     canvas.drawLine(Offset(centerX, busbarTop), Offset(centerX, busbarBottom), busPaint);
-    _drawText(canvas, sldData.panelName, 20, busbarTop - 12, amberStyle);
+    _drawText(canvas, 'PANEL: ${sldData.panelName}', 30, busbarTop - 14, amberStyle);
 
     // Ground Busbar (Left side)
-    const double groundX = centerX - 50;
+    const double groundX = centerX - 70;
     canvas.drawLine(Offset(groundX, busbarTop + 10), Offset(groundX, busbarBottom - 10), groundPaint);
-    _drawText(canvas, 'GROUND BUS', groundX - 70, busbarTop + 14, const TextStyle(color: BanaagTheme.successGreen, fontSize: 9, fontWeight: FontWeight.bold));
+    _drawText(canvas, 'GROUND BUS', groundX - 90, busbarTop + 14, const TextStyle(color: BanaagTheme.successGreen, fontSize: 10, fontWeight: FontWeight.bold));
 
     // Ground Electrode connection to earth
-    canvas.drawLine(Offset(groundX, busbarBottom - 10), Offset(groundX, busbarBottom + 25), groundPaint);
-    _drawGroundSymbol(canvas, Offset(groundX, busbarBottom + 25));
-    _drawText(canvas, sldData.feeder.groundingDescription, groundX + 10, busbarBottom + 22, mutedStyle);
+    canvas.drawLine(Offset(groundX, busbarBottom - 10), Offset(groundX, busbarBottom + 30), groundPaint);
+    _drawGroundSymbol(canvas, Offset(groundX, busbarBottom + 30));
+    _drawText(canvas, sldData.feeder.groundingDescription, groundX + 12, busbarBottom + 26, mutedStyle);
 
     // 5. Branch Circuits Sprouting from Busbar to the Right
-    double branchY = busbarTop + 20;
+    double branchY = busbarTop + 24;
     for (int i = 0; i < sldData.branchCircuits.length; i++) {
       final c = sldData.branchCircuits[i];
 
       // Branch tap line from busbar
-      canvas.drawLine(Offset(centerX, branchY), Offset(centerX + 35, branchY), linePaint);
+      canvas.drawLine(Offset(centerX, branchY), Offset(centerX + 40, branchY), linePaint);
 
       // Branch Breaker rectangle
-      final bRect = Rect.fromCenter(center: Offset(centerX + 55, branchY), width: 40, height: 24);
+      final bRect = Rect.fromCenter(center: Offset(centerX + 68, branchY), width: 50, height: 28);
       final bPaint = Paint()
         ..color = c.isSpare ? Colors.grey.shade900 : const Color(0xFF222938)
         ..style = PaintingStyle.fill;
       canvas.drawRect(bRect, bPaint);
-      canvas.drawRect(bRect, Paint()..color = c.isSpare ? Colors.white30 : Colors.white70..style = PaintingStyle.stroke..strokeWidth = 1.5);
-      _drawText(canvas, '${c.breakerRatingAmps}A', bRect.center.dx - 10, bRect.center.dy - 5, TextStyle(color: c.isSpare ? Colors.white54 : BanaagTheme.primaryAmber, fontSize: 10, fontWeight: FontWeight.bold));
+      canvas.drawRect(bRect, Paint()..color = c.isSpare ? Colors.white30 : Colors.white70..style = PaintingStyle.stroke..strokeWidth = 1.8);
+      _drawText(canvas, '${c.breakerRatingAmps}A', bRect.center.dx - 12, bRect.center.dy - 6, TextStyle(color: c.isSpare ? Colors.white54 : BanaagTheme.primaryAmber, fontSize: 11, fontWeight: FontWeight.bold));
 
       // Homerun line extending right
-      canvas.drawLine(Offset(bRect.right, branchY), Offset(bRect.right + 25, branchY), linePaint);
+      canvas.drawLine(Offset(bRect.right, branchY), Offset(bRect.right + 35, branchY), linePaint);
 
       // Homerun arrow
-      _drawHomerunArrow(canvas, Offset(bRect.right + 25, branchY));
+      _drawHomerunArrow(canvas, Offset(bRect.right + 35, branchY));
 
       // Branch Labels
-      _drawText(canvas, 'C${c.circuitNumber}: ${c.description}', bRect.right + 34, branchY - 10, TextStyle(color: c.isSpare ? BanaagTheme.textMuted : Colors.white, fontWeight: FontWeight.bold, fontSize: 11));
-      _drawText(canvas, '${c.wireSizeDescription} in ${c.conduitDescription}', bRect.right + 34, branchY + 3, mutedStyle);
+      _drawText(canvas, 'C${c.circuitNumber}: ${c.description}', bRect.right + 48, branchY - 14, TextStyle(color: c.isSpare ? BanaagTheme.textMuted : Colors.white, fontWeight: FontWeight.bold, fontSize: 12));
+      _drawText(canvas, '${c.wireSizeDescription} in ${c.conduitDescription}', bRect.right + 48, branchY + 1, mutedStyle);
 
-      branchY += 62.0;
+      if (!c.isSpare) {
+        final vdStyle = TextStyle(
+          color: c.isUpsized
+              ? BanaagTheme.primaryAmber
+              : (c.voltageDropPercent <= 3.0 ? BanaagTheme.successGreen : BanaagTheme.alertRed),
+          fontSize: 10,
+          fontWeight: FontWeight.bold,
+          fontFamily: 'monospace',
+        );
+        final String tag = c.isUpsized ? ' [UPSIZED]' : ' [PASS]';
+        _drawText(
+          canvas,
+          'VD: ${c.voltageDropPercent.toStringAsFixed(1)}%$tag • 3D Run: ${c.measuredRunMeters.toStringAsFixed(1)}m',
+          bRect.right + 48,
+          branchY + 16,
+          vdStyle,
+        );
+      }
+
+      branchY += busbarSpacing;
     }
   }
 

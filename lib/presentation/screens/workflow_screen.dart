@@ -9,6 +9,8 @@ import 'single_line_diagram_screen.dart';
 import '../widgets/project_management_dialogs.dart';
 import '../widgets/dxf_export_guide_dialog.dart';
 import '../widgets/site_inspection_dialog.dart';
+import '../widgets/utility_service_drop_dialog.dart';
+import 'plan_canvas_screen.dart';
 
 class WorkflowScreen extends StatefulWidget {
   final Project project;
@@ -182,6 +184,7 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
                 ),
               ),
               child: ExpansionTile(
+                key: PageStorageKey('phase_${phase.type.phaseNumber}'),
                 initiallyExpanded: isCurrent,
               leading: CircleAvatar(
                 backgroundColor: phase.isCompleted
@@ -339,6 +342,20 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
                     });
                   },
                 );
+              } else if (item.id == 'c3') {
+                UtilityServiceDropDialog.show(
+                  context,
+                  project: _project,
+                  checkItem: item,
+                  onSaved: () {
+                    setState(() {
+                      _project = ProjectRepository.instance.allProjects.firstWhere(
+                        (p) => p.id == _project.id,
+                        orElse: () => _project,
+                      );
+                    });
+                  },
+                );
               } else if (item.id == 'c_dxf') {
                 _handleDxfUpload(phase, item);
               } else if (item.id == 'p1') {
@@ -363,13 +380,13 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
         checkColor: Colors.black,
         onChanged: isLocked ? null : (_) => _toggleCheckItem(phase, item),
       ),
-      title: Row(
+      title: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
+          Row(
+            children: [
+              Expanded(
+                child: Text(
                   item.title,
                   style: TextStyle(
                     fontSize: 13,
@@ -380,167 +397,271 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
                     fontWeight: (item.id == 'c1' || item.id == 'c2' || item.id == 'c_dxf') ? FontWeight.bold : FontWeight.normal,
                   ),
                 ),
-                if (item.id == 'c2' && _project.siteStructure != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 2.0),
-                    child: Text(
-                      'Materials: ${_project.siteStructure!.racewayRecommendation}',
-                      style: const TextStyle(color: BanaagTheme.successGreen, fontSize: 11, fontWeight: FontWeight.w600),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          if (item.id == 'c1' && !isLocked)
-            Container(
-              margin: const EdgeInsets.only(left: 6),
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: BanaagTheme.primaryAmber.withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(4),
               ),
-              child: const Text('OPEN TALLY ➔', style: TextStyle(color: BanaagTheme.primaryAmber, fontSize: 10, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          if (item.id == 'c2' && _project.siteStructure != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 2.0),
+              child: Text(
+                'Materials: ${_project.siteStructure!.racewayRecommendation}',
+                style: const TextStyle(color: BanaagTheme.successGreen, fontSize: 11, fontWeight: FontWeight.w600),
+              ),
+            ),
+          if (item.id == 'c3' && _project.utilityServiceDrop != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 2.0),
+              child: Text(
+                'Pole ${_project.utilityServiceDrop!.poleNumberTag} • ${_project.utilityServiceDrop!.distanceToPoleMeters}m (${_project.utilityServiceDrop!.crossesRoadway ? 'Tawid-Kalsada' : 'Driveway'})',
+                style: TextStyle(
+                  color: _project.utilityServiceDrop!.requiresIntermediatePole ? BanaagTheme.alertRed : BanaagTheme.successGreen,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          if (item.id == 'c1' && !isLocked)
+            Padding(
+              padding: const EdgeInsets.only(top: 4.0),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: BanaagTheme.primaryAmber.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: const Text('OPEN TALLY ➔', style: TextStyle(color: BanaagTheme.primaryAmber, fontSize: 10, fontWeight: FontWeight.bold)),
+              ),
             ),
           if (item.id == 'c2' && !isLocked && !item.isCompleted)
-            Container(
-              margin: const EdgeInsets.only(left: 6),
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: BanaagTheme.primaryAmber.withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(4),
+            Padding(
+              padding: const EdgeInsets.only(top: 4.0),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: BanaagTheme.primaryAmber.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: const Text('ASSESS SITE ➔', style: TextStyle(color: BanaagTheme.primaryAmber, fontSize: 10, fontWeight: FontWeight.bold)),
               ),
-              child: const Text('ASSESS SITE ➔', style: TextStyle(color: BanaagTheme.primaryAmber, fontSize: 10, fontWeight: FontWeight.bold)),
             ),
           if (item.id == 'c2' && item.isCompleted)
-            Container(
-              margin: const EdgeInsets.only(left: 6),
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: BanaagTheme.successGreen.withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(4),
+            Padding(
+              padding: const EdgeInsets.only(top: 4.0),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: BanaagTheme.successGreen.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: const Text('ASSESSED ✅', style: TextStyle(color: BanaagTheme.successGreen, fontSize: 10, fontWeight: FontWeight.bold)),
               ),
-              child: const Text('ASSESSED ✅', style: TextStyle(color: BanaagTheme.successGreen, fontSize: 10, fontWeight: FontWeight.bold)),
+            ),
+          if (item.id == 'c3' && !isLocked && !item.isCompleted)
+            Padding(
+              padding: const EdgeInsets.only(top: 4.0),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: BanaagTheme.primaryAmber.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: const Text('CALCULATE DROP ➔', style: TextStyle(color: BanaagTheme.primaryAmber, fontSize: 10, fontWeight: FontWeight.bold)),
+              ),
+            ),
+          if (item.id == 'c3' && item.isCompleted)
+            Padding(
+              padding: const EdgeInsets.only(top: 4.0),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: BanaagTheme.successGreen.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: const Text('DROP VERIFIED ✅', style: TextStyle(color: BanaagTheme.successGreen, fontSize: 10, fontWeight: FontWeight.bold)),
+              ),
             ),
           if (item.id == 'c_dxf' && !isLocked && !item.isCompleted)
-            Container(
-              margin: const EdgeInsets.only(left: 6),
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: BanaagTheme.primaryAmber.withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(4),
+            Padding(
+              padding: const EdgeInsets.only(top: 4.0),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: BanaagTheme.primaryAmber.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: const Text('UPLOAD ➔', style: TextStyle(color: BanaagTheme.primaryAmber, fontSize: 10, fontWeight: FontWeight.bold)),
               ),
-              child: const Text('UPLOAD ➔', style: TextStyle(color: BanaagTheme.primaryAmber, fontSize: 10, fontWeight: FontWeight.bold)),
             ),
           if (item.id == 'c_dxf' && item.isCompleted)
-            Container(
-              margin: const EdgeInsets.only(left: 6),
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: BanaagTheme.successGreen.withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(4),
+            Padding(
+              padding: const EdgeInsets.only(top: 4.0),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: BanaagTheme.successGreen.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: const Text('PARSED ✅', style: TextStyle(color: BanaagTheme.successGreen, fontSize: 10, fontWeight: FontWeight.bold)),
               ),
-              child: const Text('PARSED ✅', style: TextStyle(color: BanaagTheme.successGreen, fontSize: 10, fontWeight: FontWeight.bold)),
             ),
           if (item.id == 'p1' && !isLocked && !item.isCompleted)
-            Container(
-              margin: const EdgeInsets.only(left: 6),
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: BanaagTheme.primaryAmber.withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(4),
+            Padding(
+              padding: const EdgeInsets.only(top: 4.0),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: BanaagTheme.primaryAmber.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: const Text('GENERATE SLD ➔', style: TextStyle(color: BanaagTheme.primaryAmber, fontSize: 10, fontWeight: FontWeight.bold)),
               ),
-              child: const Text('GENERATE SLD ➔', style: TextStyle(color: BanaagTheme.primaryAmber, fontSize: 10, fontWeight: FontWeight.bold)),
             ),
           if (item.id == 'p1' && item.isCompleted)
-            Container(
-              margin: const EdgeInsets.only(left: 6),
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: BanaagTheme.successGreen.withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(4),
+            Padding(
+              padding: const EdgeInsets.only(top: 4.0),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: BanaagTheme.successGreen.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: const Text('SLD READY ✅', style: TextStyle(color: BanaagTheme.successGreen, fontSize: 10, fontWeight: FontWeight.bold)),
               ),
-              child: const Text('SLD READY ✅', style: TextStyle(color: BanaagTheme.successGreen, fontSize: 10, fontWeight: FontWeight.bold)),
             ),
         ],
       ),
-      trailing: item.id == 'c2'
-          ? IconButton(
-              icon: Icon(
-                item.isCompleted ? Icons.check_circle : Icons.rule_sharp,
-                color: item.isCompleted ? BanaagTheme.successGreen : BanaagTheme.primaryAmber,
-              ),
-              tooltip: 'Assess Site Structure & Materials',
-              onPressed: isLocked
-                  ? null
-                  : () {
-                      SiteInspectionAssessmentDialog.show(
-                        context,
-                        project: _project,
-                        checkItem: item,
-                        onSaved: () {
-                          setState(() {
-                            _project = ProjectRepository.instance.allProjects.firstWhere(
-                              (p) => p.id == _project.id,
-                              orElse: () => _project,
-                            );
-                          });
-                        },
-                      );
-                    },
-            )
-          : (item.id == 'p1'
-              ? IconButton(
-                  icon: Icon(
-                    item.isCompleted ? Icons.verified : Icons.account_tree_outlined,
-                    color: item.isCompleted ? BanaagTheme.successGreen : BanaagTheme.primaryAmber,
-                  ),
-                  tooltip: item.isCompleted ? 'SLD & Load Schedule Ready' : 'Generate Single-Line Diagram',
-                  onPressed: isLocked
-                      ? null
-                      : () async {
-                          await Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => SingleLineDiagramScreen(project: _project),
-                            ),
-                          );
-                          setState(() {
-                            _project = ProjectRepository.instance.allProjects.firstWhere(
-                              (p) => p.id == _project.id,
-                              orElse: () => _project,
-                            );
-                          });
-                        },
-                )
-              : (item.id == 'c_dxf'
-                  ? IconButton(
-                      icon: Icon(
-                        item.isCompleted ? Icons.check_circle : Icons.upload_file,
-                        color: item.isCompleted ? BanaagTheme.successGreen : BanaagTheme.primaryAmber,
-                      ),
-                      tooltip: item.isCompleted ? 'AutoCAD .DXF Parsed & Verified' : 'Upload AutoCAD .DXF File',
-                      onPressed: isLocked ? null : () => _handleDxfUpload(phase, item),
-                    )
-                  : (item.id == 'r3' // Rough-in mandatory photo proof
-                      ? IconButton(
-                          icon: Icon(
-                            item.photoProofUri != null ? Icons.photo_library : Icons.camera_alt,
-                            color: item.photoProofUri != null ? BanaagTheme.successGreen : BanaagTheme.primaryAmber,
-                          ),
-                          tooltip: 'Attach Pre-Cover Photo Proof',
-                          onPressed: () {
-                            setState(() {
-                              item.photoProofUri = 'proof_photo_roughin.jpg';
-                              item.isCompleted = true;
-                              _toggleCheckItem(phase, item);
-                            });
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('📸 Pre-cover rough-in photo proof saved & verified!')),
-                            );
-                          },
-                        )
-                      : null))),
+      trailing: _buildCheckItemTrailing(phase, item, isLocked),
     );
+  }
+
+  Widget? _buildCheckItemTrailing(ProjectPhase phase, PhaseCheckItem item, bool isLocked) {
+    if (item.id == 'c2') {
+      return IconButton(
+        icon: Icon(
+          item.isCompleted ? Icons.check_circle : Icons.rule_sharp,
+          color: item.isCompleted ? BanaagTheme.successGreen : BanaagTheme.primaryAmber,
+        ),
+        tooltip: 'Assess Site Structure & Materials',
+        onPressed: isLocked
+            ? null
+            : () {
+                SiteInspectionAssessmentDialog.show(
+                  context,
+                  project: _project,
+                  checkItem: item,
+                  onSaved: () {
+                    setState(() {
+                      _project = ProjectRepository.instance.allProjects.firstWhere(
+                        (p) => p.id == _project.id,
+                        orElse: () => _project,
+                      );
+                    });
+                  },
+                );
+              },
+      );
+    } else if (item.id == 'c3') {
+      return IconButton(
+        icon: Icon(
+          item.isCompleted ? Icons.check_circle : Icons.electric_bolt_outlined,
+          color: item.isCompleted ? BanaagTheme.successGreen : BanaagTheme.primaryAmber,
+        ),
+        tooltip: 'Assess Utility Service Drop & Clearance',
+        onPressed: isLocked
+            ? null
+            : () {
+                UtilityServiceDropDialog.show(
+                  context,
+                  project: _project,
+                  checkItem: item,
+                  onSaved: () {
+                    setState(() {
+                      _project = ProjectRepository.instance.allProjects.firstWhere(
+                        (p) => p.id == _project.id,
+                        orElse: () => _project,
+                      );
+                    });
+                  },
+                );
+              },
+      );
+    } else if (item.id == 'p1') {
+      return IconButton(
+        icon: Icon(
+          item.isCompleted ? Icons.verified : Icons.account_tree_outlined,
+          color: item.isCompleted ? BanaagTheme.successGreen : BanaagTheme.primaryAmber,
+        ),
+        tooltip: item.isCompleted ? 'SLD & Load Schedule Ready' : 'Generate Single-Line Diagram',
+        onPressed: isLocked
+            ? null
+            : () async {
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => SingleLineDiagramScreen(project: _project),
+                  ),
+                );
+                setState(() {
+                  _project = ProjectRepository.instance.allProjects.firstWhere(
+                    (p) => p.id == _project.id,
+                    orElse: () => _project,
+                  );
+                });
+              },
+      );
+    } else if (item.id == 'c_dxf') {
+      return IconButton(
+        icon: Icon(
+          item.isCompleted ? Icons.check_circle : Icons.upload_file,
+          color: item.isCompleted ? BanaagTheme.successGreen : BanaagTheme.primaryAmber,
+        ),
+        tooltip: item.isCompleted ? 'AutoCAD .DXF Parsed & Verified' : 'Upload AutoCAD .DXF File',
+        onPressed: isLocked ? null : () => _handleDxfUpload(phase, item),
+      );
+    } else if (item.id == 'c_takeoff' || item.id == 'p_takeoff') {
+      return IconButton(
+        icon: Icon(
+          item.isCompleted ? Icons.check_circle : Icons.architecture,
+          color: item.isCompleted ? BanaagTheme.successGreen : Colors.cyanAccent,
+        ),
+        tooltip: item.isCompleted ? 'Takeoff Plan Completed' : 'Open Plan Canvas & Takeoff',
+        onPressed: isLocked
+            ? null
+            : () async {
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => PlanCanvasScreen(project: _project),
+                  ),
+                );
+                setState(() {
+                  _project = ProjectRepository.instance.allProjects.firstWhere(
+                    (p) => p.id == _project.id,
+                    orElse: () => _project,
+                  );
+                });
+              },
+      );
+    } else if (item.id == 'r3') {
+      return IconButton(
+        icon: Icon(
+          item.photoProofUri != null ? Icons.photo_library : Icons.camera_alt,
+          color: item.photoProofUri != null ? BanaagTheme.successGreen : BanaagTheme.primaryAmber,
+        ),
+        tooltip: 'Attach Pre-Cover Photo Proof',
+        onPressed: () {
+          setState(() {
+            item.photoProofUri = 'proof_photo_roughin.jpg';
+            item.isCompleted = true;
+            _toggleCheckItem(phase, item);
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('📸 Pre-cover rough-in photo proof saved & verified!')),
+          );
+        },
+      );
+    }
+    return null;
   }
 
   void _handleDxfUpload(ProjectPhase phase, PhaseCheckItem item) {

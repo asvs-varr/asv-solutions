@@ -62,6 +62,7 @@ class ProjectRepository {
         case ProjectPhaseType.consultation:
           checklist.addAll([
             PhaseCheckItem(id: 'c1', title: 'Client Needs Analysis (Appliance & Connected Loads tally)'),
+            PhaseCheckItem(id: 'c_takeoff', title: 'Initial Plan Takeoff & Wire Run Estimation (Plan Canvas)'),
             if (intakeMode == 'AUTOCAD_DXF')
               PhaseCheckItem(id: 'c_dxf', title: 'AutoCAD .DXF Architectural Plan Upload & Layer Audit'),
             PhaseCheckItem(id: 'c2', title: 'Site Inspection (Concrete vs Timber frame structure)'),
@@ -70,6 +71,7 @@ class ProjectRepository {
           break;
         case ProjectPhaseType.permitting:
           checklist.addAll([
+            PhaseCheckItem(id: 'p_takeoff', title: 'Final Architectural Takeoff & Conduit Routing Sign-off'),
             PhaseCheckItem(id: 'p1', title: 'Single-Line Diagram & Load Schedule computation completed'),
             PhaseCheckItem(id: 'p2', title: 'Plans signed and sealed by Professional Electrical Engineer (PEE)'),
             PhaseCheckItem(id: 'p3', title: 'Electrical Permit released by LGU Office of Building Official (OBO)'),

@@ -259,6 +259,100 @@ class SiteStructureAssessment {
   );
 }
 
+class UtilityServiceDropAssessment {
+  final String poleNumberTag; // SIN / Pole tag, e.g. "SIN-10492" or "M-4821"
+  final double distanceToPoleMeters; // Estimated service drop span
+  final bool crossesRoadway; // If crossing street/highway, PEC Art 2.30.2.4 requires 5.5m clearance
+  final String serviceEntranceType; // 'Overhead Masthead / Weatherhead' vs 'Underground Service Lateral'
+  final String utilityProvider; // Meralco, CANORECO, CASURECO, etc.
+  final String notes;
+
+  const UtilityServiceDropAssessment({
+    required this.poleNumberTag,
+    required this.distanceToPoleMeters,
+    this.crossesRoadway = false,
+    this.serviceEntranceType = 'Overhead Masthead / Weatherhead',
+    this.utilityProvider = 'Meralco',
+    this.notes = '',
+  });
+
+  // Business Logic & PEC Checks
+  bool get requiresIntermediatePole => distanceToPoleMeters > 30.0;
+  double get requiredVerticalClearanceMeters => crossesRoadway ? 5.5 : 4.5;
+  double get estimatedDuplexWireMeters => distanceToPoleMeters + 3.0; // +3m drip loop & masthead allowance
+
+  String get pecComplianceNote {
+    if (requiresIntermediatePole) {
+      return '⚠️ BABALA (PEC & DU Standards): Ang ${distanceToPoleMeters.toStringAsFixed(1)}m ay lagpas sa 30m maximum service span. Kinakailangan magtayo ng secondary intermediate pole (inter-pole) para hindi sumayad ang wire.';
+    }
+    return '✅ PEC Compliant: Pasok sa 30m maximum span limit (Clearance: ${requiredVerticalClearanceMeters.toStringAsFixed(1)}m ${crossesRoadway ? 'Tawid-Kalsada' : 'Driveway'}).';
+  }
+
+  Map<String, dynamic> toJson() => {
+    'poleNumberTag': poleNumberTag,
+    'distanceToPoleMeters': distanceToPoleMeters,
+    'crossesRoadway': crossesRoadway,
+    'serviceEntranceType': serviceEntranceType,
+    'utilityProvider': utilityProvider,
+    'notes': notes,
+  };
+
+  factory UtilityServiceDropAssessment.fromJson(Map<String, dynamic> json) => UtilityServiceDropAssessment(
+    poleNumberTag: json['poleNumberTag'] ?? '',
+    distanceToPoleMeters: (json['distanceToPoleMeters'] as num?)?.toDouble() ?? 15.0,
+    crossesRoadway: json['crossesRoadway'] ?? false,
+    serviceEntranceType: json['serviceEntranceType'] ?? 'Overhead Masthead / Weatherhead',
+    utilityProvider: json['utilityProvider'] ?? 'Meralco',
+    notes: json['notes'] ?? '',
+  );
+}
+
+class RoomGeometry {
+  final String roomType; // 'RECTANGULAR', 'L_SHAPE'
+  final double leftWallMeters; // e.g. 4.5
+  final double totalWidthMeters; // e.g. 4.0 (2m + 2m)
+  final double cutoutWidthMeters; // e.g. 1.0 (hallway/cutout)
+  final double cutoutDepthMeters; // e.g. 2.5
+  final double rightWallMeters; // e.g. 4.5
+
+  const RoomGeometry({
+    this.roomType = 'L_SHAPE',
+    this.leftWallMeters = 4.5,
+    this.totalWidthMeters = 4.0,
+    this.cutoutWidthMeters = 1.0,
+    this.cutoutDepthMeters = 2.5,
+    this.rightWallMeters = 4.5,
+  });
+
+  double get computedAreaSqm {
+    if (roomType == 'RECTANGULAR') {
+      return leftWallMeters * totalWidthMeters;
+    }
+    // L-Shape calculation: (Total Width * Left Wall) - (Cutout Width * Cutout Depth)
+    final baseArea = totalWidthMeters * leftWallMeters;
+    final cutoutArea = cutoutWidthMeters * cutoutDepthMeters;
+    return (baseArea - cutoutArea).clamp(1.0, 999.0);
+  }
+
+  Map<String, dynamic> toJson() => {
+    'roomType': roomType,
+    'leftWallMeters': leftWallMeters,
+    'totalWidthMeters': totalWidthMeters,
+    'cutoutWidthMeters': cutoutWidthMeters,
+    'cutoutDepthMeters': cutoutDepthMeters,
+    'rightWallMeters': rightWallMeters,
+  };
+
+  factory RoomGeometry.fromJson(Map<String, dynamic> json) => RoomGeometry(
+    roomType: json['roomType'] ?? 'L_SHAPE',
+    leftWallMeters: (json['leftWallMeters'] as num?)?.toDouble() ?? 4.5,
+    totalWidthMeters: (json['totalWidthMeters'] as num?)?.toDouble() ?? 4.0,
+    cutoutWidthMeters: (json['cutoutWidthMeters'] as num?)?.toDouble() ?? 1.0,
+    cutoutDepthMeters: (json['cutoutDepthMeters'] as num?)?.toDouble() ?? 2.5,
+    rightWallMeters: (json['rightWallMeters'] as num?)?.toDouble() ?? 4.5,
+  );
+}
+
 class Project {
   final String id;
   final String title;
@@ -272,6 +366,9 @@ class Project {
   final String intakeMode; // 'SITE_INTERVIEW', 'BLUEPRINT_PHOTO', 'AUTOCAD_DXF'
   bool isArchived;
   SiteStructureAssessment? siteStructure;
+  UtilityServiceDropAssessment? utilityServiceDrop;
+  RoomGeometry? roomGeometry;
+  String? blueprintImagePath;
   List<RoomSpace> spaces;
   List<ApplianceItem> applianceLoads;
   List<CanvasPoint> canvasPoints;
@@ -292,6 +389,9 @@ class Project {
     this.intakeMode = 'SITE_INTERVIEW',
     this.isArchived = false,
     this.siteStructure,
+    this.utilityServiceDrop,
+    this.roomGeometry,
+    this.blueprintImagePath,
     List<RoomSpace>? spaces,
     List<ApplianceItem>? applianceLoads,
     List<CanvasPoint>? canvasPoints,
@@ -325,6 +425,9 @@ class Project {
     'intakeMode': intakeMode,
     'isArchived': isArchived,
     'siteStructure': siteStructure?.toJson(),
+    'utilityServiceDrop': utilityServiceDrop?.toJson(),
+    'roomGeometry': roomGeometry?.toJson(),
+    'blueprintImagePath': blueprintImagePath,
     'spaces': spaces.map((s) => s.toJson()).toList(),
     'applianceLoads': applianceLoads.map((a) => a.toJson()).toList(),
     'canvasPoints': canvasPoints.map((c) => c.toJson()).toList(),
@@ -348,6 +451,13 @@ class Project {
     siteStructure: json['siteStructure'] != null
         ? SiteStructureAssessment.fromJson(json['siteStructure'] as Map<String, dynamic>)
         : null,
+    utilityServiceDrop: json['utilityServiceDrop'] != null
+        ? UtilityServiceDropAssessment.fromJson(json['utilityServiceDrop'] as Map<String, dynamic>)
+        : null,
+    roomGeometry: json['roomGeometry'] != null
+        ? RoomGeometry.fromJson(json['roomGeometry'] as Map<String, dynamic>)
+        : null,
+    blueprintImagePath: json['blueprintImagePath'] as String?,
     spaces: (json['spaces'] as List<dynamic>?)
             ?.map((s) => RoomSpace.fromJson(s as Map<String, dynamic>))
             .toList() ??

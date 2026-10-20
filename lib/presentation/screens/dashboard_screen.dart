@@ -11,6 +11,7 @@ import 'commercial_suite_screen.dart';
 import 'future_proofing_screen.dart';
 import 'banaag_pro_screen.dart';
 import '../widgets/project_management_dialogs.dart';
+import '../widgets/dev_ticket_modal.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -35,6 +36,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ],
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.confirmation_number_outlined, color: BanaagTheme.primaryAmber),
+            tooltip: 'Submit Dev Ticket / Issue',
+            onPressed: () => showDevTicketSheet(context, projectContext: 'Dashboard'),
+          ),
           IconButton(
             icon: const Icon(Icons.workspace_premium, color: BanaagTheme.primaryAmber),
             tooltip: 'BANAAG PRO Settings',

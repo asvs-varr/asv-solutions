@@ -1,11 +1,17 @@
-// BANAAG Plan Canvas & Takeoff Screen (Interactive 2D Canvas with live 3D Drop Takeoff)
-
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 import '../../domain/models.dart';
 import '../../domain/takeoff_engine.dart';
+import '../../domain/dxf_cad_engine.dart';
+import '../../domain/institutional_building_presets.dart';
 import '../../data/project_repository.dart';
 import '../theme/banaag_theme.dart';
 import '../widgets/dxf_export_guide_dialog.dart';
+import '../widgets/room_dimension_input_dialog.dart';
+import '../widgets/lighting_visualizer_modal.dart';
+import '../widgets/raw_plan_calibration_modal.dart';
 
 class PlanCanvasScreen extends StatefulWidget {
   final Project? project;
@@ -18,10 +24,14 @@ class PlanCanvasScreen extends StatefulWidget {
 class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
   late List<CanvasPoint> _points;
   late List<ConduitRoute> _routes;
+  RoomGeometry? _roomGeometry;
+  bool _isHeatmapVisible = false;
+  String _selectedTool = 'PANEL';
 
   @override
   void initState() {
     super.initState();
+    _roomGeometry = widget.project?.roomGeometry;
     if (widget.project != null && widget.project!.canvasPoints.isNotEmpty) {
       _points = widget.project!.canvasPoints;
       _routes = widget.project!.conduitRoutes;
@@ -94,8 +104,6 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
     }
   }
 
-  String _selectedTool = 'OUTLET_DUPLEX';
-
   void _addPointAt(TapUpDetails details) {
     setState(() {
       final newId = 'pt-${_points.length + 1}';
@@ -127,37 +135,200 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
       appBar: AppBar(
         title: const Text('📐 Plan Canvas & Auto-Takeoff'),
         actions: [
+          // 1. Quick Room Dimensions Generator
           IconButton(
-            icon: const Icon(Icons.help_outline, color: BanaagTheme.primaryAmber),
-            tooltip: 'AutoCAD .DXF 100% Export Guide',
-            onPressed: () => DxfExportGuideDialog.show(context),
-          ),
-          IconButton(
-            icon: const Icon(Icons.file_upload_outlined, color: BanaagTheme.primaryAmber),
-            tooltip: 'Import AutoCAD .DXF / Blueprint Image',
+            icon: const Icon(Icons.aspect_ratio, color: BanaagTheme.primaryAmber),
+            tooltip: 'Room Dimensions & Wall Calibration',
             onPressed: () {
-              if (widget.project != null) {
-                // Find c_dxf or CAD upload checklist item in project phases
-                for (final phase in widget.project!.phases) {
-                  for (final item in phase.checklist) {
-                    if (item.id == 'c_dxf') {
-                      item.isCompleted = true;
-                      item.notes = 'Imported via Plan Canvas Engine';
+              RoomDimensionInputDialog.show(
+                context,
+                initialGeometry: _roomGeometry,
+                onGenerated: (geom, pts, rts) {
+                  setState(() {
+                    _roomGeometry = geom;
+                    _points = pts;
+                    _routes = rts;
+                    if (widget.project != null) {
+                      widget.project!.roomGeometry = geom;
+                      widget.project!.canvasPoints = pts;
+                      widget.project!.conduitRoutes = rts;
+                      ProjectRepository.instance.updateProject(widget.project!);
                     }
-                  }
-                  if (phase.checklist.every((c) => c.isCompleted)) {
-                    phase.isCompleted = true;
-                  }
-                }
-                ProjectRepository.instance.updateProject(widget.project!);
-              }
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('⚡ Dual-Engine: AutoCAD .DXF parsed! Checklist item auto-checked ✅'),
-                  backgroundColor: BanaagTheme.successGreen,
-                ),
+                  });
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('📐 Auto-drawn ${geom.roomType == 'L_SHAPE' ? 'L-Shape' : 'Room'} (${geom.computedAreaSqm.toStringAsFixed(1)} m²)! ${pts.length} devices routed.'),
+                      backgroundColor: BanaagTheme.successGreen,
+                    ),
+                  );
+                },
               );
             },
+          ),
+
+          // 2. Import Floor Plan / DXF Intake
+          IconButton(
+            icon: const Icon(Icons.file_upload_outlined, color: Colors.cyanAccent),
+            tooltip: 'Import Architectural Floor Plan / DXF',
+            onPressed: () {
+              RawPlanCalibrationModal.show(
+                context,
+                project: widget.project,
+                onApplied: (pts, rts, geom) {
+                  setState(() {
+                    _points = pts;
+                    _routes = rts;
+                    _roomGeometry = geom;
+
+                    if (widget.project != null) {
+                      widget.project!.canvasPoints = pts;
+                      widget.project!.conduitRoutes = rts;
+                      widget.project!.roomGeometry = geom;
+
+                      // Mark Takeoff & Intake checklist item complete if applicable
+                      for (final phase in widget.project!.phases) {
+                        for (final item in phase.checklist) {
+                          if (item.id == 'c_dxf' || item.id == 'c_takeoff' || item.id == 'p_takeoff') {
+                            item.isCompleted = true;
+                            item.notes = 'Completed via Takeoff Plan Engine (${pts.length} devices auto-placed)';
+                          }
+                        }
+                        if (phase.checklist.every((c) => c.isCompleted)) {
+                          phase.isCompleted = true;
+                        }
+                      }
+                      ProjectRepository.instance.updateProject(widget.project!);
+                    }
+                  });
+
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('⚡ PEC Smart Placement Applied: ${pts.length} devices in ${geom.totalWidthMeters.toStringAsFixed(1)}m × ${geom.leftWallMeters.toStringAsFixed(1)}m area!'),
+                      backgroundColor: BanaagTheme.successGreen,
+                    ),
+                  );
+                },
+              );
+            },
+          ),
+
+          // 3. Overflow Menu for Lighting Calculator, Heatmap, and DXF Export
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert, color: Colors.white),
+            tooltip: 'More Engineering Tools',
+            color: const Color(0xFF1E2430),
+            onSelected: (val) async {
+              if (val == 'heatmap') {
+                setState(() {
+                  _isHeatmapVisible = !_isHeatmapVisible;
+                });
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(_isHeatmapVisible ? '🔥 In-Canvas Lux Heatmap Activated (IESNA)' : '❄️ Lux Heatmap Hidden (CAD Mode)'),
+                    backgroundColor: _isHeatmapVisible ? BanaagTheme.primaryAmber : const Color(0xFF262C38),
+                    duration: const Duration(seconds: 2),
+                  ),
+                );
+              } else if (val == 'lighting') {
+                LightingVisualizerModal.show(
+                  context,
+                  initialLength: _roomGeometry?.leftWallMeters ?? 7.0,
+                  initialWidth: _roomGeometry?.totalWidthMeters ?? 6.0,
+                  onApplyToCanvas: (result) {
+                    setState(() {
+                      for (int i = 0; i < result.fixtures.length; i++) {
+                        final f = result.fixtures[i];
+                        _points.add(CanvasPoint(
+                          id: 'pt-lux-${_points.length + 1}',
+                          type: 'LIGHT',
+                          label: f.label,
+                          x: 80.0 + (f.xMeters * 20.0),
+                          y: 80.0 + (f.yMeters * 20.0),
+                        ));
+                      }
+                      if (widget.project != null) {
+                        widget.project!.canvasPoints = _points;
+                        ProjectRepository.instance.updateProject(widget.project!);
+                      }
+                    });
+                  },
+                );
+              } else if (val == 'dxf_export') {
+                try {
+                  final preset = InstitutionalBuildingPreset.sanLorenzoRuizCollege();
+                  final dxfString = DxfCadEngine.generateDxf(
+                    projectName: widget.project?.title ?? 'Takeoff Electrical Plan',
+                    points: _points,
+                    routes: _routes,
+                    roomGeometry: _roomGeometry,
+                    preset: preset,
+                  );
+
+                  final tempDir = await getTemporaryDirectory();
+                  final file = File('${tempDir.path}/${widget.project?.title.replaceAll(" ", "_") ?? "Takeoff"}_Plan.dxf');
+                  await file.writeAsString(dxfString);
+
+                  await SharePlus.instance.share(
+                    ShareParams(
+                      files: [XFile(file.path)],
+                      text: '📐 BANAAG AutoCAD DXF Export: ${widget.project?.title ?? "Electrical Plan"}\n100% Editable in AutoCAD / DWG FastView.',
+                      subject: 'AutoCAD DXF Electrical Plan Export',
+                    ),
+                  );
+                } catch (e) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('DXF Export Error: $e'), backgroundColor: Colors.redAccent),
+                    );
+                  }
+                }
+              } else if (val == 'dxf_guide') {
+                DxfExportGuideDialog.show(context);
+              }
+            },
+            itemBuilder: (ctx) => [
+              PopupMenuItem(
+                value: 'heatmap',
+                child: Row(
+                  children: [
+                    Icon(_isHeatmapVisible ? Icons.blur_on : Icons.blur_off_outlined, color: Colors.amberAccent, size: 18),
+                    const SizedBox(width: 10),
+                    Text(_isHeatmapVisible ? 'Hide Lux Heatmap' : 'Show Lux Heatmap', style: const TextStyle(color: Colors.white, fontSize: 13)),
+                  ],
+                ),
+              ),
+              PopupMenuItem(
+                value: 'lighting',
+                child: Row(
+                  children: const [
+                    Icon(Icons.wb_incandescent_outlined, color: Colors.amberAccent, size: 18),
+                    SizedBox(width: 10),
+                    Text('Illuminance Calculator (IESNA)', style: TextStyle(color: Colors.white, fontSize: 13)),
+                  ],
+                ),
+              ),
+              const PopupMenuDivider(),
+              PopupMenuItem(
+                value: 'dxf_export',
+                child: Row(
+                  children: const [
+                    Icon(Icons.download_for_offline_outlined, color: Colors.cyanAccent, size: 18),
+                    SizedBox(width: 10),
+                    Text('Export AutoCAD (.DXF)', style: TextStyle(color: Colors.white, fontSize: 13)),
+                  ],
+                ),
+              ),
+              PopupMenuItem(
+                value: 'dxf_guide',
+                child: Row(
+                  children: const [
+                    Icon(Icons.help_outline, color: BanaagTheme.primaryAmber, size: 18),
+                    SizedBox(width: 10),
+                    Text('AutoCAD Export Guide', style: TextStyle(color: Colors.white, fontSize: 13)),
+                  ],
+                ),
+              ),
+            ],
           ),
           IconButton(
             icon: const Icon(Icons.check_circle, color: BanaagTheme.successGreen),
@@ -210,7 +381,12 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
               child: Container(
                 color: const Color(0xFF16191F),
                 child: CustomPaint(
-                  painter: CanvasPainter(points: _points, routes: _routes),
+                  painter: CanvasPainter(
+                    points: _points,
+                    routes: _routes,
+                    roomGeometry: _roomGeometry,
+                    isHeatmap: _isHeatmapVisible,
+                  ),
                   child: Container(),
                 ),
               ),
@@ -270,8 +446,15 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
 class CanvasPainter extends CustomPainter {
   final List<CanvasPoint> points;
   final List<ConduitRoute> routes;
+  final RoomGeometry? roomGeometry;
+  final bool isHeatmap;
 
-  CanvasPainter({required this.points, required this.routes});
+  CanvasPainter({
+    required this.points,
+    required this.routes,
+    this.roomGeometry,
+    this.isHeatmap = false,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -285,6 +468,30 @@ class CanvasPainter extends CustomPainter {
     }
     for (double y = 0; y < size.height; y += 30) {
       canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
+    }
+
+    // Draw Room Walls if RoomGeometry is specified
+    if (roomGeometry != null) {
+      _drawRoomWalls(canvas, size, roomGeometry!);
+    }
+
+    // In-Canvas Optical Lux Heatmap Layer
+    if (isHeatmap) {
+      for (final pt in points.where((p) => p.type == 'LIGHT')) {
+        final radius = 55.0;
+        final gradPaint = Paint()
+          ..shader = RadialGradient(
+            colors: [
+              BanaagTheme.primaryAmber.withValues(alpha: 0.55),
+              BanaagTheme.primaryAmber.withValues(alpha: 0.18),
+              Colors.transparent,
+            ],
+            stops: const [0.0, 0.45, 1.0],
+          ).createShader(Rect.fromCircle(center: Offset(pt.x, pt.y), radius: radius))
+          ..blendMode = BlendMode.screen;
+
+        canvas.drawCircle(Offset(pt.x, pt.y), radius, gradPaint);
+      }
     }
 
     // Draw Conduit Routes
@@ -314,15 +521,93 @@ class CanvasPainter extends CustomPainter {
           ..strokeWidth = 1.5,
       );
 
-      // Label
+      // Label (compact display to avoid overlapping)
+      final displayLabel = pt.label.contains('(') ? pt.label.split('(').first.trim() : pt.label;
       final textSpan = TextSpan(
-        text: pt.label,
-        style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+        text: displayLabel,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 9,
+          fontWeight: FontWeight.bold,
+          backgroundColor: Color(0xCC161922),
+        ),
       );
       final textPainter = TextPainter(text: textSpan, textDirection: TextDirection.ltr);
       textPainter.layout();
       textPainter.paint(canvas, Offset(pt.x - (textPainter.width / 2), pt.y + 14));
     }
+  }
+
+  void _drawRoomWalls(Canvas canvas, Size size, RoomGeometry geom) {
+    const originX = 60.0;
+    const originY = 60.0;
+    final maxDim = geom.totalWidthMeters > geom.leftWallMeters ? geom.totalWidthMeters : geom.leftWallMeters;
+    final scale = (300.0 / (maxDim <= 0 ? 6.0 : maxDim)).clamp(20.0, 50.0);
+
+    final wallPaint = Paint()
+      ..color = const Color(0xFF5A6882)
+      ..strokeWidth = 4.0
+      ..style = PaintingStyle.stroke;
+
+    final fillPaint = Paint()
+      ..color = const Color(0xFF1B2230).withValues(alpha: 0.4)
+      ..style = PaintingStyle.fill;
+
+    final path = Path();
+    if (geom.roomType == 'RECTANGULAR') {
+      final rect = Rect.fromLTWH(
+        originX,
+        originY,
+        geom.totalWidthMeters * scale,
+        geom.leftWallMeters * scale,
+      );
+      canvas.drawRect(rect, fillPaint);
+      canvas.drawRect(rect, wallPaint);
+    } else {
+      // L-Shaped Room / Cutout based on user sketch:
+      // P1: (originX, originY) -> Top Left
+      // P2: (originX + (geom.totalWidthMeters - geom.cutoutWidthMeters) * scale, originY)
+      // P3: Turn Down along Cutout: (..., originY + geom.cutoutDepthMeters * scale)
+      // P4: Turn Right: (originX + geom.totalWidthMeters * scale, originY + geom.cutoutDepthMeters * scale)
+      // P5: Down to Bottom Right: (originX + geom.totalWidthMeters * scale, originY + geom.leftWallMeters * scale)
+      // P6: Left along Bottom: (originX, originY + geom.leftWallMeters * scale)
+      // Close to P1
+      final wMain = (geom.totalWidthMeters - geom.cutoutWidthMeters) * scale;
+      final wTotal = geom.totalWidthMeters * scale;
+      final hLeft = geom.leftWallMeters * scale;
+      final hCutout = geom.cutoutDepthMeters * scale;
+
+      path.moveTo(originX, originY);
+      path.lineTo(originX + wMain, originY);
+      path.lineTo(originX + wMain, originY + hCutout);
+      path.lineTo(originX + wTotal, originY + hCutout);
+      path.lineTo(originX + wTotal, originY + hLeft);
+      path.lineTo(originX, originY + hLeft);
+      path.close();
+
+      canvas.drawPath(path, fillPaint);
+      canvas.drawPath(path, wallPaint);
+
+      // Dimension labels
+      _drawDimensionText(canvas, '${geom.leftWallMeters.toStringAsFixed(1)}m', originX - 35, originY + (hLeft / 2));
+      _drawDimensionText(canvas, '${geom.totalWidthMeters.toStringAsFixed(1)}m', originX + (wTotal / 2) - 15, originY + hLeft + 12);
+      _drawDimensionText(canvas, '${geom.cutoutWidthMeters.toStringAsFixed(1)}m', originX + wMain + 5, originY + hCutout - 15);
+    }
+
+    // Floor Area badge inside room
+    final areaText = 'AREA: ${geom.computedAreaSqm.toStringAsFixed(1)} m²';
+    _drawDimensionText(canvas, areaText, originX + 25, originY + 25, color: BanaagTheme.primaryAmber, isBold: true);
+  }
+
+  void _drawDimensionText(Canvas canvas, String text, double x, double y, {Color color = const Color(0xFF8C9BAE), bool isBold = false}) {
+    final painter = TextPainter(
+      text: TextSpan(
+        text: text,
+        style: TextStyle(color: color, fontSize: 10, fontWeight: isBold ? FontWeight.bold : FontWeight.normal, fontFamily: 'monospace'),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    painter.paint(canvas, Offset(x, y));
   }
 
   Color _getColorForType(String type) {

@@ -1,10 +1,13 @@
 // BANAAG Client Needs Analysis Screen: Modular List View, Custom Spaces, Custom Appliances & Smart Lighting Sizer
 
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../../domain/models.dart';
 import '../../domain/lighting_engine.dart';
+import '../../domain/illuminance_grid_engine.dart';
 import '../../data/project_repository.dart';
 import '../theme/banaag_theme.dart';
+import '../widgets/lighting_visualizer_modal.dart';
 import 'plan_canvas_screen.dart';
 
 class ClientNeedsAnalysisScreen extends StatefulWidget {
@@ -20,24 +23,65 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
 
   late String _activeSpaceName;
 
-  // Standard Philippine Quick-Pick Preset Catalog
+  // Standard Philippine Quick-Pick Preset Catalog by Category
   final List<Map<String, dynamic>> _quickPresets = [
-    {'name': '2.5HP Inverter Split ACU', 'va': 2600.0, 'dedicated': true, 'lighting': false, 'icon': Icons.ac_unit},
-    {'name': '1.5HP Inverter Split ACU', 'va': 1650.0, 'dedicated': true, 'lighting': false, 'icon': Icons.ac_unit},
-    {'name': 'Two-Door Inverter Refrigerator', 'va': 800.0, 'dedicated': true, 'lighting': false, 'icon': Icons.kitchen},
-    {'name': 'Induction Cooktop (Double Burner)', 'va': 3500.0, 'dedicated': true, 'lighting': false, 'icon': Icons.soup_kitchen},
-    {'name': 'Multipoint Water Heater (3.5kW)', 'va': 3500.0, 'dedicated': true, 'lighting': false, 'icon': Icons.hot_tub},
-    {'name': 'Single-point Shower Heater', 'va': 2500.0, 'dedicated': true, 'lighting': false, 'icon': Icons.shower},
-    {'name': 'Front-load Washing Machine', 'va': 1800.0, 'dedicated': true, 'lighting': false, 'icon': Icons.local_laundry_service},
-    {'name': 'Microwave & Oven Toaster', 'va': 1800.0, 'dedicated': false, 'lighting': false, 'icon': Icons.microwave},
-    {'name': '65" Smart 4K TV & Audio Rack', 'va': 350.0, 'dedicated': false, 'lighting': false, 'icon': Icons.tv},
-    {'name': 'General Convenience Outlet (Duplex)', 'va': 180.0, 'dedicated': false, 'lighting': false, 'icon': Icons.power},
-    {'name': 'Workstation PC / Desktop', 'va': 450.0, 'dedicated': false, 'lighting': false, 'icon': Icons.computer},
-    {'name': 'Electric Stand Fan (16")', 'va': 75.0, 'dedicated': false, 'lighting': false, 'icon': Icons.toys_outlined},
-    {'name': 'Wall-Mounted Orbit Fan', 'va': 90.0, 'dedicated': false, 'lighting': false, 'icon': Icons.rotate_right},
-    {'name': 'Standard Ceiling Fan (52" 3-Blade)', 'va': 85.0, 'dedicated': false, 'lighting': false, 'icon': Icons.mode_fan_off_outlined},
-    {'name': 'DC Inverter Smart Ceiling Fan', 'va': 40.0, 'dedicated': false, 'lighting': false, 'icon': Icons.mode_fan_off_outlined},
-    {'name': 'Ceiling Fan with Drop Light', 'va': 120.0, 'dedicated': false, 'lighting': true, 'icon': Icons.mode_fan_off_outlined},
+    // Outlets & Receptacles
+    {'name': 'General Convenience Outlet (Duplex)', 'category': 'outlets', 'va': 180.0, 'dedicated': false, 'lighting': false, 'icon': Icons.power},
+    {'name': 'Single Convenience Outlet (180 VA)', 'category': 'outlets', 'va': 180.0, 'dedicated': false, 'lighting': false, 'icon': Icons.power_input},
+    {'name': 'Triplex Convenience Outlet (270 VA)', 'category': 'outlets', 'va': 270.0, 'dedicated': false, 'lighting': false, 'icon': Icons.power},
+    {'name': 'Quadplex Convenience Outlet (360 VA)', 'category': 'outlets', 'va': 360.0, 'dedicated': false, 'lighting': false, 'icon': Icons.power},
+    {'name': 'GFCI Weatherproof Outdoor Outlet', 'category': 'outlets', 'va': 180.0, 'dedicated': false, 'lighting': false, 'icon': Icons.shield_outlined},
+    {'name': 'Pop-up Floor Receptacle Box', 'category': 'outlets', 'va': 180.0, 'dedicated': false, 'lighting': false, 'icon': Icons.layers_outlined},
+    {'name': 'Kitchen Countertop SABC Outlet', 'category': 'outlets', 'va': 180.0, 'dedicated': false, 'lighting': false, 'icon': Icons.countertops_outlined},
+
+    // HVAC & Cooling / Fans
+    {'name': '1.0HP Inverter Split ACU', 'category': 'hvac', 'va': 1100.0, 'dedicated': true, 'lighting': false, 'icon': Icons.ac_unit},
+    {'name': '1.5HP Inverter Split ACU', 'category': 'hvac', 'va': 1650.0, 'dedicated': true, 'lighting': false, 'icon': Icons.ac_unit},
+    {'name': '2.0HP Inverter Split ACU', 'category': 'hvac', 'va': 2100.0, 'dedicated': true, 'lighting': false, 'icon': Icons.ac_unit},
+    {'name': '2.5HP Inverter Split ACU', 'category': 'hvac', 'va': 2600.0, 'dedicated': true, 'lighting': false, 'icon': Icons.ac_unit},
+    {'name': '0.75HP Window Type ACU', 'category': 'hvac', 'va': 900.0, 'dedicated': true, 'lighting': false, 'icon': Icons.window_outlined},
+    {'name': '1.0HP Window Type ACU', 'category': 'hvac', 'va': 1200.0, 'dedicated': true, 'lighting': false, 'icon': Icons.window_outlined},
+    {'name': 'Standard Ceiling Fan (52" 3-Blade)', 'category': 'hvac', 'va': 85.0, 'dedicated': false, 'lighting': false, 'icon': Icons.mode_fan_off_outlined},
+    {'name': 'DC Inverter Smart Ceiling Fan', 'category': 'hvac', 'va': 40.0, 'dedicated': false, 'lighting': false, 'icon': Icons.mode_fan_off_outlined},
+    {'name': 'Ceiling Fan with Drop Light', 'category': 'hvac', 'va': 120.0, 'dedicated': false, 'lighting': true, 'icon': Icons.mode_fan_off_outlined},
+    {'name': 'Wall-Mounted Orbit Fan', 'category': 'hvac', 'va': 90.0, 'dedicated': false, 'lighting': false, 'icon': Icons.rotate_right},
+    {'name': 'Electric Stand Fan (16")', 'category': 'hvac', 'va': 75.0, 'dedicated': false, 'lighting': false, 'icon': Icons.toys_outlined},
+    {'name': 'Ceiling / Wall Exhaust Fan (35W)', 'category': 'hvac', 'va': 50.0, 'dedicated': false, 'lighting': false, 'icon': Icons.air},
+
+    // Kitchen Appliances
+    {'name': 'Two-Door Inverter Refrigerator', 'category': 'kitchen', 'va': 800.0, 'dedicated': true, 'lighting': false, 'icon': Icons.kitchen},
+    {'name': 'Side-by-Side Inverter Refrigerator', 'category': 'kitchen', 'va': 1200.0, 'dedicated': true, 'lighting': false, 'icon': Icons.kitchen},
+    {'name': 'Induction Cooktop (Single Burner)', 'category': 'kitchen', 'va': 2100.0, 'dedicated': true, 'lighting': false, 'icon': Icons.soup_kitchen},
+    {'name': 'Induction Cooktop (Double Burner)', 'category': 'kitchen', 'va': 3500.0, 'dedicated': true, 'lighting': false, 'icon': Icons.soup_kitchen},
+    {'name': 'Electric Range with Oven', 'category': 'kitchen', 'va': 6000.0, 'dedicated': true, 'lighting': false, 'icon': Icons.microwave_outlined},
+    {'name': 'Microwave & Oven Toaster', 'category': 'kitchen', 'va': 1800.0, 'dedicated': false, 'lighting': false, 'icon': Icons.microwave},
+    {'name': 'Air Fryer (1500W)', 'category': 'kitchen', 'va': 1500.0, 'dedicated': false, 'lighting': false, 'icon': Icons.local_fire_department},
+    {'name': 'Rice Cooker (Warm & Cook)', 'category': 'kitchen', 'va': 700.0, 'dedicated': false, 'lighting': false, 'icon': Icons.rice_bowl},
+    {'name': 'Range Hood Exhaust', 'category': 'kitchen', 'va': 250.0, 'dedicated': false, 'lighting': false, 'icon': Icons.heat_pump},
+    {'name': 'Electric Kettle', 'category': 'kitchen', 'va': 1500.0, 'dedicated': false, 'lighting': false, 'icon': Icons.coffee_maker},
+
+    // Bathroom & Laundry
+    {'name': 'Single-point Shower Heater', 'category': 'bath_laundry', 'va': 2500.0, 'dedicated': true, 'lighting': false, 'icon': Icons.shower},
+    {'name': 'Multipoint Water Heater (3.5kW)', 'category': 'bath_laundry', 'va': 3500.0, 'dedicated': true, 'lighting': false, 'icon': Icons.hot_tub},
+    {'name': 'Multipoint Water Heater (4.5kW)', 'category': 'bath_laundry', 'va': 4500.0, 'dedicated': true, 'lighting': false, 'icon': Icons.hot_tub},
+    {'name': 'Front-load Washing Machine', 'category': 'bath_laundry', 'va': 1800.0, 'dedicated': true, 'lighting': false, 'icon': Icons.local_laundry_service},
+    {'name': 'Top-load Washing Machine', 'category': 'bath_laundry', 'va': 1000.0, 'dedicated': false, 'lighting': false, 'icon': Icons.local_laundry_service},
+    {'name': 'Electric Clothes Dryer (3.0kW)', 'category': 'bath_laundry', 'va': 3000.0, 'dedicated': true, 'lighting': false, 'icon': Icons.dry_cleaning},
+
+    // Entertainment & Office
+    {'name': '65" Smart 4K TV & Audio Rack', 'category': 'entertainment', 'va': 350.0, 'dedicated': false, 'lighting': false, 'icon': Icons.tv},
+    {'name': '50" Living Room Smart TV', 'category': 'entertainment', 'va': 200.0, 'dedicated': false, 'lighting': false, 'icon': Icons.tv},
+    {'name': 'Soundbar & Subwoofer System', 'category': 'entertainment', 'va': 150.0, 'dedicated': false, 'lighting': false, 'icon': Icons.speaker},
+    {'name': 'Workstation PC / Desktop', 'category': 'entertainment', 'va': 450.0, 'dedicated': false, 'lighting': false, 'icon': Icons.computer},
+    {'name': 'Laptop & Multi-monitor Dock', 'category': 'entertainment', 'va': 180.0, 'dedicated': false, 'lighting': false, 'icon': Icons.laptop},
+    {'name': 'WiFi 6 Router & ONT Modem', 'category': 'entertainment', 'va': 50.0, 'dedicated': false, 'lighting': false, 'icon': Icons.wifi},
+
+    // Heavy & Dedicated Motors
+    {'name': '1.0HP Deep Well Water Pump', 'category': 'heavy', 'va': 1400.0, 'dedicated': true, 'lighting': false, 'icon': Icons.water_drop},
+    {'name': '0.5HP Booster Water Pump', 'category': 'heavy', 'va': 750.0, 'dedicated': true, 'lighting': false, 'icon': Icons.water_drop_outlined},
+    {'name': 'Electric Gate Motor (Sliding)', 'category': 'heavy', 'va': 600.0, 'dedicated': true, 'lighting': false, 'icon': Icons.garage},
+    {'name': 'Inverter Welding Machine Outlet', 'category': 'heavy', 'va': 3800.0, 'dedicated': true, 'lighting': false, 'icon': Icons.build},
+    {'name': '7kW EV Level-2 Home Charger', 'category': 'heavy', 'va': 7000.0, 'dedicated': true, 'lighting': false, 'icon': Icons.ev_station},
   ];
 
   @override
@@ -1042,14 +1086,14 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
             // Prepare Pack Items with their respective PEC Articles & Justifications
             final List<Map<String, dynamic>> previewItems = [];
 
-            // Primary Lighting
+            // Primary Lighting (Room-Specific Dynamic Fixture)
             previewItems.add({
-              'name': '${lighting.recommendedWattagePerFixture}W LED Downlights (${lighting.fixtureCount} pcs)',
-              'va': 15.0 * lighting.fixtureCount,
+              'name': '${lighting.primaryFixtureName} (${lighting.recommendedWattagePerFixture}W x ${lighting.fixtureCount} pcs)',
+              'va': (lighting.recommendedWattagePerFixture / 0.85) * lighting.fixtureCount,
               'isLighting': true,
               'isDedicated': false,
-              'citation': 'PEC 2017 Art 2.10.3.2',
-              'rule': '${selectedTier.label}: ${lighting.roomType.recommendedLux} Lux target (${(lighting.targetLumens).toStringAsFixed(0)} lumens para sa ${area.toStringAsFixed(0)} m²)',
+              'citation': 'PEC 2017 Art 2.10.3.2 / IESNA',
+              'rule': '${selectedTier.label}: ${lighting.roomType.recommendedLux} Lux benchmark (${(lighting.targetLumens).toStringAsFixed(0)} lm target para sa ${area.toStringAsFixed(0)} m²)',
               'icon': Icons.lightbulb_outline,
             });
 
@@ -1750,54 +1794,382 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
   void _showQuickPresetPicker() {
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       backgroundColor: BanaagTheme.surfaceCard,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (ctx) => Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text('Quick Preset Library: $_activeSpaceName', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(ctx)),
-              ],
-            ),
-            const Text('Pumili ng appliance para ma-add sa active room nang mabilis:', style: TextStyle(color: BanaagTheme.textMuted, fontSize: 12)),
-            const SizedBox(height: 12),
-            Expanded(
-              child: ListView.separated(
-                itemCount: _quickPresets.length,
-                separatorBuilder: (context, index) => const Divider(color: Colors.white10),
-                itemBuilder: (context, index) {
-                  final preset = _quickPresets[index];
-                  return ListTile(
-                    leading: CircleAvatar(
-                      backgroundColor: BanaagTheme.primaryAmber.withValues(alpha: 0.15),
-                      foregroundColor: BanaagTheme.primaryAmber,
-                      child: Icon(preset['icon'], size: 20),
+      builder: (ctx) {
+        // Local state for bulk multi-select
+        String selectedCategory = 'all';
+        String searchQuery = '';
+        final Map<String, int> bulkQuantities = {};
+
+        final categories = [
+          {'id': 'all', 'label': 'All Loads', 'icon': Icons.flash_on},
+          {'id': 'outlets', 'label': 'Outlets', 'icon': Icons.power},
+          {'id': 'hvac', 'label': 'HVAC & Fans', 'icon': Icons.ac_unit},
+          {'id': 'kitchen', 'label': 'Kitchen', 'icon': Icons.kitchen},
+          {'id': 'bath_laundry', 'label': 'Bath & Wash', 'icon': Icons.shower},
+          {'id': 'entertainment', 'label': 'Media & PC', 'icon': Icons.tv},
+          {'id': 'heavy', 'label': 'Heavy & Motors', 'icon': Icons.build},
+        ];
+
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            // Filter list based on category & search query
+            final filteredPresets = _quickPresets.where((p) {
+              final matchesCategory = selectedCategory == 'all' || p['category'] == selectedCategory;
+              final matchesSearch = searchQuery.isEmpty ||
+                  (p['name'] as String).toLowerCase().contains(searchQuery.toLowerCase());
+              return matchesCategory && matchesSearch;
+            }).toList();
+
+            // Compute total selected items and VA
+            int totalSelectedCount = 0;
+            double totalSelectedVA = 0.0;
+            bulkQuantities.forEach((name, qty) {
+              if (qty > 0) {
+                totalSelectedCount += qty;
+                final match = _quickPresets.firstWhere((p) => p['name'] == name);
+                totalSelectedVA += (match['va'] as double) * qty;
+              }
+            });
+
+            return SizedBox(
+              height: MediaQuery.of(context).size.height * 0.88,
+              child: Column(
+                children: [
+                  // Header
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  const Icon(Icons.playlist_add_check, color: BanaagTheme.primaryAmber, size: 22),
+                                  const SizedBox(width: 8),
+                                  Flexible(
+                                    child: Text(
+                                      'Bulk Load Optimizer: $_activeSpaceName',
+                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 2),
+                              const Text(
+                                'Piliin ang appliances & outlets na sabay-sabay ipapasok sa kwarto:',
+                                style: TextStyle(color: BanaagTheme.textMuted, fontSize: 11),
+                              ),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close),
+                          onPressed: () => Navigator.pop(ctx),
+                        ),
+                      ],
                     ),
-                    title: Text(preset['name'], style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
-                    subtitle: Text('${preset['va']} VA (${(preset['va'] / 230.0).toStringAsFixed(1)}A) ${preset['dedicated'] ? '• [DEDICATED]' : ''}',
-                        style: TextStyle(color: preset['dedicated'] ? Colors.redAccent : BanaagTheme.textMuted, fontSize: 11)),
-                    trailing: const Icon(Icons.add_circle, color: BanaagTheme.primaryAmber),
-                    onTap: () {
-                      _addOrIncrementAppliance(
-                        name: preset['name'],
-                        ratingVA: preset['va'],
-                        isDedicated: preset['dedicated'],
-                        isLighting: preset['lighting'] ?? false,
-                      );
-                      Navigator.pop(ctx);
-                    },
-                  );
-                },
+                  ),
+
+                  // Search Bar
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                    child: Container(
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: Colors.black26,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: BanaagTheme.surfaceCardBorder),
+                      ),
+                      child: TextField(
+                        style: const TextStyle(fontSize: 13),
+                        decoration: InputDecoration(
+                          hintText: 'Maghanap ng appliance o outlet...',
+                          hintStyle: const TextStyle(color: BanaagTheme.textMuted, fontSize: 12),
+                          prefixIcon: const Icon(Icons.search, size: 18, color: BanaagTheme.primaryAmber),
+                          suffixIcon: searchQuery.isNotEmpty
+                              ? IconButton(
+                                  icon: const Icon(Icons.clear, size: 16),
+                                  onPressed: () => setSheetState(() => searchQuery = ''),
+                                )
+                              : null,
+                          border: InputBorder.none,
+                          contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                        ),
+                        onChanged: (val) => setSheetState(() => searchQuery = val),
+                      ),
+                    ),
+                  ),
+
+                  // Category Filter Chips
+                  SizedBox(
+                    height: 44,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                      itemCount: categories.length,
+                      separatorBuilder: (context, index) => const SizedBox(width: 8),
+                      itemBuilder: (context, idx) {
+                        final cat = categories[idx];
+                        final bool isSelected = selectedCategory == cat['id'];
+                        return FilterChip(
+                          selected: isSelected,
+                          avatar: Icon(cat['icon'] as IconData, size: 14, color: isSelected ? Colors.black : Colors.white70),
+                          label: Text(
+                            cat['label'] as String,
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                              color: isSelected ? Colors.black : Colors.white,
+                            ),
+                          ),
+                          backgroundColor: const Color(0xFF1F2430),
+                          selectedColor: BanaagTheme.primaryAmber,
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          visualDensity: VisualDensity.compact,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          onSelected: (_) => setSheetState(() => selectedCategory = cat['id'] as String),
+                        );
+                      },
+                    ),
+                  ),
+
+                  const Divider(color: BanaagTheme.surfaceCardBorder, height: 1),
+
+                  // Compact Load List
+                  Expanded(
+                    child: ListView.separated(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      itemCount: filteredPresets.length,
+                      separatorBuilder: (context, index) => const Divider(color: Colors.white10, height: 1),
+                      itemBuilder: (context, index) {
+                        final preset = filteredPresets[index];
+                        final String name = preset['name'];
+                        final double va = preset['va'];
+                        final bool isDedicated = preset['dedicated'];
+                        final IconData icon = preset['icon'];
+                        final int qty = bulkQuantities[name] ?? 0;
+                        final bool hasQty = qty > 0;
+
+                        return Container(
+                          padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 6),
+                          decoration: BoxDecoration(
+                            color: hasQty ? BanaagTheme.primaryAmber.withValues(alpha: 0.08) : Colors.transparent,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            children: [
+                              // Compact Icon
+                              Container(
+                                width: 34,
+                                height: 34,
+                                decoration: BoxDecoration(
+                                  color: hasQty
+                                      ? BanaagTheme.primaryAmber.withValues(alpha: 0.25)
+                                      : Colors.white.withValues(alpha: 0.05),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Icon(
+                                  icon,
+                                  size: 18,
+                                  color: hasQty ? BanaagTheme.primaryAmber : Colors.white70,
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+
+                              // Name & Tech Specs (Zero omitted info)
+                              Expanded(
+                                child: InkWell(
+                                  onTap: () {
+                                    setSheetState(() {
+                                      bulkQuantities[name] = qty + 1;
+                                    });
+                                  },
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        name,
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: hasQty ? FontWeight.bold : FontWeight.w600,
+                                          color: hasQty ? BanaagTheme.primaryAmber : Colors.white,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Row(
+                                        children: [
+                                          Text(
+                                            '${va.toStringAsFixed(0)} VA (${(va / 230.0).toStringAsFixed(1)}A)',
+                                            style: const TextStyle(color: BanaagTheme.textMuted, fontSize: 10),
+                                          ),
+                                          if (isDedicated) ...[
+                                            const SizedBox(width: 6),
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                              decoration: BoxDecoration(
+                                                color: Colors.redAccent.withValues(alpha: 0.2),
+                                                borderRadius: BorderRadius.circular(4),
+                                                border: Border.all(color: Colors.redAccent.withValues(alpha: 0.6), width: 0.8),
+                                              ),
+                                              child: const Text(
+                                                'DEDICATED',
+                                                style: TextStyle(color: Colors.redAccent, fontSize: 8.5, fontWeight: FontWeight.bold),
+                                              ),
+                                            ),
+                                          ],
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+
+                              // Compact Counter (- Qty +)
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (hasQty)
+                                    IconButton(
+                                      visualDensity: VisualDensity.compact,
+                                      padding: EdgeInsets.zero,
+                                      constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                                      icon: const Icon(Icons.remove_circle_outline, size: 20, color: Colors.white60),
+                                      onPressed: () {
+                                        setSheetState(() {
+                                          if (qty > 1) {
+                                            bulkQuantities[name] = qty - 1;
+                                          } else {
+                                            bulkQuantities.remove(name);
+                                          }
+                                        });
+                                      },
+                                    ),
+                                  if (hasQty)
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: BanaagTheme.primaryAmber,
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Text(
+                                        '$qty',
+                                        style: const TextStyle(color: Colors.black, fontSize: 12, fontWeight: FontWeight.bold),
+                                      ),
+                                    ),
+                                  IconButton(
+                                    visualDensity: VisualDensity.compact,
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                                    icon: Icon(
+                                      hasQty ? Icons.add_circle : Icons.add_circle_outline,
+                                      size: 22,
+                                      color: BanaagTheme.primaryAmber,
+                                    ),
+                                    onPressed: () {
+                                      setSheetState(() {
+                                        bulkQuantities[name] = qty + 1;
+                                      });
+                                    },
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+
+                  // Bottom Action Summary Bar
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    decoration: const BoxDecoration(
+                      color: Color(0xFF171B22),
+                      border: Border(top: BorderSide(color: BanaagTheme.surfaceCardBorder)),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                totalSelectedCount > 0
+                                    ? '$totalSelectedCount Items Napili'
+                                    : 'Pumili ng mga ikakabit',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                  color: totalSelectedCount > 0 ? BanaagTheme.primaryAmber : BanaagTheme.textMuted,
+                                ),
+                              ),
+                              Text(
+                                totalSelectedCount > 0
+                                    ? 'Dagdag: ${(totalSelectedVA / 1000.0).toStringAsFixed(2)} kVA (${(totalSelectedVA / 230.0).toStringAsFixed(1)} A)'
+                                    : 'Mag-tap ng + para magdagdag',
+                                style: const TextStyle(fontSize: 11, color: BanaagTheme.textMuted),
+                              ),
+                            ],
+                          ),
+                        ),
+                        ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: totalSelectedCount > 0 ? BanaagTheme.primaryAmber : Colors.grey.shade800,
+                            foregroundColor: Colors.black,
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                          icon: const Icon(Icons.check, size: 18),
+                          label: Text(
+                            totalSelectedCount > 0 ? 'Ilagay sa Kwarto ($totalSelectedCount)' : 'Wala pang napili',
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                          ),
+                          onPressed: totalSelectedCount == 0
+                              ? null
+                              : () {
+                                  // Bulk apply to project
+                                  bulkQuantities.forEach((name, count) {
+                                    if (count > 0) {
+                                      final match = _quickPresets.firstWhere((p) => p['name'] == name);
+                                      for (int i = 0; i < count; i++) {
+                                        _addOrIncrementAppliance(
+                                          name: match['name'],
+                                          ratingVA: match['va'],
+                                          isDedicated: match['dedicated'],
+                                          isLighting: match['lighting'] ?? false,
+                                        );
+                                      }
+                                    }
+                                  });
+                                  Navigator.pop(ctx);
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      backgroundColor: BanaagTheme.successGreen,
+                                      content: Text('✅ $totalSelectedCount items naidagdag sa "$_activeSpaceName"!'),
+                                    ),
+                                  );
+                                },
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
-            ),
-          ],
-        ),
-      ),
+            );
+          },
+        );
+      },
     );
   }
 
@@ -1925,7 +2297,7 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Smart Lighting: ${lightingRec.fixtureCount} pcs ${lightingRec.recommendedWattagePerFixture}W LED Downlight (${lightingRec.lumensPerFixture} lm)',
+                        'Smart Lighting: ${lightingRec.fixtureCount}x ${lightingRec.primaryFixtureName}',
                         style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.white),
                       ),
                       Text(
@@ -1935,6 +2307,35 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
                     ],
                   ),
                 ),
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size(0, 36),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                    side: const BorderSide(color: BanaagTheme.primaryAmber),
+                    foregroundColor: BanaagTheme.primaryAmber,
+                  ),
+                  icon: const Icon(Icons.grid_on, size: 14),
+                  label: const Text('Layout & Heatmap', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                  onPressed: () {
+                    final currentSpace = _spaces.firstWhere((s) => s.name == _activeSpaceName, orElse: () => _spaces.first);
+                    final double estLength = math.sqrt(currentSpace.areaSqm * 1.25);
+                    final double estWidth = currentSpace.areaSqm / estLength;
+
+                    showDialog(
+                      context: context,
+                      builder: (ctx) => LightingVisualizerModal(
+                        initialRoomType: lightingRec.roomType,
+                        initialLength: double.parse(estLength.toStringAsFixed(1)),
+                        initialWidth: double.parse(estWidth.toStringAsFixed(1)),
+                        initialHeight: currentSpace.ceilingHeight,
+                        onApplyToCanvas: (result) {
+                          _applyLightingLayoutToCanvas(result);
+                        },
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(width: 6),
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
                     minimumSize: const Size(0, 36),
@@ -1944,12 +2345,14 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
                   ),
                   onPressed: () {
                     _addOrIncrementAppliance(
-                      name: '${lightingRec.recommendedWattagePerFixture}W LED Downlight ($_activeSpaceName)',
-                      ratingVA: 15.0,
+                      name: '${lightingRec.primaryFixtureName} ($_activeSpaceName)',
+                      ratingVA: (lightingRec.recommendedWattagePerFixture * 1.25).clamp(15.0, 100.0),
                       isDedicated: false,
+                      isLighting: true,
+                      circuitNumber: 1,
                     );
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('💡 Added recommended LED lighting fixture to $_activeSpaceName!')),
+                      SnackBar(content: Text('💡 Added ${lightingRec.primaryFixtureName} to $_activeSpaceName!')),
                     );
                   },
                   child: const Text('+ Add Light', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
@@ -2015,14 +2418,14 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
                         count: currentSpaceItems.where((a) => a.isLighting || a.name.toLowerCase().contains('light') || a.name.toLowerCase().contains('led')).length,
                         onAdd: () {
                           _addOrIncrementAppliance(
-                            name: '${lightingRec.recommendedWattagePerFixture}W LED Downlight ($_activeSpaceName)',
-                            ratingVA: 15.0,
+                            name: '${lightingRec.primaryFixtureName} ($_activeSpaceName)',
+                            ratingVA: (lightingRec.recommendedWattagePerFixture * 1.25).clamp(15.0, 100.0),
                             isDedicated: false,
                             isLighting: true,
                             circuitNumber: 1,
                           );
                           ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('💡 Added LED fixture to $_activeSpaceName!')),
+                            SnackBar(content: Text('💡 Added ${lightingRec.primaryFixtureName} to $_activeSpaceName!')),
                           );
                         },
                       ),
@@ -2535,6 +2938,101 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
     );
   }
 
+  void _applyLightingLayoutToCanvas(IlluminanceLayoutResult result) {
+    // Generate CanvasPoints for Room perimeter & fixtures
+    final double originX = 140.0;
+    final double originY = 120.0;
+    final double scale = 36.0; // 36 px per meter
+
+    // 1. Ensure Panel exists
+    if (!widget.project.canvasPoints.any((p) => p.type == 'PANEL')) {
+      widget.project.canvasPoints.add(
+        CanvasPoint(id: 'pt-panel', type: 'PANEL', label: 'Main Panel (LP-1)', x: 50, y: originY + 60),
+      );
+    }
+
+    // 2. Add Switch at Room Entrance (dx = 0, dy = wallDistY)
+    final switchId = 'sw-${DateTime.now().millisecondsSinceEpoch}';
+    widget.project.canvasPoints.add(
+      CanvasPoint(
+        id: switchId,
+        type: 'SWITCH_1G',
+        label: 'Sₐ ($_activeSpaceName)',
+        x: originX + 15,
+        y: originY + (result.wallDistanceYMeters * scale),
+        circuitNumber: 1,
+      ),
+    );
+
+    // 3. Add Calculated Fixtures
+    String? previousLightId;
+    for (final fix in result.fixtures) {
+      final lightId = 'lt-${DateTime.now().millisecondsSinceEpoch}-${fix.index}';
+      final lightPt = CanvasPoint(
+        id: lightId,
+        type: 'LIGHT',
+        label: '${fix.label} (${result.fixtureModelName})',
+        x: originX + (fix.xMeters * scale),
+        y: originY + (fix.yMeters * scale),
+        circuitNumber: 1,
+      );
+      widget.project.canvasPoints.add(lightPt);
+
+      // Connect conduit route
+      if (previousLightId == null) {
+        // Connect Switch to 1st Light
+        widget.project.conduitRoutes.add(ConduitRoute(
+          id: 'rt-${DateTime.now().millisecondsSinceEpoch}-${fix.index}',
+          fromPointId: switchId,
+          toPointId: lightId,
+          measuredLengthMeters: result.wallDistanceXMeters + 0.5,
+          conductorCount: 2,
+        ));
+      } else {
+        // Connect previous light to current light
+        widget.project.conduitRoutes.add(ConduitRoute(
+          id: 'rt-${DateTime.now().millisecondsSinceEpoch}-${fix.index}',
+          fromPointId: previousLightId,
+          toPointId: lightId,
+          measuredLengthMeters: result.spacingXMeters > 0 ? result.spacingXMeters : result.spacingYMeters,
+          conductorCount: 2,
+        ));
+      }
+      previousLightId = lightId;
+    }
+
+    // Update Project Repository
+    ProjectRepository.instance.updateProject(widget.project);
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        backgroundColor: BanaagTheme.surfaceCard,
+        content: Row(
+          children: [
+            const Icon(Icons.check_circle, color: BanaagTheme.primaryAmber, size: 20),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                '⚡ Inilapat ang ${result.totalFixtures}x fixtures at Sₐ Switch sa Plan Canvas!',
+                style: const TextStyle(color: Colors.white, fontSize: 12),
+              ),
+            ),
+          ],
+        ),
+        action: SnackBarAction(
+          label: 'OPEN CANVAS',
+          textColor: BanaagTheme.primaryAmber,
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => PlanCanvasScreen(project: widget.project)),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
   Widget _metricColumn(String label, String value, String subtext, {Color? color}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -2546,3 +3044,4 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
     );
   }
 }
+
