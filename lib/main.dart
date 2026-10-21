@@ -12,11 +12,16 @@ class BanaagApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'BANAAG - Electrical Project Director',
-      debugShowCheckedModeBanner: false,
-      theme: BanaagTheme.darkTheme,
-      home: const SplashScreen(),
+    return ValueListenableBuilder<BanaagThemeMode>(
+      valueListenable: BanaagTheme.currentThemeMode,
+      builder: (context, currentMode, _) {
+        return MaterialApp(
+          title: 'BANAAG - Electrical Project Director',
+          debugShowCheckedModeBanner: false,
+          theme: BanaagTheme.getTheme(currentMode),
+          home: const SplashScreen(),
+        );
+      },
     );
   }
 }

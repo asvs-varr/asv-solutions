@@ -12,7 +12,9 @@ class BanaagProScreen extends StatefulWidget {
 class _BanaagProScreenState extends State<BanaagProScreen> {
   final SecurityEngine _securityEngine = SecurityEngine.instance;
   late bool _isProActive;
-  String _selectedTheme = 'Industrial Amber (Default)';
+  String _selectedTheme = BanaagTheme.currentThemeMode.value == BanaagThemeMode.obsidianThermal
+      ? 'Obsidian Thermal Arc (New / Icon Match)'
+      : 'Industrial Amber (Classic / Dati)';
   final TextEditingController _companyNameController = TextEditingController(text: 'LANITON Electrical & Engineering Services');
   final TextEditingController _prcLicenseController = TextEditingController(text: 'PEE Lic. No. 0012345 / RME 0098765');
 
@@ -31,11 +33,8 @@ class _BanaagProScreenState extends State<BanaagProScreen> {
   }
 
   final List<String> _themes = [
-    'Industrial Amber (Default)',
-    'High-Contrast Sunlight Yellow',
-    'Tactical Slate / Stealth Black',
-    'Clean White Engineering Office',
-    'Cyberpunk Neon Wire',
+    'Obsidian Thermal Arc (New / Icon Match)',
+    'Industrial Amber (Classic / Dati)',
   ];
 
   @override
@@ -197,6 +196,11 @@ class _BanaagProScreenState extends State<BanaagProScreen> {
                   onChanged: (val) {
                     if (val != null) {
                       setState(() => _selectedTheme = val);
+                      if (val.contains('Obsidian Thermal Arc')) {
+                        BanaagTheme.currentThemeMode.value = BanaagThemeMode.obsidianThermal;
+                      } else {
+                        BanaagTheme.currentThemeMode.value = BanaagThemeMode.industrialAmber;
+                      }
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(content: Text('🎨 Theme switched to "$val"')),
                       );
