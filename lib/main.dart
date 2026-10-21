@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'presentation/theme/banaag_theme.dart';
-import 'presentation/screens/dashboard_screen.dart';
+import 'presentation/screens/splash_screen.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -16,7 +16,7 @@ class BanaagApp extends StatelessWidget {
       title: 'BANAAG - Electrical Project Director',
       debugShowCheckedModeBanner: false,
       theme: BanaagTheme.darkTheme,
-      home: const DashboardScreen(),
+      home: const SplashScreen(),
     );
   }
 }

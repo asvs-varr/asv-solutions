@@ -42,11 +42,19 @@ class _BanaagProScreenState extends State<BanaagProScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Row(
+        title: Row(
           children: [
-            Icon(Icons.workspace_premium, color: BanaagTheme.primaryAmber),
-            SizedBox(width: 8),
-            Text('BANAAG PRO Settings'),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: Image.asset(
+                'assets/icon/app_icon.png',
+                width: 26,
+                height: 26,
+                fit: BoxFit.cover,
+              ),
+            ),
+            const SizedBox(width: 10),
+            const Text('BANAAG PRO Settings'),
           ],
         ),
       ),
