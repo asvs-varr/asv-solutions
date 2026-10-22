@@ -1,0 +1,142 @@
+﻿// BANAAG Offline-First Account & Identity Service
+// Manages Verified Google/Gmail Binding with 30-Day Zero-Trust Offline Leasing.
+// Guarantees 100% offline functionality while preventing unauthorized APK sharing.
+
+import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'security_engine.dart';
+
+class BanaagUserProfile {
+  final String email;
+  final String displayName;
+  final String? photoUrl;
+  final String userId;
+  final DateTime verifiedAt;
+  final bool isGuest;
+
+  BanaagUserProfile({
+    required this.email,
+    required this.displayName,
+    this.photoUrl,
+    required this.userId,
+    required this.verifiedAt,
+    this.isGuest = false,
+  });
+
+  Map<String, dynamic> toJson() => {
+    'email': email,
+    'displayName': displayName,
+    'photoUrl': photoUrl,
+    'userId': userId,
+    'verifiedAt': verifiedAt.toIso8601String(),
+    'isGuest': isGuest,
+  };
+
+  factory BanaagUserProfile.fromJson(Map<String, dynamic> json) => BanaagUserProfile(
+    email: json['email'] ?? 'guest@banaag.local',
+    displayName: json['displayName'] ?? 'Contractor (Guest)',
+    photoUrl: json['photoUrl'],
+    userId: json['userId'] ?? 'guest-device',
+    verifiedAt: DateTime.parse(json['verifiedAt'] ?? DateTime.now().toIso8601String()),
+    isGuest: json['isGuest'] ?? false,
+  );
+}
+
+class BanaagAuthService {
+  BanaagAuthService._();
+  static final BanaagAuthService instance = BanaagAuthService._();
+
+  static const String _userProfileKey = 'banaag_user_profile_v1';
+  static const String _activeLeaseKey = 'banaag_active_lease_token_v1';
+
+  BanaagUserProfile? _currentUser;
+  LicenseToken? _currentLease;
+
+  BanaagUserProfile? get currentUser => _currentUser;
+  LicenseToken? get currentLease => _currentLease;
+
+  bool get isAuthenticated => _currentUser != null && !_currentUser!.isGuest;
+  bool get hasValidOfflineLease => _currentLease != null && !_currentLease!.isExpired;
+
+  /// Initializes auth state from hardware local storage (100% Offline-Safe)
+  Future<void> initialize() async {
+    final prefs = await SharedPreferences.getInstance();
+    
+    // Load profile
+    final userJsonStr = prefs.getString(_userProfileKey);
+    if (userJsonStr != null) {
+      try {
+        _currentUser = BanaagUserProfile.fromJson(jsonDecode(userJsonStr));
+      } catch (_) {}
+    }
+
+    // Load active cryptographic offline lease
+    final leaseJsonStr = prefs.getString(_activeLeaseKey);
+    if (leaseJsonStr != null) {
+      try {
+        _currentLease = LicenseToken.fromJson(jsonDecode(leaseJsonStr));
+      } catch (_) {}
+    }
+
+    // Default to Guest if no profile saved yet
+    _currentUser ??= BanaagUserProfile(
+      email: 'offline.contractor@banaag.local',
+      displayName: 'Guest Electrician',
+      userId: 'device-offline-guest',
+      verifiedAt: DateTime.now(),
+      isGuest: true,
+    );
+  }
+
+  /// Binds a verified Google Account and automatically mints a 30-Day Zero-Trust Offline Lease
+  Future<BanaagUserProfile> signInWithVerifiedGoogle({
+    required String email,
+    required String displayName,
+    String? photoUrl,
+  }) async {
+    final sanitizedEmail = email.trim().toLowerCase();
+    final userId = 'user_${sanitizedEmail.hashCode.abs()}';
+
+    final profile = BanaagUserProfile(
+      email: sanitizedEmail,
+      displayName: displayName.trim().isEmpty ? 'Verified Contractor' : displayName,
+      photoUrl: photoUrl,
+      userId: userId,
+      verifiedAt: DateTime.now(),
+      isGuest: false,
+    );
+
+    // Issue cryptographic 30-day offline lease bound to this email
+    final lease = SecurityEngine.instance.issueOfflineLease(
+      userId: userId,
+      tier: 'PRO_CONTRACTOR',
+      validityDays: 30,
+    );
+
+    _currentUser = profile;
+    _currentLease = lease;
+
+    // Persist securely to device storage
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_userProfileKey, jsonEncode(profile.toJson()));
+    await prefs.setString(_activeLeaseKey, jsonEncode(lease.toJson()));
+
+    return profile;
+  }
+
+  /// Switches back to Guest mode while preserving calculations
+  Future<void> signOut() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_userProfileKey);
+    await prefs.remove(_activeLeaseKey);
+
+    _currentUser = BanaagUserProfile(
+      email: 'offline.contractor@banaag.local',
+      displayName: 'Guest Electrician',
+      userId: 'device-offline-guest',
+      verifiedAt: DateTime.now(),
+      isGuest: true,
+    );
+    _currentLease = null;
+  }
+}

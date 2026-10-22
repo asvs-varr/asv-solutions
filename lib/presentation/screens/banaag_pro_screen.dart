@@ -1,6 +1,9 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import '../../domain/security_engine.dart';
 import '../theme/banaag_theme.dart';
+import '../widgets/legal_disclaimer_dialog.dart';
+import '../widgets/google_auth_modal.dart';
+import '../../domain/banaag_auth_service.dart';
 
 class BanaagProScreen extends StatefulWidget {
   const BanaagProScreen({super.key});
@@ -62,6 +65,59 @@ class _BanaagProScreenState extends State<BanaagProScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Account Binding Card (Anti-Counterfeit Protection)
+            AnimatedBuilder(
+              animation: BanaagTheme.currentThemeMode,
+              builder: (context, _) {
+                final auth = BanaagAuthService.instance;
+                final user = auth.currentUser;
+                final isBound = auth.isAuthenticated;
+
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 16),
+                  color: BanaagTheme.surfaceCard,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    side: BorderSide(
+                      color: isBound ? BanaagTheme.successGreen.withValues(alpha: 0.5) : BanaagTheme.primaryAmber.withValues(alpha: 0.3),
+                    ),
+                  ),
+                  child: ListTile(
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    leading: CircleAvatar(
+                      backgroundColor: isBound ? BanaagTheme.successGreen.withValues(alpha: 0.2) : BanaagTheme.primaryAmber.withValues(alpha: 0.2),
+                      child: Icon(
+                        isBound ? Icons.verified : Icons.account_circle,
+                        color: isBound ? BanaagTheme.successGreen : BanaagTheme.primaryAmber,
+                      ),
+                    ),
+                    title: Text(
+                      isBound ? (user?.displayName ?? 'Verified Contractor') : 'Unbound Guest Device',
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                    ),
+                    subtitle: Text(
+                      isBound ? ' • 30-Day Offline Lease Active' : 'Bind Google account for anti-piracy protection & cloud backup',
+                      style: const TextStyle(fontSize: 11, color: BanaagTheme.textMuted),
+                    ),
+                    trailing: OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: isBound ? BanaagTheme.textMuted : BanaagTheme.primaryAmber,
+                        side: BorderSide(color: isBound ? BanaagTheme.textMuted : BanaagTheme.primaryAmber),
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+                      ),
+                      onPressed: () async {
+                        final res = await GoogleAuthModal.show(context);
+                        if (res == true) {
+                          setState(() {});
+                        }
+                      },
+                      child: Text(isBound ? 'Manage' : 'Bind Account', style: const TextStyle(fontSize: 11)),
+                    ),
+                  ),
+                );
+              },
+            ),
+
             // PRO Membership Banner
             Container(
               padding: const EdgeInsets.all(18),
@@ -165,7 +221,7 @@ class _BanaagProScreenState extends State<BanaagProScreen> {
                       label: const Text('Upload Company Logo (PNG / Vector)'),
                       onPressed: () {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('📸 Company Logo uploaded & locked to PDF Proposal templates!')),
+                          const SnackBar(content: Text('ðŸ“¸ Company Logo uploaded & locked to PDF Proposal templates!')),
                         );
                       },
                     ),
@@ -202,7 +258,7 @@ class _BanaagProScreenState extends State<BanaagProScreen> {
                         BanaagTheme.currentThemeMode.value = BanaagThemeMode.industrialAmber;
                       }
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('🎨 Theme switched to "$val"')),
+                        SnackBar(content: Text('ðŸŽ¨ Theme switched to "$val"')),
                       );
                     }
                   },
@@ -249,6 +305,30 @@ class _BanaagProScreenState extends State<BanaagProScreen> {
                 ),
               ),
             ),
+            const SizedBox(height: 24),
+            Center(
+              child: Column(
+                children: [
+                  TextButton.icon(
+                    style: TextButton.styleFrom(
+                      foregroundColor: const Color(0xFF94A3B8),
+                    ),
+                    icon: const Icon(Icons.gavel_rounded, size: 16, color: Color(0xFFFFB300)),
+                    label: const Text(
+                      'Engineering Disclaimer & Liability (RA 7920)',
+                      style: TextStyle(fontSize: 12, decoration: TextDecoration.underline),
+                    ),
+                    onPressed: () => LegalDisclaimerDialog.show(context),
+                  ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'BANAAG v1.0.0 by ASV Solutions (A.E. CCTV & Computer Installation Services)',
+                    style: TextStyle(fontSize: 10, color: Color(0xFF64748B)),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
           ],
         ),
       ),
@@ -309,7 +389,7 @@ class _BanaagProScreenState extends State<BanaagProScreen> {
               Navigator.pop(ctx);
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
-                  content: Text('⚡ Supabase Cloud Architecture Connected! Projects ready for automatic cloud sync.'),
+                  content: Text('âš¡ Supabase Cloud Architecture Connected! Projects ready for automatic cloud sync.'),
                 ),
               );
             },
@@ -320,3 +400,7 @@ class _BanaagProScreenState extends State<BanaagProScreen> {
     );
   }
 }
+
+
+
+

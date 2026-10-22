@@ -1,10 +1,10 @@
-# 🌌 BANAAG STRATEGIC HORIZON VAULT
+﻿# ðŸŒŒ BANAAG STRATEGIC HORIZON VAULT
 > **Repository of High-Value Product Ideas, Deferred Systems, and Architectural Upgrades**  
 > *Locked and monitored via the `/horizon` skill command. These ideas are preserved to prevent loss while current situational constraints exist.*
 
 ---
 
-## 📊 Horizon Status Matrix
+## ðŸ“Š Horizon Status Matrix
 
 | Category | Total Items | Primary Situational Constraint |
 | :--- | :---: | :--- |
@@ -41,7 +41,7 @@
 - **Blocker Category**: `[STORE-BLOCKED]`
 - **Strategic / Business Impact**: High (Direct PRO monetization)
 - **Technical Effort**: Medium
-- **Why It's Blocked Today**: Walang live Google Merchant account para mag-process ng peso transactions (₱499/mo o ₱3,499/yr para sa Cosmetic & Prestige PRO).
+- **Why It's Blocked Today**: Walang live Google Merchant account para mag-process ng peso transactions (â‚±499/mo o â‚±3,499/yr para sa Cosmetic & Prestige PRO).
 - **Actionable Unblocking Steps**:
   1. I-setup ang Google Play Merchant profile at mag-submit ng tax/banking information sa Pilipinas.
   2. Gumawa ng SKU identifiers sa Play Console (`banaag_pro_monthly`, `banaag_pro_annual`).
@@ -52,7 +52,7 @@
 ---
 
 ### [HRZ-003] Multi-Device Cloud Sync & Realtime Team Collaboration
-- **Status**: ⏳ ARCHITECTURE READY / UNBLOCKING IN PROGRESS
+- **Status**: â³ ARCHITECTURE READY / UNBLOCKING IN PROGRESS
 - **Blocker Category**: `[INFRA-BLOCKED]`
 - **Strategic / Business Impact**: 🏆 Game-Changer (Multi-electrician project sync)
 - **Technical Effort**: High
@@ -147,7 +147,7 @@
 - **Why It's Blocked Today**: Walang pisikal na mobile thermal camera dongle (e.g. FLIR ONE Pro o Seek Thermal) para subukan ang thermal image parsing sa main distribution panel.
 - **Actionable Unblocking Steps**:
   1. Kumuha ng test unit o sample thermal imaging files mula sa partner electrical consultant.
-  2. Magpatupad ng temperature threshold flagging (>75°C terminal lugs) batay sa PEC Table 3.10.2.6 temperature limitations.
+  2. Magpatupad ng temperature threshold flagging (>75Â°C terminal lugs) batay sa PEC Table 3.10.2.6 temperature limitations.
 
 ---
 
@@ -193,7 +193,7 @@
 ---
 
 ### [HRZ-013] Three-Phase Commercial & Industrial Systems Engine (400V/230V Wye & 230V Delta)
-- **Status**: ⏳ ARCHITECTURE READY / UNBLOCKING CANDIDATE
+- **Status**: â³ ARCHITECTURE READY / UNBLOCKING CANDIDATE
 - **Blocker Category**: `[ELECTRICAL-EXPANSION]`
 - **Strategic / Business Impact**: 🏆 Game-Changer (Unlocks factories, warehouses, restaurants, 3-phase commercial fit-outs, and high-end residential estates)
 - **Technical Effort**: Medium
@@ -230,29 +230,29 @@
 - **Why It's Blocked Today**: Nangangailangan ng remote cloud JSON/Supabase endpoint o periodic scraper/curator index na nag-a-update ng presyo ng THHN wires, uPVC conduits, at circuit breakers base sa kasalukuyang Philippine retail/wholesale market.
 - **Actionable Unblocking Steps**:
   1. Mag-host ng `market_price_index.json` sa Supabase o GitHub Raw CDN na may regional multiplier (NCR, Luzon, Visayas, Mindanao) at copper price index.
-  2. Maglagay ng **"🔄 Sync Latest Market Prices"** button sa BOM screen na may offline cached fallback at "Last Updated: [Date]" badge.
+  2. Maglagay ng **"ðŸ”„ Sync Latest Market Prices"** button sa BOM screen na may offline cached fallback at "Last Updated: [Date]" badge.
   3. Payagan din ang contractor na mag-save ng sarili nilang custom local hardware price overrides.
 
 ---
 
 ### [HRZ-016] Multi-Brand BOM Comparison Matrix ("Generic/Economy vs. Branded/Premium" + Brand Advantages)
-- **Status**: ⏳ READY TO UNBLOCK (100% Offline-Capable UX Upgrade!)
+- **Status**: â³ READY TO UNBLOCK (100% Offline-Capable UX Upgrade!)
 - **Blocker Category**: `[UX/PRODUCT-EXPANSION]`
 - **Strategic / Business Impact**: 🏆 Game-Changer (Parang "Generic vs. Branded" sa gamot; sobrang bilis makapag-decide ni Client; suggested by *John Omar*)
 - **Technical Effort**: Low-Medium
 - **Why It's Deferred Today**: Walang external blocker! Maaari na itong i-code anumang oras sa loob ng `BomEngine` (`lib/domain/bom_engine.dart`) at Project Estimate / Proposal screen.
 - **Actionable Unblocking Steps**:
   1. Magdagdag ng 3-Tier Brand Matrix sa `BomEngine`:
-     - **Tier 1: Budget / Code-Minimum (PS/ICC Certified Economy)** — e.g., *Columbia / Philflex Basic*, *Royu / Omni*, *Moldflex PVC*.
-     - **Tier 2: Contractor Standard (Balanced Reliability)** — e.g., *Phelps Dodge / Duraflex THHN*, *Koten / GE Breakers*, *20mm Thick-Wall Neltex/Emerald PVC*.
-     - **Tier 3: Executive / Heavy-Duty Branded** — e.g., *Phelps Dodge Lead-Free + Heat-Guard*, *Schneider Electric / Square D / Mitsubishi Breakers*, *Panasonic Wide Series Devices*.
+     - **Tier 1: Budget / Code-Minimum (PS/ICC Certified Economy)** â€” e.g., *Columbia / Philflex Basic*, *Royu / Omni*, *Moldflex PVC*.
+     - **Tier 2: Contractor Standard (Balanced Reliability)** â€” e.g., *Phelps Dodge / Duraflex THHN*, *Koten / GE Breakers*, *20mm Thick-Wall Neltex/Emerald PVC*.
+     - **Tier 3: Executive / Heavy-Duty Branded** â€” e.g., *Phelps Dodge Lead-Free + Heat-Guard*, *Schneider Electric / Square D / Mitsubishi Breakers*, *Panasonic Wide Series Devices*.
   2. Magpakita ng **Brand Advantage Cards** sa bawat item (hal. *"Phelps Dodge THHN: 99.99% Pure Electrolytic Copper, mas mababa ang init at voltage drop, 25+ yrs insulation lifespan vs ordinary wire"*).
   3. Hayaang makita ni Client ang side-by-side price difference at pumili ng tier bago i-export ang PDF Contract Proposal!
 
 ---
 
 ### [HRZ-017] Dual-Persona Mode ("Tatay / Homeowner Renovator" vs. "Pro Engineer") & Visual Electrical Glossary
-- **Status**: ⏳ READY TO UNBLOCK (100% Offline-Capable UX Upgrade!)
+- **Status**: â³ READY TO UNBLOCK (100% Offline-Capable UX Upgrade!)
 - **Blocker Category**: `[UX/PRODUCT-EXPANSION]`
 - **Strategic / Business Impact**: 🏆 Game-Changer (Opens BANAAG to millions of Filipino homeowners & DIY renovators while keeping full PEC rigor for Engineers; suggested by *John Omar*)
 - **Technical Effort**: Low-Medium
@@ -262,7 +262,7 @@
      - Gumagamit ng madaling intindihin na Taglish guide (*"Ilang Aircon, Ilaw, at Saksakan ang idadagdag sa kwarto?"*) at nagbibigay agad ng **Budget Range (Materials + Labor Estimate)** at **Safety Checklist** nang hindi nakakalula ang engineering formulas.
   2. **Interactive Electrical Terminologies & Layman's Dictionary**:
      - Searchable Taglish glossary na may malinaw na paliwanag at larawan/halimbawa para sa:
-       - **THHN / mm²** (*Kapal at klase ng tanso sa loob ng wire*)
+       - **THHN / mmÂ²** (*Kapal at klase ng tanso sa loob ng wire*)
        - **AT / Circuit Breaker** (*Automatic pamputol-kuryente kapag nag-overload o nag-short*)
        - **GFCI Outlet** (*Saksakan sa banyo/kusina na kusang namamatay sa loob ng milliseconds kapag nabasa para iwas-kuryente*)
        - **Dedicated Circuit / Home Run** (*Sariling linya ng kuryente diretso sa panelboard para sa malalakas kumain gaya ng Aircon at Water Heater*)
@@ -272,7 +272,7 @@
 ---
 
 ### [HRZ-018] Built-in 1,165-Page Verbatim PEC 2017 Knowledge Base, Offline FTS5 Codebook & AI/Rule Code Assistant ("Tanungan ng Bayan")
-- **Status**: ⏳ READY TO UNBLOCK (100% Offline-Capable Feature!)
+- **Status**: â³ READY TO UNBLOCK (100% Offline-Capable Feature!)
 - **Blocker Category**: `[UX/PRODUCT-EXPANSION]`
 - **Strategic / Business Impact**: 🏆 Game-Changer (Transforms BANAAG from an engineering tool into the Definitive Philippine Electrical Code Authority in every Electrician & Engineer's pocket)
 - **Technical Effort**: Medium
@@ -285,9 +285,9 @@
      - Interactive Table of Contents na may search bar na sumasala ng keywords (e.g. "grounding rod", "conduit fill", "GFCI", "clearance").
      - Fast bookmarks at copy-citation button para sa field inspection reports sa LGU/OBO.
   3. **"Ask PEC" / In-App Rule Assistant ("Tanungan ng Bayan")**:
-     - Search / Question bar na nagba-bracket ng inquiry (e.g. "Ilang mm² ang wire sa 30A?") at nagbibigay ng direct verbatim snippet + Table citation.
+     - Search / Question bar na nagba-bracket ng inquiry (e.g. "Ilang mmÂ² ang wire sa 30A?") at nagbibigay ng direct verbatim snippet + Table citation.
   4. **Contextual In-App Deep Links**:
-     - Pag-tap sa kahit anong calculation card sa SLD o Calculator, may "📖 Read PEC Sec. X.XX.X" button na magbubukas ng verbatim code provision sa slide-over bottom sheet.
+     - Pag-tap sa kahit anong calculation card sa SLD o Calculator, may "ðŸ“– Read PEC Sec. X.XX.X" button na magbubukas ng verbatim code provision sa slide-over bottom sheet.
 - **Detailed Architectural Notes**:
   - Walang internet o LLM token cost na kailangan. Lahat ay mabilis at gagana 100% offline sa liblib na construction site gamit ang SQLite FTS5 engine.
 
@@ -296,3 +296,44 @@
 *Laging panatilihing updated ang file na ito gamit ang `/horizon` tuwing may bagong situational development o unblocked feature!*
 
 
+
+---
+
+### [HRZ-021] Dun & Bradstreet (D-U-N-S) Number for A.E. CCTV & Computer Installation Services
+- **Status**: ⏳ PENDING EXTERNAL ACTION / CRIF REVIEW
+- **Blocker Category**: `[LEGAL-BLOCKED]`
+- **Strategic / Business Impact**: 🏆 Game-Changer (Direct Production Release on Google Play without 14-day 20-tester closed testing)
+- **Technical Effort**: Low
+- **Current Progress**:
+  - ✅ Live official corporate website deployed at `https://asvs-varr.github.io/asv-solutions/` showcasing DTI Certificate No. 8285425 and ASVS branding.
+  - ✅ Official inquiry ticket submitted to CRIF Philippines (Dun & Bradstreet partner) on October 22, 2026.
+- **Actionable Unblocking Steps**:
+  1. Complete identity and document submission (DTI certificate, ID) when CRIF contacts via email (`mr.arvin03@gmail.com`) or phone.
+  2. Receive the 9-digit D-U-N-S number.
+  3. Resume Google Play Console Organization signup flow at `Link a payments profile` and input the 9-digit D-U-N-S.
+
+---
+
+### [HRZ-022] GitHub Official Release v1.0.0 Asset Tracking & Live Download Counter Badge
+- **Status**: 🧊 DEFERRED (Awaiting Post-Security Distribution)
+- **Blocker Category**: `[INFRA-BLOCKED]`
+- **Strategic / Business Impact**: High (Accurate, automated public download counter for BANAAG APK)
+- **Technical Effort**: Low
+- **Why It's Deferred Today**: Inilalagay muna natin ang Zero-Trust Google Account Authentication para ang ia-upload na APK sa official GitHub Release ay may cryptographic user binding na.
+- **Actionable Unblocking Steps**:
+  1. Mag-create ng GitHub Release `v1.0.0` sa repository na `https://github.com/asvs-varr/asv-solutions/releases`.
+  2. I-attach ang signed `banaag-release.apk` bilang binary asset.
+  3. I-update ang download button sa `index.html` patungo sa release asset URL at magkabit ng dynamic Shields.io badge: `![Downloads](https://img.shields.io/github/downloads/asvs-varr/asv-solutions/total)`.
+
+---
+
+### [HRZ-023] Free Google Analytics 4 (GA4) Web Traffic & Regional Telemetry for ASV Solutions Portal
+- **Status**: 🧊 DEFERRED (Awaiting Google Analytics Measurement ID)
+- **Blocker Category**: `[INFRA-BLOCKED]`
+- **Strategic / Business Impact**: Medium-High (Pinpoint user demographic, province-level traffic, and APK conversion rates)
+- **Technical Effort**: Very Low (5 minutes)
+- **Why It's Deferred Today**: Nangangailangan ng libreng GA4 Measurement ID (`G-XXXXXXXXXX`) mula sa Google Analytics dashboard bago i-paste ang `gtag.js` script tag sa `index.html`.
+- **Actionable Unblocking Steps**:
+  1. Magbukas sa https://analytics.google.com gamit ang `mr.arvin03@gmail.com`.
+  2. Gumawa ng web property para sa `https://asvs-varr.github.io/asv-solutions/`.
+  3. Kopyahin ang Measurement ID at i-paste natin sa `index.html`.

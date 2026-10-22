@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'presentation/theme/banaag_theme.dart';
 import 'presentation/screens/splash_screen.dart';
 
@@ -25,3 +25,4 @@ class BanaagApp extends StatelessWidget {
     );
   }
 }
+
