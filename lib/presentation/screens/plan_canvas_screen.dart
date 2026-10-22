@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:file_picker/file_picker.dart';
@@ -37,6 +38,12 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
   List<PdfBlueprintPageInfo> _pdfPages = [];
   String? _renderedPdfImagePath;
   bool _isRenderingPdf = false;
+  bool _invertBlueprint = false;
+  Offset _pinA = const Offset(60, 200);
+  Offset _pinB = const Offset(240, 200);
+  int? _activeDraggingPin;
+  Offset? _activeSnapPoint;
+  double _pixelsPerMeter = 30.0;
   bool _showLabels = true;
   bool _showConduits = true;
   CanvasPoint? _selectedPoint;
@@ -111,6 +118,8 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
     super.initState();
     _roomGeometry = widget.project?.roomGeometry;
     _blueprintPath = widget.project?.blueprintImagePath;
+    _invertBlueprint = widget.project?.invertBlueprint ?? false;
+    _pixelsPerMeter = widget.project?.calibrationPixelsPerMeter ?? 30.0;
     if (widget.project != null && widget.project!.canvasPoints.isNotEmpty) {
       _points = List<CanvasPoint>.from(widget.project!.canvasPoints);
       _routes = List<ConduitRoute>.from(widget.project!.conduitRoutes);
@@ -396,6 +405,23 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
     _dragStartOffset = details.localPosition;
     _hasMovedSignificantly = false;
 
+    if (_selectedTool == 'CALIBRATE') {
+      final tapPos = details.localPosition;
+      if ((_pinA - tapPos).distance <= 28.0) {
+        setState(() => _activeDraggingPin = 1);
+        return;
+      } else if ((_pinB - tapPos).distance <= 28.0) {
+        setState(() => _activeDraggingPin = 2);
+        return;
+      } else {
+        final mid = Offset((_pinA.dx + _pinB.dx) / 2, (_pinA.dy + _pinB.dy) / 2);
+        if ((mid - tapPos).distance <= 32.0) {
+          _showCalibrationDialog();
+          return;
+        }
+      }
+    }
+
     // Detect if user grabbed a device point
     CanvasPoint? hitPt;
     for (final pt in _points.reversed) {
@@ -415,6 +441,51 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
   }
 
   void _handlePanUpdate(DragUpdateDetails details) {
+    if (_selectedTool == 'CALIBRATE' && _activeDraggingPin != null) {
+      final newPos = details.localPosition;
+      if (_dragStartOffset != null && (newPos - _dragStartOffset!).distance > 6.0) {
+        _hasMovedSignificantly = true;
+      }
+
+      // Magnetic snapping candidate anchors (all points, corners, and grid lines)
+      final List<Offset> snapAnchors = [];
+      for (final p in _points) {
+        snapAnchors.add(Offset(p.x, p.y));
+      }
+      snapAnchors.addAll([
+        const Offset(45, 145),
+        const Offset(275, 145),
+        const Offset(275, 395),
+        const Offset(45, 395),
+        const Offset(132, 145),
+        const Offset(132, 395),
+      ]);
+
+      Offset targetPos = newPos;
+      Offset? foundSnap;
+      for (final a in snapAnchors) {
+        if ((a - newPos).distance <= 16.0) {
+          targetPos = a;
+          foundSnap = a;
+          break;
+        }
+      }
+
+      if (foundSnap != null && foundSnap != _activeSnapPoint) {
+        HapticFeedback.selectionClick();
+      }
+
+      setState(() {
+        _activeSnapPoint = foundSnap;
+        if (_activeDraggingPin == 1) {
+          _pinA = targetPos;
+        } else if (_activeDraggingPin == 2) {
+          _pinB = targetPos;
+        }
+      });
+      return;
+    }
+
     if (_draggedPoint != null) {
       final newPos = details.localPosition;
       if (_dragStartOffset != null && (newPos - _dragStartOffset!).distance > 6.0) {
@@ -432,6 +503,20 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
   }
 
   void _handlePanEnd(DragEndDetails details) {
+    if (_selectedTool == 'CALIBRATE') {
+      final hadDrag = _hasMovedSignificantly;
+      setState(() {
+        _activeDraggingPin = null;
+        _activeSnapPoint = null;
+        _dragStartOffset = null;
+        _hasMovedSignificantly = false;
+      });
+      if (!hadDrag) {
+        _showCalibrationDialog();
+      }
+      return;
+    }
+
     if (_draggedPoint != null) {
       if (_hasMovedSignificantly) {
         // Persist updated point coordinates
@@ -995,10 +1080,20 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                                 opacity: _underlayOpacity,
                                 child: _blueprintPath!.toLowerCase().endsWith('.pdf')
                                     ? (_renderedPdfImagePath != null && File(_renderedPdfImagePath!).existsSync()
-                                        ? Image.file(
-                                            File(_renderedPdfImagePath!),
-                                            fit: BoxFit.contain,
-                                            errorBuilder: (ctx, err, stack) => _buildPdfUnderlayPlaceholder(),
+                                        ? ColorFiltered(
+                                            colorFilter: _invertBlueprint
+                                                ? const ColorFilter.matrix([
+                                                    -1.0,  0.0,  0.0, 0.0, 255.0,
+                                                     0.0, -1.0,  0.0, 0.0, 255.0,
+                                                     0.0,  0.0, -1.0, 0.0, 255.0,
+                                                     0.0,  0.0,  0.0, 1.0,   0.0,
+                                                  ])
+                                                : const ColorFilter.mode(Colors.transparent, BlendMode.dst),
+                                            child: Image.file(
+                                              File(_renderedPdfImagePath!),
+                                              fit: BoxFit.contain,
+                                              errorBuilder: (ctx, err, stack) => _buildPdfUnderlayPlaceholder(),
+                                            ),
                                           )
                                         : (_isRenderingPdf
                                             ? const Center(
@@ -1029,11 +1124,17 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                               points: _points,
                               routes: _routes,
                               roomGeometry: _roomGeometry,
+                              spaces: widget.project?.spaces ?? [],
                               isHeatmap: _isHeatmapVisible,
                               showLabels: _showLabels,
                               showConduits: _showConduits,
                               hasBlueprintUnderlay: _hasBlueprintFile && _isUnderlayVisible,
                               selectedPoint: _selectedPoint,
+                              isCalibrating: _selectedTool == 'CALIBRATE',
+                              pinA: _pinA,
+                              pinB: _pinB,
+                              activeSnapPoint: _activeSnapPoint,
+                              pixelsPerMeter: _pixelsPerMeter,
                             ),
                             child: Container(),
                           ),
@@ -1140,6 +1241,26 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                                 }).toList(),
                               ),
                             ],
+                            const SizedBox(width: 6),
+                            GestureDetector(
+                              onTap: () {
+                                setState(() {
+                                  _invertBlueprint = !_invertBlueprint;
+                                  if (widget.project != null) {
+                                    widget.project!.invertBlueprint = _invertBlueprint;
+                                    ProjectRepository.instance.updateProject(widget.project!);
+                                  }
+                                });
+                              },
+                              child: Tooltip(
+                                message: 'Invert Blueprint Contrast',
+                                child: Icon(
+                                  Icons.contrast,
+                                  size: 15,
+                                  color: _invertBlueprint ? BanaagTheme.primaryAmber : Colors.white54,
+                                ),
+                              ),
+                            ),
                             const SizedBox(width: 6),
                             GestureDetector(
                               onTap: () => setState(() => _isUnderlayVisible = !_isUnderlayVisible),
@@ -1252,6 +1373,7 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
               child: Row(
                 children: [
                   _symbolButton('SELECT', Icons.near_me, 'Select / Move'),
+                  _symbolButton('CALIBRATE', Icons.straighten, 'Calibrate (mm)'),
                   _symbolButton('PANEL', Icons.dashboard, 'Panel'),
                   _symbolButton('SWITCH_1G', Icons.toggle_on, '1G Switch'),
                   _symbolButton('LIGHT', Icons.lightbulb, 'Light'),
@@ -1263,6 +1385,170 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  void _showCalibrationDialog() {
+    final pixelDist = (_pinA - _pinB).distance;
+    if (pixelDist < 5.0) return;
+
+    bool isMm = true;
+    final currentCalibratedMm = (pixelDist / _pixelsPerMeter) * 1000.0;
+    final distCtrl = TextEditingController(
+      text: currentCalibratedMm.round().toString(),
+    );
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDlgState) => AlertDialog(
+          backgroundColor: BanaagTheme.surfaceCard,
+          title: Row(
+            children: const [
+              Icon(Icons.straighten, color: BanaagTheme.primaryAmber, size: 20),
+              SizedBox(width: 8),
+              Text(
+                '2-Point Scale Calibration',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'CAD Pixel Distance: ${pixelDist.toStringAsFixed(1)} px',
+                style: const TextStyle(fontSize: 12, color: Colors.cyanAccent),
+              ),
+              const SizedBox(height: 10),
+              const Text(
+                'Enter the known physical length between Pin A and Pin B:',
+                style: TextStyle(fontSize: 11, color: BanaagTheme.textMuted),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: distCtrl,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      decoration: InputDecoration(
+                        labelText: isMm ? 'Distance (mm)' : 'Distance (m)',
+                        isDense: true,
+                        suffixText: isMm ? 'mm' : 'm',
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  ChoiceChip(
+                    label: Text(isMm ? 'mm' : 'meters', style: const TextStyle(fontSize: 11)),
+                    selected: true,
+                    selectedColor: BanaagTheme.primaryAmber,
+                    onSelected: (_) {
+                      setDlgState(() {
+                        final currentVal = double.tryParse(distCtrl.text.trim()) ?? 0.0;
+                        if (isMm) {
+                          distCtrl.text = (currentVal / 1000.0).toStringAsFixed(3);
+                        } else {
+                          distCtrl.text = (currentVal * 1000.0).round().toString();
+                        }
+                        isMm = !isMm;
+                      });
+                    },
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              const Text('Quick Presets:', style: TextStyle(fontSize: 10, color: Colors.white60)),
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 6,
+                children: [
+                  ActionChip(
+                    label: const Text('3000 mm (3m)', style: TextStyle(fontSize: 10)),
+                    onPressed: () => setDlgState(() {
+                      distCtrl.text = isMm ? '3000' : '3.000';
+                    }),
+                  ),
+                  ActionChip(
+                    label: const Text('4000 mm (4m)', style: TextStyle(fontSize: 10)),
+                    onPressed: () => setDlgState(() {
+                      distCtrl.text = isMm ? '4000' : '4.000';
+                    }),
+                  ),
+                  ActionChip(
+                    label: const Text('6000 mm (6m)', style: TextStyle(fontSize: 10)),
+                    onPressed: () => setDlgState(() {
+                      distCtrl.text = isMm ? '6000' : '6.000';
+                    }),
+                  ),
+                  ActionChip(
+                    label: const Text('8000 mm (8m)', style: TextStyle(fontSize: 10)),
+                    onPressed: () => setDlgState(() {
+                      distCtrl.text = isMm ? '8000' : '8.000';
+                    }),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel', style: TextStyle(color: BanaagTheme.textMuted)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: BanaagTheme.primaryAmber,
+                foregroundColor: Colors.black,
+              ),
+              onPressed: () {
+                final val = double.tryParse(distCtrl.text.trim()) ?? 0.0;
+                if (val > 0) {
+                  final double distMeters = isMm ? (val / 1000.0) : val;
+                  final double newPixelsPerMeter = pixelDist / distMeters;
+
+                  setState(() {
+                    _pixelsPerMeter = newPixelsPerMeter;
+
+                    // Recalculate all conduit routes
+                    for (int i = 0; i < _routes.length; i++) {
+                      final r = _routes[i];
+                      final p1 = _points.firstWhere((p) => p.id == r.fromPointId, orElse: () => _points.first);
+                      final p2 = _points.firstWhere((p) => p.id == r.toPointId, orElse: () => _points.first);
+                      final px = (Offset(p1.x, p1.y) - Offset(p2.x, p2.y)).distance;
+                      final realMeters = px / _pixelsPerMeter;
+                      _routes[i] = ConduitRoute(
+                        id: r.id,
+                        fromPointId: r.fromPointId,
+                        toPointId: r.toPointId,
+                        measuredLengthMeters: double.parse(realMeters.clamp(1.0, 99.0).toStringAsFixed(2)),
+                        conductorCount: r.conductorCount,
+                      );
+                    }
+
+                    if (widget.project != null) {
+                      widget.project!.calibrationPixelsPerMeter = _pixelsPerMeter;
+                      widget.project!.conduitRoutes = _routes;
+                      ProjectRepository.instance.updateProject(widget.project!);
+                    }
+                  });
+
+                  Navigator.pop(ctx);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('✅ Scale Calibrated! (${(distMeters * 1000).round()} mm) - All conduit takeoffs updated.'),
+                      backgroundColor: BanaagTheme.successGreen,
+                    ),
+                  );
+                }
+              },
+              child: const Text('Apply Calibration'),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1361,21 +1647,33 @@ class CanvasPainter extends CustomPainter {
   final List<CanvasPoint> points;
   final List<ConduitRoute> routes;
   final RoomGeometry? roomGeometry;
+  final List<RoomSpace> spaces;
   final bool isHeatmap;
   final bool showLabels;
   final bool showConduits;
   final bool hasBlueprintUnderlay;
   final CanvasPoint? selectedPoint;
+  final bool isCalibrating;
+  final Offset pinA;
+  final Offset pinB;
+  final Offset? activeSnapPoint;
+  final double pixelsPerMeter;
 
   CanvasPainter({
     required this.points,
     required this.routes,
     this.roomGeometry,
+    this.spaces = const [],
     this.isHeatmap = false,
     this.showLabels = true,
     this.showConduits = true,
     this.hasBlueprintUnderlay = false,
     this.selectedPoint,
+    this.isCalibrating = false,
+    this.pinA = const Offset(60, 200),
+    this.pinB = const Offset(240, 200),
+    this.activeSnapPoint,
+    this.pixelsPerMeter = 30.0,
   });
 
   @override
@@ -1392,9 +1690,11 @@ class CanvasPainter extends CustomPainter {
       canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
     }
 
-    // Draw Synthetic Room Walls ONLY if no actual blueprint image/PDF is underlaid
+    // Draw Auto-Recreated CAD Floor Plan Walls (Always visible to frame electrical layout)
     if (roomGeometry != null && !hasBlueprintUnderlay) {
       _drawRoomWalls(canvas, size, roomGeometry!);
+    } else {
+      _drawArchitecturalFloorPlan(canvas, size);
     }
 
     // In-Canvas Optical Lux Heatmap Layer
@@ -1667,6 +1967,214 @@ class CanvasPainter extends CustomPainter {
       default:
         return Colors.white;
     }
+  }
+
+  void _drawArchitecturalFloorPlan(Canvas canvas, Size size) {
+    if (points.isEmpty) return;
+
+    // Calculate dynamic bounding envelope encompassing all electrical fixtures
+    double minX = points.map((p) => p.x).reduce(math.min);
+    double maxX = points.map((p) => p.x).reduce(math.max);
+    double minY = points.map((p) => p.y).reduce(math.min);
+    double maxY = points.map((p) => p.y).reduce(math.max);
+
+    // Add architectural clearance around perimeter fixtures
+    minX = (minX - 22.0).clamp(25.0, 1200.0);
+    maxX = (maxX + 22.0).clamp(minX + 200.0, 1600.0);
+    minY = (minY - 22.0).clamp(120.0, 1200.0);
+    maxY = (maxY + 22.0).clamp(minY + 220.0, 1600.0);
+
+    final outerRect = Rect.fromLTRB(minX, minY, maxX, maxY);
+
+    // Subtle CAD floor tint
+    final floorFill = Paint()
+      ..color = const Color(0xFF131A26).withValues(alpha: 0.45)
+      ..style = PaintingStyle.fill;
+    canvas.drawRect(outerRect, floorFill);
+
+    // Exterior Architectural Building Walls (Double Line CAD Wall with Corner Pillars)
+    final outerWallPaint = Paint()
+      ..color = const Color(0xFF48658A)
+      ..strokeWidth = 3.5
+      ..style = PaintingStyle.stroke;
+
+    final innerCasingPaint = Paint()
+      ..color = const Color(0xFF2C3E55)
+      ..strokeWidth = 1.0
+      ..style = PaintingStyle.stroke;
+
+    canvas.drawRect(outerRect, outerWallPaint);
+    canvas.drawRect(outerRect.deflate(4.0), innerCasingPaint);
+
+    // Corner Structural Columns (Reinforced Concrete CAD Columns)
+    final columnPaint = Paint()
+      ..color = const Color(0xFF64B5F6).withValues(alpha: 0.85)
+      ..style = PaintingStyle.fill;
+
+    const colSize = 7.0;
+    canvas.drawRect(Rect.fromCenter(center: outerRect.topLeft, width: colSize, height: colSize), columnPaint);
+    canvas.drawRect(Rect.fromCenter(center: outerRect.topRight, width: colSize, height: colSize), columnPaint);
+    canvas.drawRect(Rect.fromCenter(center: outerRect.bottomLeft, width: colSize, height: colSize), columnPaint);
+    canvas.drawRect(Rect.fromCenter(center: outerRect.bottomRight, width: colSize, height: colSize), columnPaint);
+
+    // Interior Room Partitions (Divide into Left and Right Wings & Zones)
+    final partitionPaint = Paint()
+      ..color = const Color(0xFF3B4E6B)
+      ..strokeWidth = 2.0
+      ..style = PaintingStyle.stroke;
+
+    final midX = minX + (maxX - minX) * 0.48;
+    final midY = minY + (maxY - minY) * 0.52;
+
+    // Vertical Divider with Door Opening Gap
+    canvas.drawLine(Offset(midX, minY), Offset(midX, minY + 35), partitionPaint);
+    canvas.drawLine(Offset(midX, minY + 65), Offset(midX, maxY), partitionPaint);
+
+    // Horizontal Divider in Left Wing
+    canvas.drawLine(Offset(minX, midY), Offset(midX - 30, midY), partitionPaint);
+
+    // Horizontal Divider in Right Wing
+    canvas.drawLine(Offset(midX, midY), Offset(maxX, midY), partitionPaint);
+
+    // Stylized CAD Room Labels with Area Badges
+    final List<Map<String, dynamic>> roomTags = [];
+    if (spaces.isNotEmpty) {
+      final s1 = spaces[0];
+      roomTags.add({'name': s1.name.toUpperCase(), 'sqm': s1.areaSqm, 'center': Offset(minX + (midX - minX) / 2, minY + 40)});
+      if (spaces.length > 1) {
+        final s2 = spaces[1];
+        roomTags.add({'name': s2.name.toUpperCase(), 'sqm': s2.areaSqm, 'center': Offset(minX + (midX - minX) / 2, midY + 45)});
+      }
+      if (spaces.length > 2) {
+        final s3 = spaces[2];
+        roomTags.add({'name': s3.name.toUpperCase(), 'sqm': s3.areaSqm, 'center': Offset(midX + (maxX - midX) / 2, minY + 40)});
+      }
+      if (spaces.length > 3) {
+        final s4 = spaces[3];
+        roomTags.add({'name': s4.name.toUpperCase(), 'sqm': s4.areaSqm, 'center': Offset(midX + (maxX - midX) / 2, midY + 45)});
+      }
+    } else {
+      roomTags.add({'name': 'MAIN LIVING & WORKSPACE', 'sqm': 28.5, 'center': Offset(minX + (midX - minX) / 2, minY + 40)});
+      roomTags.add({'name': 'KITCHEN & UTILITY', 'sqm': 16.0, 'center': Offset(minX + (midX - minX) / 2, midY + 45)});
+      roomTags.add({'name': 'BEDROOM 1', 'sqm': 18.0, 'center': Offset(midX + (maxX - midX) / 2, minY + 40)});
+      roomTags.add({'name': 'BEDROOM 2 & BATH', 'sqm': 14.5, 'center': Offset(midX + (maxX - midX) / 2, midY + 45)});
+    }
+
+    for (final tag in roomTags) {
+      final Offset c = tag['center'];
+      final String name = tag['name'];
+      final double sqm = tag['sqm'];
+
+      final textSpan = TextSpan(
+        text: '$name • ${sqm.toStringAsFixed(1)} m²',
+        style: TextStyle(
+          color: Colors.white.withValues(alpha: 0.38),
+          fontSize: 8.0,
+          fontWeight: FontWeight.bold,
+          letterSpacing: 0.4,
+        ),
+      );
+      final tp = TextPainter(text: textSpan, textDirection: TextDirection.ltr)..layout();
+      tp.paint(canvas, Offset(c.dx - (tp.width / 2), c.dy));
+    }
+
+    // If 2-Point Calibration Mode is Active, draw overlay
+    if (isCalibrating) {
+      _drawCalibrationOverlay(canvas, size);
+    }
+  }
+
+  void _drawCalibrationOverlay(Canvas canvas, Size size) {
+    // 1. Dynamic Dimension Line connecting Pin A and Pin B
+    final dimPaint = Paint()
+      ..color = Colors.cyanAccent
+      ..strokeWidth = 1.5
+      ..style = PaintingStyle.stroke;
+
+    canvas.drawLine(pinA, pinB, dimPaint);
+
+    // Architectural 45-degree CAD dimension ticks on Pin A & Pin B
+    final tickPaint = Paint()
+      ..color = Colors.cyanAccent
+      ..strokeWidth = 2.0
+      ..style = PaintingStyle.stroke;
+
+    const tickLen = 6.0;
+    canvas.drawLine(pinA + const Offset(-tickLen, -tickLen), pinA + const Offset(tickLen, tickLen), tickPaint);
+    canvas.drawLine(pinB + const Offset(-tickLen, -tickLen), pinB + const Offset(tickLen, tickLen), tickPaint);
+
+    // 2. Interactive Distance Badge at Center of Line
+    final center = Offset((pinA.dx + pinB.dx) / 2, (pinA.dy + pinB.dy) / 2);
+    final pixelDist = (pinA - pinB).distance;
+    final realMm = (pixelDist / pixelsPerMeter) * 1000.0;
+    final realMeters = realMm / 1000.0;
+
+    final badgeText = '${realMm.round()} mm (${realMeters.toStringAsFixed(2)}m)';
+    final textSpan = TextSpan(
+      text: badgeText,
+      style: const TextStyle(
+        color: Colors.black,
+        fontSize: 10.0,
+        fontWeight: FontWeight.bold,
+      ),
+    );
+    final tp = TextPainter(text: textSpan, textDirection: TextDirection.ltr)..layout();
+
+    final badgeRect = RRect.fromRectAndRadius(
+      Rect.fromCenter(center: center, width: tp.width + 12, height: tp.height + 6),
+      const Radius.circular(5),
+    );
+    canvas.drawRRect(badgeRect, Paint()..color = BanaagTheme.primaryAmber);
+    tp.paint(canvas, Offset(center.dx - (tp.width / 2), center.dy - (tp.height / 2)));
+
+    // 3. Pin A (Cyan Crosshair & Target Ring)
+    _drawPinTarget(canvas, pinA, 'A', Colors.cyanAccent);
+
+    // 4. Pin B (Amber Crosshair & Target Ring)
+    _drawPinTarget(canvas, pinB, 'B', BanaagTheme.primaryAmber);
+
+    // 5. Magnetic Snap Indicator (Glowing Diamond)
+    if (activeSnapPoint != null) {
+      final snapP = Paint()
+        ..color = Colors.cyanAccent
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.0;
+
+      const sz = 7.0;
+      final path = Path()
+        ..moveTo(activeSnapPoint!.dx, activeSnapPoint!.dy - sz)
+        ..lineTo(activeSnapPoint!.dx + sz, activeSnapPoint!.dy)
+        ..lineTo(activeSnapPoint!.dx, activeSnapPoint!.dy + sz)
+        ..lineTo(activeSnapPoint!.dx - sz, activeSnapPoint!.dy)
+        ..close();
+      canvas.drawPath(path, snapP);
+      canvas.drawCircle(activeSnapPoint!, sz * 1.6, Paint()..color = Colors.cyanAccent.withValues(alpha: 0.25)..style = PaintingStyle.stroke);
+    }
+  }
+
+  void _drawPinTarget(Canvas canvas, Offset pos, String label, Color color) {
+    // Outer Target Glow
+    canvas.drawCircle(pos, 16.0, Paint()..color = color.withValues(alpha: 0.25));
+
+    // Crisp Target Ring
+    canvas.drawCircle(pos, 11.0, Paint()..color = color..style = PaintingStyle.stroke..strokeWidth = 2.0);
+
+    // Crosshairs
+    const arm = 15.0;
+    final crossPaint = Paint()..color = color..strokeWidth = 1.2;
+    canvas.drawLine(pos + const Offset(-arm, 0), pos + const Offset(arm, 0), crossPaint);
+    canvas.drawLine(pos + const Offset(0, -arm), pos + const Offset(0, arm), crossPaint);
+
+    // Center Solid Core
+    canvas.drawCircle(pos, 8.0, Paint()..color = const Color(0xFF11151E));
+    canvas.drawCircle(pos, 8.0, Paint()..color = color..style = PaintingStyle.stroke..strokeWidth = 1.2);
+
+    // Letter Label
+    final tp = TextPainter(
+      text: TextSpan(text: label, style: TextStyle(color: color, fontSize: 8.5, fontWeight: FontWeight.bold)),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    tp.paint(canvas, Offset(pos.dx - (tp.width / 2), pos.dy - (tp.height / 2)));
   }
 
   @override

@@ -136,12 +136,18 @@ class RoomSpace {
   final String name; // e.g. 'Living & Dining', 'Master Bedroom', 'Dirty Kitchen'
   final double areaSqm;
   final double ceilingHeight;
+  final String shapeType; // 'RECTANGULAR', 'L_SHAPE', 'T_SHAPE', 'CUSTOM'
+  final double cutoutDepth;
+  final double cutoutWidth;
 
   RoomSpace({
     required this.id,
     required this.name,
     this.areaSqm = 16.0,
     this.ceilingHeight = 2.7,
+    this.shapeType = 'RECTANGULAR',
+    this.cutoutDepth = 0.0,
+    this.cutoutWidth = 0.0,
   });
 
   Map<String, dynamic> toJson() => {
@@ -149,6 +155,9 @@ class RoomSpace {
     'name': name,
     'areaSqm': areaSqm,
     'ceilingHeight': ceilingHeight,
+    'shapeType': shapeType,
+    'cutoutDepth': cutoutDepth,
+    'cutoutWidth': cutoutWidth,
   };
 
   factory RoomSpace.fromJson(Map<String, dynamic> json) => RoomSpace(
@@ -156,6 +165,9 @@ class RoomSpace {
     name: json['name'] ?? 'Custom Space',
     areaSqm: (json['areaSqm'] as num?)?.toDouble() ?? 16.0,
     ceilingHeight: (json['ceilingHeight'] as num?)?.toDouble() ?? 2.7,
+    shapeType: json['shapeType'] ?? 'RECTANGULAR',
+    cutoutDepth: (json['cutoutDepth'] as num?)?.toDouble() ?? 0.0,
+    cutoutWidth: (json['cutoutWidth'] as num?)?.toDouble() ?? 0.0,
   );
 }
 
@@ -415,6 +427,8 @@ class Project {
   List<PanelboardSpec> panelboards;
   final List<ProjectPhase> phases;
   final DateTime createdAt;
+  double? calibrationPixelsPerMeter;
+  bool invertBlueprint;
 
   Project({
     required this.id,
@@ -432,6 +446,8 @@ class Project {
     this.utilityServiceDrop,
     this.roomGeometry,
     this.blueprintImagePath,
+    this.calibrationPixelsPerMeter,
+    this.invertBlueprint = false,
     List<RoomSpace>? spaces,
     List<ApplianceItem>? applianceLoads,
     List<CanvasPoint>? canvasPoints,
@@ -472,6 +488,8 @@ class Project {
     'utilityServiceDrop': utilityServiceDrop?.toJson(),
     'roomGeometry': roomGeometry?.toJson(),
     'blueprintImagePath': blueprintImagePath,
+    'calibrationPixelsPerMeter': calibrationPixelsPerMeter,
+    'invertBlueprint': invertBlueprint,
     'spaces': spaces.map((s) => s.toJson()).toList(),
     'applianceLoads': applianceLoads.map((a) => a.toJson()).toList(),
     'canvasPoints': canvasPoints.map((c) => c.toJson()).toList(),
@@ -503,6 +521,8 @@ class Project {
         ? RoomGeometry.fromJson(json['roomGeometry'] as Map<String, dynamic>)
         : null,
     blueprintImagePath: json['blueprintImagePath'] as String?,
+    calibrationPixelsPerMeter: (json['calibrationPixelsPerMeter'] as num?)?.toDouble(),
+    invertBlueprint: json['invertBlueprint'] ?? false,
     spaces: (json['spaces'] as List<dynamic>?)
             ?.map((s) => RoomSpace.fromJson(s as Map<String, dynamic>))
             .toList() ??

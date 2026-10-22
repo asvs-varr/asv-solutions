@@ -121,52 +121,117 @@ class _FloorPlanRoomIntakeModalState extends State<FloorPlanRoomIntakeModal> {
     final room = _rooms[index];
     final nameCtrl = TextEditingController(text: room.name);
     final sqmCtrl = TextEditingController(text: room.areaSqm.toStringAsFixed(2));
+    final cutWCtrl = TextEditingController(text: room.cutoutWidth > 0 ? room.cutoutWidth.toStringAsFixed(1) : '1.5');
+    final cutDCtrl = TextEditingController(text: room.cutoutDepth > 0 ? room.cutoutDepth.toStringAsFixed(1) : '2.0');
+    String shape = room.shapeType;
 
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: BanaagTheme.surfaceCard,
-        title: const Text('Edit Room Space', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: nameCtrl,
-              decoration: const InputDecoration(labelText: 'Space / Room Name'),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDlgState) => AlertDialog(
+          backgroundColor: BanaagTheme.surfaceCard,
+          title: const Text('Edit Room Space Geometry', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.white)),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                TextField(
+                  controller: nameCtrl,
+                  decoration: const InputDecoration(labelText: 'Space / Room Name', isDense: true),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: sqmCtrl,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(labelText: 'Floor Area (m² / sq.m)', isDense: true),
+                ),
+                const SizedBox(height: 14),
+                const Text('Room Geometry / Boundary Shape:', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white70)),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    ChoiceChip(
+                      label: const Text('▭ Rect', style: TextStyle(fontSize: 11)),
+                      selected: shape == 'RECTANGULAR',
+                      selectedColor: BanaagTheme.primaryAmber,
+                      onSelected: (s) => setDlgState(() => shape = 'RECTANGULAR'),
+                    ),
+                    const SizedBox(width: 6),
+                    ChoiceChip(
+                      label: const Text('⮡ L-Shape', style: TextStyle(fontSize: 11)),
+                      selected: shape == 'L_SHAPE',
+                      selectedColor: BanaagTheme.primaryAmber,
+                      onSelected: (s) => setDlgState(() => shape = 'L_SHAPE'),
+                    ),
+                    const SizedBox(width: 6),
+                    ChoiceChip(
+                      label: const Text('⬡ Custom', style: TextStyle(fontSize: 11)),
+                      selected: shape == 'CUSTOM',
+                      selectedColor: BanaagTheme.primaryAmber,
+                      onSelected: (s) => setDlgState(() => shape = 'CUSTOM'),
+                    ),
+                  ],
+                ),
+                if (shape != 'RECTANGULAR') ...[
+                  const SizedBox(height: 12),
+                  const Text('Cutout / Alcove Dimensions (Non-Square):', style: TextStyle(fontSize: 11, color: BanaagTheme.primaryAmber)),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: cutWCtrl,
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          decoration: const InputDecoration(labelText: 'Cutout Width (m)', isDense: true),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextField(
+                          controller: cutDCtrl,
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          decoration: const InputDecoration(labelText: 'Cutout Depth (m)', isDense: true),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
             ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: sqmCtrl,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(labelText: 'Floor Area (m² / sq.m)'),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel', style: TextStyle(color: BanaagTheme.textMuted)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: BanaagTheme.primaryAmber, foregroundColor: Colors.black),
+              onPressed: () {
+                final newName = nameCtrl.text.trim();
+                final newSqm = double.tryParse(sqmCtrl.text.trim()) ?? room.areaSqm;
+                final newCutW = double.tryParse(cutWCtrl.text.trim()) ?? 0.0;
+                final newCutD = double.tryParse(cutDCtrl.text.trim()) ?? 0.0;
+
+                if (newName.isNotEmpty && newSqm > 0) {
+                  setState(() {
+                    _rooms[index] = RoomSpace(
+                      id: room.id,
+                      name: newName,
+                      areaSqm: newSqm,
+                      ceilingHeight: room.ceilingHeight,
+                      shapeType: shape,
+                      cutoutWidth: shape == 'RECTANGULAR' ? 0.0 : newCutW,
+                      cutoutDepth: shape == 'RECTANGULAR' ? 0.0 : newCutD,
+                    );
+                  });
+                }
+                Navigator.pop(ctx);
+              },
+              child: const Text('Save'),
             ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel', style: TextStyle(color: BanaagTheme.textMuted)),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: BanaagTheme.primaryAmber, foregroundColor: Colors.black),
-            onPressed: () {
-              final newName = nameCtrl.text.trim();
-              final newSqm = double.tryParse(sqmCtrl.text.trim()) ?? room.areaSqm;
-              if (newName.isNotEmpty && newSqm > 0) {
-                setState(() {
-                  _rooms[index] = RoomSpace(
-                    id: room.id,
-                    name: newName,
-                    areaSqm: newSqm,
-                    ceilingHeight: room.ceilingHeight,
-                  );
-                });
-              }
-              Navigator.pop(ctx);
-            },
-            child: const Text('Save'),
-          ),
-        ],
       ),
     );
   }
@@ -521,9 +586,70 @@ class _FloorPlanRoomIntakeModalState extends State<FloorPlanRoomIntakeModal> {
                                       room.name,
                                       style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.white),
                                     ),
-                                    Text(
-                                      '${room.areaSqm.toStringAsFixed(2)} m² • Ceiling: ${room.ceilingHeight.toStringAsFixed(1)}m',
-                                      style: const TextStyle(fontSize: 11, color: BanaagTheme.primaryAmber),
+                                    const SizedBox(height: 3),
+                                    Row(
+                                      children: [
+                                        GestureDetector(
+                                          onTap: () {
+                                            setState(() {
+                                              final next = room.shapeType == 'RECTANGULAR'
+                                                  ? 'L_SHAPE'
+                                                  : (room.shapeType == 'L_SHAPE' ? 'CUSTOM' : 'RECTANGULAR');
+                                              _rooms[idx] = RoomSpace(
+                                                id: room.id,
+                                                name: room.name,
+                                                areaSqm: room.areaSqm,
+                                                ceilingHeight: room.ceilingHeight,
+                                                shapeType: next,
+                                                cutoutDepth: next == 'RECTANGULAR' ? 0.0 : 2.0,
+                                                cutoutWidth: next == 'RECTANGULAR' ? 0.0 : 1.5,
+                                              );
+                                            });
+                                          },
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                                            decoration: BoxDecoration(
+                                              color: room.shapeType == 'L_SHAPE'
+                                                  ? BanaagTheme.primaryAmber.withValues(alpha: 0.18)
+                                                  : const Color(0xFF222938),
+                                              borderRadius: BorderRadius.circular(4),
+                                              border: Border.all(
+                                                color: room.shapeType == 'L_SHAPE'
+                                                    ? BanaagTheme.primaryAmber.withValues(alpha: 0.5)
+                                                    : Colors.white24,
+                                              ),
+                                            ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Icon(
+                                                  room.shapeType == 'L_SHAPE'
+                                                      ? Icons.turn_right
+                                                      : (room.shapeType == 'CUSTOM' ? Icons.polyline : Icons.crop_square),
+                                                  size: 10,
+                                                  color: room.shapeType == 'L_SHAPE' ? BanaagTheme.primaryAmber : Colors.white70,
+                                                ),
+                                                const SizedBox(width: 3),
+                                                Text(
+                                                  room.shapeType == 'L_SHAPE'
+                                                      ? 'L-Shape'
+                                                      : (room.shapeType == 'CUSTOM' ? 'Custom' : 'Rect'),
+                                                  style: TextStyle(
+                                                    fontSize: 9.5,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: room.shapeType == 'L_SHAPE' ? BanaagTheme.primaryAmber : Colors.white70,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Text(
+                                          '${room.areaSqm.toStringAsFixed(1)} m²',
+                                          style: const TextStyle(fontSize: 11, color: BanaagTheme.primaryAmber),
+                                        ),
+                                      ],
                                     ),
                                   ],
                                 ),
