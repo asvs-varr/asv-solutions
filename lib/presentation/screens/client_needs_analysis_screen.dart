@@ -1297,14 +1297,10 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
               child: Container(
                 height: MediaQuery.of(modalContext).size.height * 0.88,
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-                decoration: const BoxDecoration(
-                  color: Color(0xFF13171F),
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-                  border: Border(
-                    top: BorderSide(color: BanaagTheme.primaryAmber, width: 2.0),
-                    left: BorderSide(color: Colors.white12),
-                    right: BorderSide(color: Colors.white12),
-                  ),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF13171F),
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                  border: Border.all(color: BanaagTheme.primaryAmber.withValues(alpha: 0.6), width: 1.5),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -2230,15 +2226,14 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
           children: [
             // Telemetry Summary Ribbon
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               color: const Color(0xFF1B2028),
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  _metricColumn('Connected Load', '${(totalConnectedVA / 1000.0).toStringAsFixed(1)} kVA', 'Total Rating'),
-                  _metricColumn('Total Amps', '${totalCurrentAmps.toStringAsFixed(1)} A', '230V 1-Phase'),
-                  _metricColumn('Dedicated Lines', '$dedicatedLinesCount Lines', 'Heaters/ACU/Ref', color: BanaagTheme.primaryAmber),
-                  _metricColumn('Total Units', '$totalApplianceUnits pcs', 'Tallied Items'),
+                  Expanded(child: _metricColumn('Connected Load', '${(totalConnectedVA / 1000.0).toStringAsFixed(1)} kVA', 'Total Rating')),
+                  Expanded(child: _metricColumn('Total Amps', '${totalCurrentAmps.toStringAsFixed(1)} A', '230V 1-Phase')),
+                  Expanded(child: _metricColumn('Dedicated Lines', '$dedicatedLinesCount Lines', 'Heaters/ACU/Ref', color: BanaagTheme.primaryAmber)),
+                  Expanded(child: _metricColumn('Total Units', '$totalApplianceUnits pcs', 'Tallied Items')),
                 ],
               ),
             ),
@@ -2307,76 +2302,93 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
 
           // Smart Lighting Sizer Suggestion Ribbon
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
             color: const Color(0xFF1E2430),
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(Icons.auto_awesome, color: BanaagTheme.primaryAmber, size: 20),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Smart Lighting: ${lightingRec.fixtureCount}x ${lightingRec.primaryFixtureName}',
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.white),
+                Row(
+                  children: [
+                    const Icon(Icons.auto_awesome, color: BanaagTheme.primaryAmber, size: 18),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Smart Lighting: ${lightingRec.fixtureCount}x ${lightingRec.primaryFixtureName}',
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.white),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          Text(
+                            'Target: ${lightingRec.targetLumens.toStringAsFixed(0)} lm (${lightingRec.roomType.recommendedLux} Lux standard for $_activeSpaceName)',
+                            style: const TextStyle(fontSize: 10, color: BanaagTheme.textMuted),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
                       ),
-                      Text(
-                        'Target: ${lightingRec.targetLumens.toStringAsFixed(0)} lm (${lightingRec.roomType.recommendedLux} Lux standard for $_activeSpaceName)',
-                        style: const TextStyle(fontSize: 10, color: BanaagTheme.textMuted),
-                      ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-                OutlinedButton.icon(
-                  style: OutlinedButton.styleFrom(
-                    minimumSize: const Size(0, 36),
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                    side: const BorderSide(color: BanaagTheme.primaryAmber),
-                    foregroundColor: BanaagTheme.primaryAmber,
-                  ),
-                  icon: const Icon(Icons.grid_on, size: 14),
-                  label: const Text('Layout & Heatmap', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                  onPressed: () {
-                    final currentSpace = _spaces.firstWhere((s) => s.name == _activeSpaceName, orElse: () => _spaces.first);
-                    final double estLength = math.sqrt(currentSpace.areaSqm * 1.25);
-                    final double estWidth = currentSpace.areaSqm / estLength;
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          minimumSize: const Size(0, 32),
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          side: const BorderSide(color: BanaagTheme.primaryAmber),
+                          foregroundColor: BanaagTheme.primaryAmber,
+                        ),
+                        icon: const Icon(Icons.grid_on, size: 13),
+                        label: const Text('Layout & Heatmap', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                        onPressed: () {
+                          final currentSpace = _spaces.firstWhere((s) => s.name == _activeSpaceName, orElse: () => _spaces.first);
+                          final double estLength = math.sqrt(currentSpace.areaSqm * 1.25);
+                          final double estWidth = currentSpace.areaSqm / estLength;
 
-                    showDialog(
-                      context: context,
-                      builder: (ctx) => LightingVisualizerModal(
-                        initialRoomType: lightingRec.roomType,
-                        initialLength: double.parse(estLength.toStringAsFixed(1)),
-                        initialWidth: double.parse(estWidth.toStringAsFixed(1)),
-                        initialHeight: currentSpace.ceilingHeight,
-                        onApplyToCanvas: (result) {
-                          _applyLightingLayoutToCanvas(result);
+                          showDialog(
+                            context: context,
+                            builder: (ctx) => LightingVisualizerModal(
+                              initialRoomType: lightingRec.roomType,
+                              initialLength: double.parse(estLength.toStringAsFixed(1)),
+                              initialWidth: double.parse(estWidth.toStringAsFixed(1)),
+                              initialHeight: currentSpace.ceilingHeight,
+                              onApplyToCanvas: (result) {
+                                _applyLightingLayoutToCanvas(result);
+                              },
+                            ),
+                          );
                         },
                       ),
-                    );
-                  },
-                ),
-                const SizedBox(width: 6),
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    minimumSize: const Size(0, 36),
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    backgroundColor: BanaagTheme.primaryAmber,
-                    foregroundColor: Colors.black,
-                  ),
-                  onPressed: () {
-                    _addOrIncrementAppliance(
-                      name: '${lightingRec.primaryFixtureName} ($_activeSpaceName)',
-                      ratingVA: (lightingRec.recommendedWattagePerFixture * 1.25).clamp(15.0, 100.0),
-                      isDedicated: false,
-                      isLighting: true,
-                      circuitNumber: 1,
-                    );
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('💡 Added ${lightingRec.primaryFixtureName} to $_activeSpaceName!')),
-                    );
-                  },
-                  child: const Text('+ Add Light', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          minimumSize: const Size(0, 32),
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          backgroundColor: BanaagTheme.primaryAmber,
+                          foregroundColor: Colors.black,
+                        ),
+                        icon: const Icon(Icons.add, size: 14),
+                        label: const Text('Add Light', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                        onPressed: () {
+                          _addOrIncrementAppliance(
+                            name: '${lightingRec.primaryFixtureName} ($_activeSpaceName)',
+                            ratingVA: (lightingRec.recommendedWattagePerFixture * 1.25).clamp(15.0, 100.0),
+                            isDedicated: false,
+                            isLighting: true,
+                            circuitNumber: 1,
+                          );
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('💡 Added ${lightingRec.primaryFixtureName} to $_activeSpaceName!')),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -2393,31 +2405,30 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
                         const SizedBox(height: 12),
                         Text('No electrical loads assigned to $_activeSpaceName yet.', style: const TextStyle(color: BanaagTheme.textMuted, fontSize: 13)),
                         const SizedBox(height: 16),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            ElevatedButton.icon(
-                              style: ElevatedButton.styleFrom(
-                                minimumSize: const Size(220, 44),
-                                backgroundColor: BanaagTheme.primaryAmber,
-                                foregroundColor: Colors.black,
-                              ),
-                              icon: const Icon(Icons.bolt, size: 16),
-                              label: const Text('Apply PEC Standard Pack', style: TextStyle(fontWeight: FontWeight.bold)),
-                              onPressed: () => _promptPecStandardPackPreview(_activeSpaceName),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          child: ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              minimumSize: const Size(200, 44),
+                              backgroundColor: BanaagTheme.primaryAmber,
+                              foregroundColor: Colors.black,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                             ),
-                          ],
+                            icon: const Icon(Icons.bolt, size: 16),
+                            label: const Text('Apply PEC Standard Pack', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                            onPressed: () => _promptPecStandardPackPreview(_activeSpaceName),
+                          ),
                         ),
                         const SizedBox(height: 10),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
+                        Wrap(
+                          alignment: WrapAlignment.center,
+                          spacing: 8,
                           children: [
                             TextButton.icon(
                               icon: const Icon(Icons.flash_on, size: 14, color: Colors.white70),
                               label: const Text('Quick Preset', style: TextStyle(color: Colors.white70, fontSize: 12)),
                               onPressed: _showQuickPresetPicker,
                             ),
-                            const SizedBox(width: 8),
                             TextButton.icon(
                               icon: const Icon(Icons.add, size: 14, color: BanaagTheme.primaryAmber),
                               label: const Text('Custom Item', style: TextStyle(color: BanaagTheme.primaryAmber, fontSize: 12)),
@@ -3058,9 +3069,9 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(value, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: color ?? Colors.white)),
-        Text(label, style: const TextStyle(color: BanaagTheme.textMuted, fontSize: 10)),
-        Text(subtext, style: const TextStyle(color: Colors.white24, fontSize: 8)),
+        Text(value, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: color ?? Colors.white), overflow: TextOverflow.ellipsis),
+        Text(label, style: const TextStyle(color: BanaagTheme.textMuted, fontSize: 9), overflow: TextOverflow.ellipsis),
+        Text(subtext, style: const TextStyle(color: Colors.white24, fontSize: 8), overflow: TextOverflow.ellipsis),
       ],
     );
   }

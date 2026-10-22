@@ -468,7 +468,9 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
           if ((item.id == 'c_takeoff' || item.id == 'p_takeoff') && !isLocked)
             Padding(
               padding: const EdgeInsets.only(top: 4.0),
-              child: Row(
+              child: Wrap(
+                spacing: 6,
+                runSpacing: 4,
                 children: [
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -478,8 +480,7 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
                     ),
                     child: const Text('OPEN CANVAS ➔', style: TextStyle(color: Colors.cyanAccent, fontSize: 10, fontWeight: FontWeight.bold)),
                   ),
-                  if (_project.blueprintImagePath != null && _project.blueprintImagePath!.isNotEmpty) ...[
-                    const SizedBox(width: 6),
+                  if (_project.blueprintImagePath != null && _project.blueprintImagePath!.isNotEmpty)
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                       decoration: BoxDecoration(
@@ -488,7 +489,6 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
                       ),
                       child: const Text('RE-SCAN PLAN 🔍', style: TextStyle(color: BanaagTheme.primaryAmber, fontSize: 10, fontWeight: FontWeight.bold)),
                     ),
-                  ],
                 ],
               ),
             ),
