@@ -13,6 +13,7 @@ import '../widgets/site_inspection_dialog.dart';
 import '../widgets/utility_service_drop_dialog.dart';
 import '../widgets/floor_plan_room_intake_modal.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:file_picker/file_picker.dart';
 import 'plan_canvas_screen.dart';
 
 class WorkflowScreen extends StatefulWidget {
@@ -850,18 +851,112 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
 
   Future<void> _openFloorPlanScanner() async {
     String? path = _project.blueprintImagePath;
+    final hasExisting = path != null && path.isNotEmpty && File(path).existsSync();
 
-    if (path == null || path.isEmpty || !File(path).existsSync()) {
-      // Prompt user to pick/capture a floor plan photo first
-      final picker = ImagePicker();
-      final XFile? image = await picker.pickImage(source: ImageSource.gallery);
-      if (image == null) return;
-      path = image.path;
-      _project.blueprintImagePath = path;
-      ProjectRepository.instance.updateProject(_project);
+    final selectedPath = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: BanaagTheme.surfaceCard,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: BanaagTheme.primaryAmber.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.document_scanner_outlined, color: BanaagTheme.primaryAmber, size: 22),
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Floor Plan Blueprint Intake',
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white),
+                        ),
+                        Text(
+                          'Select format for On-Device Room Space Extraction',
+                          style: TextStyle(fontSize: 11, color: BanaagTheme.textMuted),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const Divider(color: Colors.white10, height: 24),
+              if (hasExisting) ...[
+                ListTile(
+                  leading: Icon(
+                    path.toLowerCase().endsWith('.pdf') ? Icons.picture_as_pdf : Icons.image,
+                    color: BanaagTheme.primaryAmber,
+                  ),
+                  title: Text(
+                    'Scan Current Blueprint (${path.split(Platform.pathSeparator).last})',
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.white),
+                  ),
+                  subtitle: const Text('Re-analyze room spaces with Google ML Kit OCR', style: TextStyle(fontSize: 11, color: BanaagTheme.textMuted)),
+                  onTap: () => Navigator.pop(ctx, path),
+                ),
+                const Divider(color: Colors.white10, height: 12),
+              ],
+              ListTile(
+                leading: const Icon(Icons.picture_as_pdf, color: Colors.redAccent),
+                title: const Text('Import PDF Blueprint Sheet', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.white)),
+                subtitle: const Text('Multi-page CAD architectural drawings & engineering plans', style: TextStyle(fontSize: 11, color: BanaagTheme.textMuted)),
+                onTap: () async {
+                  Navigator.pop(ctx);
+                  try {
+                    final res = await FilePicker.pickFile(
+                      type: FileType.custom,
+                      allowedExtensions: ['pdf'],
+                    );
+                    if (res != null && res.path != null) {
+                      _launchFloorPlanModal(res.path!);
+                    }
+                  } catch (e) {
+                    debugPrint('Error picking PDF: $e');
+                  }
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_library_outlined, color: Colors.cyanAccent),
+                title: const Text('Pick Floor Plan Image / Photo', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.white)),
+                subtitle: const Text('High-resolution PNG, JPG, or blueprint camera snapshot', style: TextStyle(fontSize: 11, color: BanaagTheme.textMuted)),
+                onTap: () async {
+                  Navigator.pop(ctx);
+                  final picker = ImagePicker();
+                  final XFile? image = await picker.pickImage(source: ImageSource.gallery);
+                  if (image != null) {
+                    _launchFloorPlanModal(image.path);
+                  }
+                },
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    if (selectedPath != null && mounted) {
+      _launchFloorPlanModal(selectedPath);
     }
+  }
 
-    if (!mounted) return;
+  void _launchFloorPlanModal(String path) {
+    _project.blueprintImagePath = path;
+    ProjectRepository.instance.updateProject(_project);
 
     FloorPlanRoomIntakeModal.show(
       context,

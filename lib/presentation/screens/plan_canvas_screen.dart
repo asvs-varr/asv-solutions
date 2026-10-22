@@ -8,6 +8,7 @@ import '../../domain/models.dart';
 import '../../domain/takeoff_engine.dart';
 import '../../domain/dxf_cad_engine.dart';
 import '../../domain/institutional_building_presets.dart';
+import '../../domain/pdf_blueprint_engine.dart';
 import '../../data/project_repository.dart';
 import '../theme/banaag_theme.dart';
 import '../widgets/dxf_export_guide_dialog.dart';
@@ -32,6 +33,10 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
   bool _isUnderlayVisible = true;
   final double _underlayOpacity = 0.78;
   String? _blueprintPath;
+  int _pdfSheetIndex = 0;
+  List<PdfBlueprintPageInfo> _pdfPages = [];
+  String? _renderedPdfImagePath;
+  bool _isRenderingPdf = false;
   bool _showLabels = true;
   bool _showConduits = true;
   CanvasPoint? _selectedPoint;
@@ -126,6 +131,36 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
         ConduitRoute(id: 'rt-3', fromPointId: 'pt-1', toPointId: 'pt-4', measuredLengthMeters: 5.0),
         ConduitRoute(id: 'rt-4', fromPointId: 'pt-4', toPointId: 'pt-5', measuredLengthMeters: 4.8),
       ];
+    }
+    if (_blueprintPath != null && PdfBlueprintEngine.isPdf(_blueprintPath)) {
+      _loadPdfBlueprint();
+    }
+  }
+
+  Future<void> _loadPdfBlueprint() async {
+    final path = _blueprintPath;
+    if (path == null || !PdfBlueprintEngine.isPdf(path)) return;
+    if (!File(path).existsSync()) return;
+
+    setState(() => _isRenderingPdf = true);
+
+    try {
+      final pages = await PdfBlueprintEngine.getPdfPages(path);
+      final rendered = await PdfBlueprintEngine.renderPdfPageToImage(
+        path,
+        pageIndex: _pdfSheetIndex,
+        dpi: 150.0,
+      );
+      if (mounted) {
+        setState(() {
+          _pdfPages = pages;
+          _renderedPdfImagePath = rendered;
+          _isRenderingPdf = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error rasterizing PDF blueprint: $e');
+      if (mounted) setState(() => _isRenderingPdf = false);
     }
   }
 
@@ -959,7 +994,27 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                               child: Opacity(
                                 opacity: _underlayOpacity,
                                 child: _blueprintPath!.toLowerCase().endsWith('.pdf')
-                                    ? _buildPdfUnderlayPlaceholder()
+                                    ? (_renderedPdfImagePath != null && File(_renderedPdfImagePath!).existsSync()
+                                        ? Image.file(
+                                            File(_renderedPdfImagePath!),
+                                            fit: BoxFit.contain,
+                                            errorBuilder: (ctx, err, stack) => _buildPdfUnderlayPlaceholder(),
+                                          )
+                                        : (_isRenderingPdf
+                                            ? const Center(
+                                                child: Column(
+                                                  mainAxisSize: MainAxisSize.min,
+                                                  children: [
+                                                    CircularProgressIndicator(color: BanaagTheme.primaryAmber),
+                                                    SizedBox(height: 12),
+                                                    Text(
+                                                      'Rendering Architectural Blueprint...',
+                                                      style: TextStyle(color: BanaagTheme.primaryAmber, fontSize: 12),
+                                                    ),
+                                                  ],
+                                                ),
+                                              )
+                                            : _buildPdfUnderlayPlaceholder()))
                                     : Image.file(
                                         File(_blueprintPath!),
                                         fit: BoxFit.contain,
@@ -1016,13 +1071,75 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                             ),
                             const SizedBox(width: 6),
                             ConstrainedBox(
-                              constraints: const BoxConstraints(maxWidth: 115),
+                              constraints: const BoxConstraints(maxWidth: 100),
                               child: Text(
                                 _blueprintPath!.split(Platform.pathSeparator).last,
                                 style: const TextStyle(color: Colors.white, fontSize: 10.5, fontWeight: FontWeight.bold),
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
+                            if (_blueprintPath!.toLowerCase().endsWith('.pdf') && _pdfPages.length > 1) ...[
+                              const SizedBox(width: 4),
+                              PopupMenuButton<int>(
+                                tooltip: 'Switch Blueprint Sheet',
+                                color: BanaagTheme.surfaceCard,
+                                padding: EdgeInsets.zero,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: BanaagTheme.primaryAmber.withValues(alpha: 0.2),
+                                    borderRadius: BorderRadius.circular(4),
+                                    border: Border.all(color: BanaagTheme.primaryAmber.withValues(alpha: 0.5)),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        'Sheet ${_pdfSheetIndex + 1}',
+                                        style: const TextStyle(
+                                          color: BanaagTheme.primaryAmber,
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      const Icon(Icons.arrow_drop_down, size: 14, color: BanaagTheme.primaryAmber),
+                                    ],
+                                  ),
+                                ),
+                                onSelected: (idx) {
+                                  if (idx != _pdfSheetIndex) {
+                                    setState(() {
+                                      _pdfSheetIndex = idx;
+                                    });
+                                    _loadPdfBlueprint();
+                                  }
+                                },
+                                itemBuilder: (context) => _pdfPages.map((p) {
+                                  final isCurrent = p.pageIndex == _pdfSheetIndex;
+                                  return PopupMenuItem<int>(
+                                    value: p.pageIndex,
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          isCurrent ? Icons.check_circle : Icons.layers_outlined,
+                                          size: 16,
+                                          color: isCurrent ? BanaagTheme.primaryAmber : Colors.white70,
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Text(
+                                          p.label,
+                                          style: TextStyle(
+                                            color: isCurrent ? BanaagTheme.primaryAmber : Colors.white,
+                                            fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                }).toList(),
+                              ),
+                            ],
                             const SizedBox(width: 6),
                             GestureDetector(
                               onTap: () => setState(() => _isUnderlayVisible = !_isUnderlayVisible),
@@ -1187,11 +1304,16 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
         setState(() {
           _blueprintPath = path;
           _isUnderlayVisible = true;
+          _pdfSheetIndex = 0;
+          _renderedPdfImagePath = null;
           if (widget.project != null) {
             widget.project!.blueprintImagePath = path;
             ProjectRepository.instance.updateProject(widget.project!);
           }
         });
+        if (PdfBlueprintEngine.isPdf(path)) {
+          _loadPdfBlueprint();
+        }
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(

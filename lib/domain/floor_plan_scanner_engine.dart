@@ -5,8 +5,24 @@
 import 'dart:io';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 import 'models.dart';
+import 'pdf_blueprint_engine.dart';
 
 class FloorPlanScannerEngine {
+  /// Scans a floor plan from either an Image file or a PDF Blueprint.
+  /// If a PDF is provided, it automatically extracts and renders the selected sheet page.
+  static Future<List<RoomSpace>> scanFloorPlan(String path, {int pdfPageIndex = 0}) async {
+    String imageToScan = path;
+    if (PdfBlueprintEngine.isPdf(path)) {
+      final rendered = await PdfBlueprintEngine.renderPdfPageToImage(path, pageIndex: pdfPageIndex);
+      if (rendered != null) {
+        imageToScan = rendered;
+      } else {
+        return [];
+      }
+    }
+    return scanFloorPlanImage(imageToScan);
+  }
+
   /// Scans a local floor plan image or photo on-device.
   /// Extracts rooms with their names, detected areas (m²), and default ceiling heights.
   static Future<List<RoomSpace>> scanFloorPlanImage(String imagePath) async {

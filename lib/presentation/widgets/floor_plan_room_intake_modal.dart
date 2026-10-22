@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import '../../domain/models.dart';
 import '../../domain/floor_plan_scanner_engine.dart';
+import '../../domain/pdf_blueprint_engine.dart';
 import '../theme/banaag_theme.dart';
 
 class FloorPlanRoomIntakeModal extends StatefulWidget {
@@ -49,6 +50,10 @@ class _FloorPlanRoomIntakeModalState extends State<FloorPlanRoomIntakeModal> {
   double _calibratedLength = 9.0;
   double _calibratedWidth = 8.8;
 
+  int _selectedPageIndex = 0;
+  List<PdfBlueprintPageInfo> _pdfPages = [];
+  String? _rasterizedImagePath;
+
   final TextEditingController _lenController = TextEditingController(text: '9.0');
   final TextEditingController _widController = TextEditingController(text: '8.8');
 
@@ -62,7 +67,21 @@ class _FloorPlanRoomIntakeModalState extends State<FloorPlanRoomIntakeModal> {
     setState(() => _isScanning = true);
 
     List<RoomSpace> scanned = [];
-    if (!widget.blueprintPath.toLowerCase().endsWith('.pdf')) {
+    final isPdf = PdfBlueprintEngine.isPdf(widget.blueprintPath);
+
+    if (isPdf) {
+      if (_pdfPages.isEmpty) {
+        _pdfPages = await PdfBlueprintEngine.getPdfPages(widget.blueprintPath);
+      }
+      _rasterizedImagePath = await PdfBlueprintEngine.renderPdfPageToImage(
+        widget.blueprintPath,
+        pageIndex: _selectedPageIndex,
+        dpi: 150.0,
+      );
+      if (_rasterizedImagePath != null) {
+        scanned = await FloorPlanScannerEngine.scanFloorPlanImage(_rasterizedImagePath!);
+      }
+    } else {
       scanned = await FloorPlanScannerEngine.scanFloorPlanImage(widget.blueprintPath);
     }
 
@@ -201,7 +220,7 @@ class _FloorPlanRoomIntakeModalState extends State<FloorPlanRoomIntakeModal> {
                         style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white),
                       ),
                       Text(
-                        'Awtomatikong binasa ng On-Device OCR Scanner ang plano',
+                        'On-Device OCR Scanner automatically analyzed the plan',
                         style: TextStyle(fontSize: 11, color: BanaagTheme.primaryAmber.withValues(alpha: 0.9)),
                       ),
                     ],
@@ -255,9 +274,17 @@ class _FloorPlanRoomIntakeModalState extends State<FloorPlanRoomIntakeModal> {
                               width: 130,
                               color: Colors.white,
                               child: isPdf
-                                  ? const Center(
-                                      child: Icon(Icons.picture_as_pdf, size: 48, color: Colors.redAccent),
-                                    )
+                                  ? (_rasterizedImagePath != null && File(_rasterizedImagePath!).existsSync()
+                                      ? Image.file(
+                                          File(_rasterizedImagePath!),
+                                          fit: BoxFit.contain,
+                                          errorBuilder: (ctx, err, stack) => const Center(
+                                            child: Icon(Icons.picture_as_pdf, size: 48, color: Colors.redAccent),
+                                          ),
+                                        )
+                                      : const Center(
+                                          child: Icon(Icons.picture_as_pdf, size: 48, color: Colors.redAccent),
+                                        ))
                                   : Image.file(
                                       File(widget.blueprintPath),
                                       fit: BoxFit.contain,
@@ -306,6 +333,56 @@ class _FloorPlanRoomIntakeModalState extends State<FloorPlanRoomIntakeModal> {
                           ],
                         ),
                       ),
+                      if (isPdf && _pdfPages.length > 1) ...[
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            const Icon(Icons.layers_outlined, size: 16, color: BanaagTheme.primaryAmber),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Select Blueprint Sheet (${_pdfPages.length} Sheets Available):',
+                              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white70),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        SizedBox(
+                          height: 38,
+                          child: ListView.separated(
+                            scrollDirection: Axis.horizontal,
+                            itemCount: _pdfPages.length,
+                            separatorBuilder: (_, _) => const SizedBox(width: 8),
+                            itemBuilder: (context, idx) {
+                              final page = _pdfPages[idx];
+                              final isSelected = idx == _selectedPageIndex;
+                              return ChoiceChip(
+                                label: Text(
+                                  page.label,
+                                  style: TextStyle(
+                                    color: isSelected ? Colors.black : Colors.white70,
+                                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                                selected: isSelected,
+                                selectedColor: BanaagTheme.primaryAmber,
+                                backgroundColor: const Color(0xFF1E2430),
+                                side: BorderSide(
+                                  color: isSelected ? BanaagTheme.primaryAmber : Colors.white12,
+                                ),
+                                onSelected: (selected) {
+                                  if (selected && idx != _selectedPageIndex) {
+                                    setState(() {
+                                      _selectedPageIndex = idx;
+                                    });
+                                    _performAutoScan();
+                                  }
+                                },
+                              );
+                            },
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 16),
 
                       // Reference Measure Calibration Bar
@@ -337,7 +414,7 @@ class _FloorPlanRoomIntakeModalState extends State<FloorPlanRoomIntakeModal> {
                                     controller: _lenController,
                                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
                                     decoration: const InputDecoration(
-                                      labelText: 'Haba / Length (m)',
+                                      labelText: 'Length (m)',
                                       isDense: true,
                                       contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                                     ),
@@ -352,7 +429,7 @@ class _FloorPlanRoomIntakeModalState extends State<FloorPlanRoomIntakeModal> {
                                     controller: _widController,
                                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
                                     decoration: const InputDecoration(
-                                      labelText: 'Lapad / Width (m)',
+                                      labelText: 'Width (m)',
                                       isDense: true,
                                       contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                                     ),
