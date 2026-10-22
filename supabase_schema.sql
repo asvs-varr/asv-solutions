@@ -1,4 +1,4 @@
--- ==============================================================================
+﻿-- ==============================================================================
 -- BANAAG PostgreSQL & Supabase Database Schema
 -- Version: 1.0.0
 -- Architecture: Multi-tenant, Row-Level Security (RLS), Offline-First Cloud Sync
@@ -160,3 +160,110 @@ CREATE POLICY "Contractors manage own rough-in photos"
             AND projects.user_id = auth.uid()
         )
     );
+
+-- ==============================================================================
+-- 4. BANAAG Anti-Counterfeit 1-Device Single-Session Licensing Architecture
+-- ==============================================================================
+
+CREATE TABLE IF NOT EXISTS public.licensed_buyers (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    email TEXT UNIQUE NOT NULL,
+    buyer_name TEXT NOT NULL,
+    phone_number TEXT,
+    tier TEXT NOT NULL DEFAULT 'PRO_CONTRACTOR',
+    active_device_id TEXT,             -- Stores hardware fingerprint / unique device ID
+    active_device_model TEXT,          -- e.g. "realme C75 (RMX3941)"
+    is_active BOOLEAN DEFAULT TRUE,
+    bound_at TIMESTAMP WITH TIME ZONE,
+    last_seen_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- RLS: Public client can only query if their device is the registered one
+ALTER TABLE public.licensed_buyers ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Allow public checking of active device session"
+    ON public.licensed_buyers FOR SELECT
+    USING (true);
+
+-- Function to bind a device session (Rejects if already bound to another phone)
+CREATE OR REPLACE FUNCTION public.bind_device_session(
+    p_email TEXT,
+    p_device_id TEXT,
+    p_device_model TEXT
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    v_buyer RECORD;
+BEGIN
+    -- Check if buyer exists in whitelist
+    SELECT * INTO v_buyer FROM public.licensed_buyers WHERE LOWER(email) = LOWER(p_email);
+    
+    IF v_buyer IS NULL THEN
+        RETURN jsonb_build_object(
+            'success', false,
+            'code', 'NOT_REGISTERED',
+            'message', 'This Gmail is not yet registered in our system. Please purchase an official BANAAG license to activate.'
+        );
+    END IF;
+
+    IF NOT v_buyer.is_active THEN
+        RETURN jsonb_build_object(
+            'success', false,
+            'code', 'LICENSE_DISABLED',
+            'message', 'Your license has been suspended or revoked. Please contact ASV Solutions support.'
+        );
+    END IF;
+
+    -- Case 1: First time binding or binding to same device
+    IF v_buyer.active_device_id IS NULL OR v_buyer.active_device_id = p_device_id THEN
+        UPDATE public.licensed_buyers
+        SET active_device_id = p_device_id,
+            active_device_model = p_device_model,
+            bound_at = COALESCE(bound_at, NOW()),
+            last_seen_at = NOW()
+        WHERE LOWER(email) = LOWER(p_email);
+
+        RETURN jsonb_build_object(
+            'success', true,
+            'code', 'BOUND_SUCCESS',
+            'buyer_name', v_buyer.buyer_name,
+            'tier', v_buyer.tier,
+            'message', 'Device successfully bound. 30-Day Offline Lease activated.'
+        );
+    ELSE
+        -- Case 2: Attempting to bind a second device while first device is active
+        RETURN jsonb_build_object(
+            'success', false,
+            'code', 'DEVICE_LIMIT_REACHED',
+            'active_model', v_buyer.active_device_model,
+            'message', '1-Device Policy Active: This account is currently active on another device (' || COALESCE(v_buyer.active_device_model, 'Phone') || '). Please use the Transfer Device option on your old phone first.'
+        );
+    END IF;
+END;
+$$;
+
+-- Function to release/transfer device
+CREATE OR REPLACE FUNCTION public.release_device_session(
+    p_email TEXT,
+    p_device_id TEXT
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+    UPDATE public.licensed_buyers
+    SET active_device_id = NULL,
+        active_device_model = NULL
+    WHERE LOWER(email) = LOWER(p_email) AND active_device_id = p_device_id;
+
+    RETURN jsonb_build_object(
+        'success', true,
+        'message', 'Device released successfully. You may now log in from your new device.'
+    );
+END;
+$$;
