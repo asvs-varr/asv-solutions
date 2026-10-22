@@ -1,0 +1,76 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="100%" height="100%">
+  <defs>
+    <!-- Matte Obsidian Charcoal with Warm Ember Undertone -->
+    <radialGradient id="obsidianBg1" cx="50%" cy="48%" r="65%">
+      <stop offset="0%" stop-color="#1F150E" stop-opacity="1" />
+      <stop offset="45%" stop-color="#120E0C" stop-opacity="1" />
+      <stop offset="100%" stop-color="#060607" stop-opacity="1" />
+    </radialGradient>
+
+    <!-- Thermal Smoke Haze sa Background -->
+    <radialGradient id="warmSmoke1" cx="50%" cy="46%" r="38%">
+      <stop offset="0%" stop-color="#FF9900" stop-opacity="0.18" />
+      <stop offset="50%" stop-color="#9E4711" stop-opacity="0.08" />
+      <stop offset="100%" stop-color="#000000" stop-opacity="0" />
+    </radialGradient>
+
+    <!-- Tuktok na Arc Flash sa tapat ng Letrang 'A' -->
+    <radialGradient id="peakSpark1" cx="58%" cy="30%" r="22%">
+      <stop offset="0%" stop-color="#FFFFB3" stop-opacity="0.25" />
+      <stop offset="100%" stop-color="#FFAE00" stop-opacity="0" />
+    </radialGradient>
+
+    <!-- Subtle CAD Grid sa Thermal Smoke -->
+    <pattern id="cadGrid1" width="64" height="64" patternUnits="userSpaceOnUse">
+      <path d="M 64 0 L 0 0 0 64" fill="none" stroke="#FFAE00" stroke-width="1" stroke-opacity="0.05" />
+    </pattern>
+    <radialGradient id="gridMaskGrad1" cx="50%" cy="46%" r="36%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="1" />
+      <stop offset="100%" stop-color="#000000" stop-opacity="0" />
+    </radialGradient>
+    <mask id="gridMask1">
+      <rect width="1024" height="1024" fill="url(#gridMaskGrad1)" />
+    </mask>
+
+    <!-- HIERARCHY GRADIENTS (Thermal / Arc Spectrum: V -> S -> A) -->
+    <!-- 1. V: Unang Antas (Warm Bronze / Deep Amber) -->
+    <linearGradient id="thermalV1" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#80350A" stop-opacity="0.82" />
+      <stop offset="100%" stop-color="#C95B12" stop-opacity="0.90" />
+    </linearGradient>
+
+    <!-- 2. S: Pangalawang Antas (Rich Safety Gold / Marigold) -->
+    <linearGradient id="thermalS1" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#FF8800" stop-opacity="1" />
+      <stop offset="100%" stop-color="#FFCC00" stop-opacity="1" />
+    </linearGradient>
+
+    <!-- 3. A: Pangatlong Antas / Pinakamaliwanag (Blinding Lemon-White Spark) -->
+    <linearGradient id="thermalA1" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#FFEE55" stop-opacity="1" />
+      <stop offset="45%" stop-color="#FFFFCC" stop-opacity="1" />
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="1" />
+    </linearGradient>
+  </defs>
+
+  <!-- Squircle Icon Base -->
+  <rect width="1024" height="1024" rx="225" fill="url(#obsidianBg1)" />
+  <rect width="1024" height="1024" rx="225" fill="url(#cadGrid1)" mask="url(#gridMask1)" />
+
+  <!-- Background Haze -->
+  <circle cx="512" cy="480" r="390" fill="url(#warmSmoke1)" />
+  <circle cx="585" cy="310" r="220" fill="url(#peakSpark1)" />
+
+  <!-- ======================================================================= -->
+  <!-- BERSYON "OO": DYNAMIC BLADE (MAKAPAL SA KANTO + CHISEL-CUT SA DULO)     -->
+  <!-- ======================================================================= -->
+
+  <!-- 1. LETRANG 'V' (Unang Antas: Warm Bronze-Amber | Aligned Diagonal Hook) -->
+  <path d="M 512,556 L 518,556 L 417,790 L 642,480 L 612,475 L 615,468 L 666,466 L 360,886 Z" fill="url(#thermalV1)" />
+
+  <!-- 2. LETRANG 'S' (Pangalawang Antas: Safety Gold | Bold Center Z-Bends) -->
+  <path d="M 658,142 L 404,536 L 486,536 L 392,778 L 399,768 L 510,518 L 430,518 L 664,150 Z" fill="url(#thermalS1)" />
+
+  <!-- 3. LETRANG 'A' (Pinakamaliwanag: Lemon-White | Thick Peak + Chisel Ends) -->
+  <path d="M 475,496 L 668,166 L 570,454 L 564,454 L 632,248 L 481,496 Z" fill="url(#thermalA1)" />
+</svg>
