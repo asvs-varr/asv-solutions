@@ -782,7 +782,7 @@ class _SingleLineDiagramScreenState extends State<SingleLineDiagramScreen> with 
                             });
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
-                                content: Text('🛡️ Lahat ng circuits at main feeder ay na-restore na sa 100% Verbatim PEC 2017 Standard!'),
+                                content: Text('🛡️ All circuits and main feeder have been restored to 100% Verbatim PEC 2017 Standards!'),
                                 backgroundColor: BanaagTheme.successGreen,
                               ),
                             );
@@ -889,7 +889,7 @@ class _SingleLineDiagramScreenState extends State<SingleLineDiagramScreen> with 
                   border: Border.all(color: Colors.white12),
                 ),
                 child: const Text(
-                  '⚖️ R.A. 7920 Engineering Scope Note: Ang 100% Verbatim PEC 2017 Engine ng BANAAG ay sumasaklaw sa Single-Phase 230V Residential at Light Commercial Branch/Feeder Sizing, Demand Factors, Ampacity, Derating, Conduit Fill, Voltage Drop, at Grounding. Ang pinal na blueprint sign-off at site-specific fault current (kAIC) coordination ay dapat selyado ng Licensed PEE / REE / RME.',
+                  '⚖️ R.A. 7920 Engineering Scope Note: The 100% Verbatim PEC 2017 Engine of BANAAG covers Single-Phase 230V Residential and Light Commercial Branch/Feeder Sizing, Demand Factors, Ampacity, Derating, Conduit Fill, Voltage Drop, and Grounding. Final blueprint sign-off and site-specific fault current (kAIC) coordination must be sealed by a Licensed PEE / REE / RME.',
                   style: TextStyle(color: BanaagTheme.textMuted, fontSize: 10, height: 1.3),
                 ),
               ),
