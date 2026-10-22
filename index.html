@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>A.E. Solutions | A.E. CCTV & Computer Installation Services</title>
+  <meta name="description" content="Official Corporate Portal of A.E. CCTV & Computer Installation Services (A.E. Solutions). Providing Smart Security, IT Infrastructure, and Next-Gen Engineering Software.">
+  <style>
+    :root {
+      --bg-dark: #0a0c10;
+      --card-bg: #141822;
+      --card-border: #232b3d;
+      --primary-cyan: #00e5ff;
+      --primary-amber: #ffb300;
+      --text-main: #f0f4f8;
+      --text-muted: #94a3b8;
+      --accent-grad: linear-gradient(135deg, #00e5ff 0%, #3b82f6 50%, #ffb300 100%);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+
+    /* Header Nav */
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1.25rem 2.5rem;
+      border-bottom: 1px solid var(--card-border);
+      background: rgba(10, 12, 16, 0.85);
+      backdrop-filter: blur(12px);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .logo-area { display: flex; align-items: center; gap: 0.75rem; }
+    .brand-logo-pill {
+      background: var(--accent-grad);
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 900;
+      color: #000;
+      font-size: 1.1rem;
+    }
+    .brand-title { font-size: 1.25rem; font-weight: 800; letter-spacing: 0.5px; }
+    .nav-links a {
+      color: var(--text-muted);
+      text-decoration: none;
+      margin-left: 1.75rem;
+      font-size: 0.95rem;
+      transition: color 0.2s;
+    }
+    .nav-links a:hover { color: var(--primary-cyan); }
+    .btn-contact {
+      background: var(--primary-cyan);
+      color: #000;
+      font-weight: 700;
+      padding: 0.5rem 1.2rem;
+      border-radius: 6px;
+      text-decoration: none;
+      margin-left: 1.5rem;
+      transition: transform 0.2s, opacity 0.2s;
+    }
+    .btn-contact:hover { opacity: 0.9; transform: translateY(-1px); }
+
+    /* Hero Section */
+    .hero {
+      text-align: center;
+      padding: 5rem 1.5rem 3.5rem;
+      max-width: 900px;
+      margin: 0 auto;
+    }
+    .dti-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: rgba(255, 179, 0, 0.12);
+      border: 1px solid rgba(255, 179, 0, 0.35);
+      color: var(--primary-amber);
+      font-size: 0.85rem;
+      font-weight: 600;
+      padding: 0.4rem 1rem;
+      border-radius: 20px;
+      margin-bottom: 1.5rem;
+    }
+    .hero h1 {
+      font-size: 2.8rem;
+      line-height: 1.2;
+      font-weight: 900;
+      margin-bottom: 1.25rem;
+      background: linear-gradient(180deg, #ffffff 30%, #94a3b8 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .hero p {
+      font-size: 1.15rem;
+      color: var(--text-muted);
+      margin-bottom: 2rem;
+      max-width: 750px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+
+    /* Core Divisions Grid */
+    .section-title {
+      text-align: center;
+      font-size: 1.8rem;
+      font-weight: 800;
+      margin-bottom: 2.5rem;
+    }
+    .divisions-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 1.75rem;
+      max-width: 1150px;
+      margin: 0 auto 5rem;
+      padding: 0 1.5rem;
+    }
+    .division-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 14px;
+      padding: 2rem;
+      transition: transform 0.25s, border-color 0.25s;
+    }
+    .division-card:hover {
+      transform: translateY(-4px);
+      border-color: rgba(0, 229, 255, 0.4);
+    }
+    .division-card .icon {
+      font-size: 2.2rem;
+      margin-bottom: 1rem;
+    }
+    .division-card h3 {
+      font-size: 1.35rem;
+      margin-bottom: 0.75rem;
+      color: #fff;
+    }
+    .division-card p {
+      color: var(--text-muted);
+      font-size: 0.95rem;
+      line-height: 1.55;
+    }
+
+    /* Flagship Showcase: BANAAG */
+    .banaag-showcase {
+      background: radial-gradient(circle at center, #18130e 0%, #0a0c10 70%);
+      border-top: 1px solid #2e2119;
+      border-bottom: 1px solid #2e2119;
+      padding: 5rem 1.5rem;
+    }
+    .showcase-container {
+      max-width: 1100px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      gap: 3.5rem;
+      flex-wrap: wrap;
+    }
+    .showcase-text { flex: 1; min-width: 320px; }
+    .showcase-text .tag {
+      background: rgba(255, 179, 0, 0.15);
+      border: 1px solid var(--primary-amber);
+      color: var(--primary-amber);
+      font-size: 0.8rem;
+      font-weight: 700;
+      padding: 0.35rem 0.8rem;
+      border-radius: 6px;
+      display: inline-block;
+      margin-bottom: 1rem;
+      letter-spacing: 0.5px;
+    }
+    .showcase-text h2 {
+      font-size: 2.3rem;
+      font-weight: 900;
+      line-height: 1.25;
+      margin-bottom: 1rem;
+      color: #fff;
+    }
+    .showcase-text p {
+      color: var(--text-muted);
+      font-size: 1rem;
+      margin-bottom: 1.75rem;
+    }
+    .feature-list {
+      list-style: none;
+      margin-bottom: 2rem;
+    }
+    .feature-list li {
+      margin-bottom: 0.65rem;
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      color: #e2e8f0;
+      font-size: 0.95rem;
+    }
+    .feature-list li span { color: var(--primary-amber); font-weight: bold; }
+    .showcase-img {
+      flex: 1;
+      min-width: 280px;
+      display: flex;
+      justify-content: center;
+    }
+    .showcase-img img {
+      max-width: 320px;
+      width: 100%;
+      border-radius: 24px;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.8), 0 0 50px rgba(255, 179, 0, 0.15);
+      border: 2px solid #2e2119;
+    }
+
+    /* Verification & DTI Section */
+    .verification-section {
+      max-width: 900px;
+      margin: 5rem auto;
+      padding: 2.5rem;
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 14px;
+      text-align: center;
+    }
+    .verification-section h3 { font-size: 1.4rem; margin-bottom: 0.75rem; }
+    .verification-details {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 1.25rem;
+      margin-top: 1.5rem;
+      text-align: left;
+    }
+    .v-item {
+      background: #0f121a;
+      padding: 1rem;
+      border-radius: 8px;
+      border: 1px solid #1e2638;
+    }
+    .v-item span {
+      display: block;
+      color: var(--text-muted);
+      font-size: 0.8rem;
+      margin-bottom: 0.25rem;
+    }
+    .v-item strong { color: #fff; font-size: 0.95rem; }
+
+    /* Footer */
+    footer {
+      border-top: 1px solid var(--card-border);
+      padding: 2.5rem 1.5rem;
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 0.9rem;
+    }
+    footer a { color: var(--primary-cyan); text-decoration: none; }
+  </style>
+</head>
+<body>
+
+  <!-- Navigation -->
+  <header>
+    <div class="logo-area">
+      <div class="brand-logo-pill">AE</div>
+      <div class="brand-title">A.E. SOLUTIONS</div>
+    </div>
+    <nav class="nav-links">
+      <a href="#services">Services</a>
+      <a href="#software">Software Suite</a>
+      <a href="#verification">Legal & Verification</a>
+      <a href="mailto:mr.arvin03@gmail.com" class="btn-contact">Contact Us</a>
+    </nav>
+  </header>
+
+  <!-- Hero Section -->
+  <section class="hero">
+    <div class="dti-badge">
+      🛡️ DTI Registered Business Name No. 8285425
+    </div>
+    <h1>Enterprise Security Systems, IT Infrastructure & Engineering Software</h1>
+    <p>A.E. CCTV AND COMPUTER INSTALLATION SERVICES (A.E. Solutions) delivers professional high-precision surveillance, network architecture, and mission-critical engineering applications.</p>
+  </section>
+
+  <!-- Services Division -->
+  <section id="services">
+    <h2 class="section-title">Core Service Ecosystem</h2>
+    <div class="divisions-grid">
+      <div class="division-card">
+        <div class="icon">📹</div>
+        <h3>CCTV & Smart Security Surveillance</h3>
+        <p>Industrial AI-powered CCTV engineering, IP camera architectures, NVR central telemetry, remote viewing setups, and perimeter security for commercial, industrial, and residential projects.</p>
+      </div>
+
+      <div class="division-card">
+        <div class="icon">🖥️</div>
+        <h3>IT Infrastructure & Network Systems</h3>
+        <p>Enterprise structured cabling, high-performance router configuration (MikroTik Load Balancing & Failover), localized servers, Wi-Fi mesh design, and hardware maintenance.</p>
+      </div>
+
+      <div class="division-card">
+        <div class="icon">⚡</div>
+        <h3>Software Engineering & Digital Solutions</h3>
+        <p>Architecting autonomous mobile and desktop applications for technical industries, including electrical calculation engines, automated bill of materials, and CAD takeoff tools.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Flagship Software Showcase: BANAAG -->
+  <section id="software" class="banaag-showcase">
+    <div class="showcase-container">
+      <div class="showcase-text">
+        <div class="tag">FLAGSHIP MOBILE APPLICATION</div>
+        <h2>BANAAG: Electrical Project Director</h2>
+        <p>A high-performance offline engineering suite built for Filipino Registered Master Electricians, Electrical Engineers, and Contractors. Built strictly with 100% Philippine Electrical Code (PEC 2017) compliance.</p>
+        <ul class="feature-list">
+          <li><span>✓</span> Automated PEC 2017 Conduit, Feeder & Wire Ampacity Calculation Engine</li>
+          <li><span>✓</span> High-Speed Plan Takeoff & Automated Bill of Materials (BOM)</li>
+          <li><span>✓</span> 7-Stage Pre-Cover Gate & Megger Insulation QA Verification</li>
+          <li><span>✓</span> Future-Proof Solar PV & EV Continuous Load Sizing (Sec. 6.90 / 6.25)</li>
+        </ul>
+        <a href="#verification" class="btn-contact" style="margin-left: 0;">Explore Technical Specifications</a>
+      </div>
+      <div class="showcase-img">
+        <img src="banaag_screen.png" alt="BANAAG Mobile App - Obsidian Theme">
+      </div>
+    </div>
+  </section>
+
+  <!-- Business Legal & Verification for D-U-N-S / Google Play -->
+  <section id="verification" class="verification-section">
+    <h3>Registered Business Entity Details</h3>
+    <p style="color: var(--text-muted); font-size: 0.95rem;">Official information registered with the Republic of the Philippines Department of Trade and Industry (DTI).</p>
+    
+    <div class="verification-details">
+      <div class="v-item">
+        <span>Registered Business Name</span>
+        <strong>A.E. CCTV AND COMPUTER INSTALLATION SERVICES</strong>
+      </div>
+      <div class="v-item">
+        <span>Public Trademark / Trade Name</span>
+        <strong>A.E. Solutions / A.E. Tech & Computer Services</strong>
+      </div>
+      <div class="v-item">
+        <span>DTI Certificate No.</span>
+        <strong>8285425</strong>
+      </div>
+      <div class="v-item">
+        <span>Proprietor / Representative</span>
+        <strong>Vincent Jamito Arrogante</strong>
+      </div>
+      <div class="v-item">
+        <span>Principal Location</span>
+        <strong>Laniton, San Lorenzo Ruiz, Camarines Norte, Region V</strong>
+      </div>
+      <div class="v-item">
+        <span>Official Contact Email</span>
+        <strong>mr.arvin03@gmail.com</strong>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer>
+    <p>© 2026 A.E. CCTV AND COMPUTER INSTALLATION SERVICES (A.E. Solutions). All rights reserved.</p>
+    <p style="margin-top: 0.5rem; font-size: 0.8rem;">DTI Business Name No. 8285425 | Philippines</p>
+  </footer>
+
+</body>
+</html>
