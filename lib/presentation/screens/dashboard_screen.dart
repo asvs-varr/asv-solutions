@@ -14,6 +14,8 @@ import 'banaag_pro_screen.dart';
 import '../widgets/project_management_dialogs.dart';
 import '../widgets/dev_ticket_modal.dart';
 import '../widgets/floor_plan_room_intake_modal.dart';
+import '../widgets/project_quota_voucher_modal.dart';
+import '../../domain/banaag_auth_service.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -47,7 +49,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.confirmation_number_outlined, color: BanaagTheme.primaryAmber),
+            icon: const Icon(Icons.receipt_long_outlined, color: BanaagTheme.primaryAmber),
+            tooltip: 'Project Quota & Voucher Top-Up',
+            onPressed: () => ProjectQuotaVoucherModal.show(context),
+          ),
+          IconButton(
+            icon: const Icon(Icons.bug_report_outlined, color: BanaagTheme.primaryAmber),
             tooltip: 'Submit Dev Ticket / Issue',
             onPressed: () => showDevTicketSheet(context, projectContext: 'Dashboard'),
           ),
@@ -232,8 +239,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             const SizedBox(height: 10),
                             Text(
                               _selectedProjectTab == 0
-                                  ? 'Walang active electrical project sa ngayon.'
-                                  : 'Walang naka-archive na project.',
+                                  ? 'No active electrical projects at this time.'
+                                  : 'No archived projects.',
                               style: const TextStyle(color: BanaagTheme.textMuted, fontSize: 13),
                             ),
                             if (_selectedProjectTab == 0) ...[
@@ -401,7 +408,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  void _showNewProjectDialog(BuildContext context) {
+  void _showNewProjectDialog(BuildContext context) async {
+    final auth = BanaagAuthService.instance;
+    if (auth.isAuthenticated) {
+      final quota = await auth.getProjectQuota();
+      final remaining = (quota['remaining'] as num?)?.toInt() ?? 1;
+      if (remaining <= 0) {
+        if (!context.mounted) return;
+        ProjectQuotaVoucherModal.show(context, onTopUpSuccess: () {
+          _showNewProjectDialog(context);
+        });
+        return;
+      }
+    }
+    if (!context.mounted) return;
     final titleController = TextEditingController();
     final clientController = TextEditingController();
     final addressController = TextEditingController();
@@ -775,7 +795,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           const SizedBox(height: 6),
           if (!hasFile) ...[
             const Text(
-              'Kumuha ng litrato ng blueprint sa site o pumili mula sa gallery/PDF para mai-load agad sa Takeoff Canvas background.',
+              'Take a photo of the blueprint on site or select from gallery/PDF to load into the Takeoff Canvas background.',
               style: TextStyle(fontSize: 11, color: BanaagTheme.textMuted, height: 1.3),
             ),
             const SizedBox(height: 10),

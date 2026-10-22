@@ -281,17 +281,17 @@ class ProjectManagementDialogs {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Sigurado ka bang nais mong burahin ang "${project.title}"?',
+                'Are you sure you want to delete "${project.title}"?',
                 style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
               ),
               const SizedBox(height: 8),
               const Text(
-                'Mawawala ang lahat ng appliances, single-line computations, wire sizing takeoff, at inspection sign-offs para sa project na ito.',
+                'All appliances, single-line computations, wire sizing takeoff, and inspection sign-offs for this project will be permanently lost.',
                 style: TextStyle(color: BanaagTheme.textMuted, fontSize: 12),
               ),
               const SizedBox(height: 14),
               const Text(
-                'Para kumpirmahin at maiwasan ang aksidente, i-type ang "DELETE" sa ibaba:',
+                'To confirm and prevent accidental deletion, type "DELETE" below:',
                 style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: BanaagTheme.primaryAmber),
               ),
               const SizedBox(height: 8),

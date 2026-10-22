@@ -305,10 +305,10 @@ class LightingEngine {
       totalVA = pecMinGeneralLightingVA;
     }
 
-    final extraNote = extraFixtures.isNotEmpty ? ' May ${extraFixtures.length} karagdagang specialty/task fixtures.' : '';
+    final extraNote = extraFixtures.isNotEmpty ? ' Includes ${extraFixtures.length} additional specialty/task fixtures.' : '';
     final explanation =
-        'Batay sa ${tier.label} para sa ${roomType.label} ($lux Lux benchmark, ${safeArea.toStringAsFixed(1)} m²): '
-        'Inirerekomenda ang $fixtures pcs $lampWatts W $primaryFixtureName ($lumensPerLamp lm bawat isa).$extraNote';
+        'Based on ${tier.label} for ${roomType.label} ($lux Lux benchmark, ${safeArea.toStringAsFixed(1)} m²): '
+        'Recommended $fixtures pcs $lampWatts W $primaryFixtureName ($lumensPerLamp lm each).$extraNote';
 
     return LightingRecommendation(
       roomType: roomType,

@@ -122,7 +122,9 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
     required bool isDedicated,
     bool isLighting = false,
     int? circuitNumber,
+    String? targetSpace,
   }) {
+    final space = targetSpace ?? _activeSpaceName;
     setState(() {
       // Determine PEC auto-assigned circuit number if not specified
       final int assignedCircuit = circuitNumber ??
@@ -133,16 +135,16 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
                   : 2));
 
       final existingIndex = widget.project.applianceLoads.indexWhere(
-        (a) => a.name == name && a.roomCategory == _activeSpaceName,
+        (a) => a.name == name && a.roomCategory == space,
       );
 
       if (existingIndex != -1) {
         widget.project.applianceLoads[existingIndex].quantity++;
       } else {
         widget.project.applianceLoads.add(ApplianceItem(
-          id: 'app-${DateTime.now().millisecondsSinceEpoch}',
+          id: 'app-${DateTime.now().millisecondsSinceEpoch}-${widget.project.applianceLoads.length}',
           name: name,
-          roomCategory: _activeSpaceName,
+          roomCategory: space,
           ratingVA: ratingVA,
           quantity: 1,
           isDedicatedCircuit: isDedicated,
@@ -1031,6 +1033,13 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
   void _promptPecStandardPackPreview(String spaceName) {
     LightingTier selectedTier = LightingTier.standard;
 
+    final targetSpace = _spaces.firstWhere(
+      (s) => s.name.toLowerCase() == spaceName.toLowerCase(),
+      orElse: () => _currentSpace,
+    );
+    final double area = targetSpace.areaSqm <= 0 ? 16.0 : targetSpace.areaSqm;
+    final double ceilingHeight = targetSpace.ceilingHeight <= 0 ? 2.7 : targetSpace.ceilingHeight;
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -1039,13 +1048,12 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
         return StatefulBuilder(
           builder: (modalContext, setModalState) {
             final lower = spaceName.toLowerCase();
-            final area = _currentSpace.areaSqm;
 
             // 1. Dynamic Lighting Calculation with Selected Tier
             final lighting = LightingEngine.calculate(
               roomType: _mapSpaceToRoomType(spaceName),
               areaSqm: area,
-              ceilingHeightMeters: _currentSpace.ceilingHeight,
+              ceilingHeightMeters: ceilingHeight,
               tier: selectedTier,
             );
 
@@ -1079,7 +1087,7 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
               acuSpec = {
                 'hp': '2.5 HP Inverter Heavy Split ACU',
                 'va': 2600.0,
-                'note': 'High-capacity cooling para sa open-concept o malalaking espasyo (≥33 m²)',
+                'note': 'High-capacity cooling for open-concept or expansive spaces (≥33 m²)',
               };
             }
 
@@ -1093,7 +1101,7 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
               'isLighting': true,
               'isDedicated': false,
               'citation': 'PEC 2017 Art 2.10.3.2 / IESNA',
-              'rule': '${selectedTier.label}: ${lighting.roomType.recommendedLux} Lux benchmark (${(lighting.targetLumens).toStringAsFixed(0)} lm target para sa ${area.toStringAsFixed(0)} m²)',
+              'rule': '${selectedTier.label}: ${lighting.roomType.recommendedLux} Lux benchmark (${(lighting.targetLumens).toStringAsFixed(0)} lm target for ${area.toStringAsFixed(0)} m²)',
               'icon': Icons.lightbulb_outline,
             });
 
@@ -1105,7 +1113,7 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
                 'isLighting': true,
                 'isDedicated': false,
                 'citation': extra['citation'] as String,
-                'rule': 'Architectural Layer: Nagbibigay ng warm ambient glow at luxury aesthetic',
+                'rule': 'Architectural Layer: Provides warm ambient glow and luxury accent',
                 'icon': Icons.auto_awesome,
               });
             }
@@ -1118,7 +1126,7 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
                   'isLighting': false,
                   'isDedicated': false,
                   'citation': 'PEC 2017 Art 2.10.1.11(C)(1) & Art 2.10.3.3',
-                  'rule': 'Minimum dalawang 20A Small Appliance Branch Circuits sa kusina',
+                  'rule': 'Minimum two 20A Small Appliance Branch Circuits in kitchen',
                   'icon': Icons.power,
                 },
                 {
@@ -1127,7 +1135,7 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
                   'isLighting': false,
                   'isDedicated': false,
                   'citation': 'PEC 2017 Art 2.10.1.8(A)(6)',
-                  'rule': 'Mandatory GFCI protection sa lahat ng receptacles sa loob ng 1.8m mula sa lababo/sink',
+                  'rule': 'Mandatory GFCI protection for all receptacles within 1.8m from sink',
                   'icon': Icons.security,
                 },
                 {
@@ -1136,7 +1144,7 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
                   'isLighting': false,
                   'isDedicated': true,
                   'citation': 'PEC 2017 Art 2.10.2.5',
-                  'rule': 'Dedicated branch circuit para sa continuous refrigeration load',
+                  'rule': 'Dedicated branch circuit for continuous refrigeration load',
                   'icon': Icons.kitchen,
                 },
                 {
@@ -1145,7 +1153,7 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
                   'isLighting': false,
                   'isDedicated': true,
                   'citation': 'PEC 2017 Art 4.22.2.1',
-                  'rule': 'Individual branch circuit para sa cooking appliances na lumalagpas sa 20A',
+                  'rule': 'Individual branch circuit for cooking appliances exceeding 20A',
                   'icon': Icons.soup_kitchen,
                 },
               ]);
@@ -1189,7 +1197,7 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
                   'isLighting': false,
                   'isDedicated': false,
                   'citation': 'PEC 2017 Art 2.10.1.8(A)(1)',
-                  'rule': 'Mandatory Class A GFCI (4-6mA trip threshold) sa banyo upang maiwasan ang electric shock',
+                  'rule': 'Mandatory Class A GFCI (4-6mA trip threshold) in bathroom to prevent electric shock',
                   'icon': Icons.security,
                 },
                 {
@@ -1198,7 +1206,7 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
                   'isLighting': false,
                   'isDedicated': true,
                   'citation': 'PEC 2017 Art 4.22.2.3 & Art 2.10.2.1',
-                  'rule': 'Direct dedicated circuit na may kasamang 30A 2P breaker at ELCB/GFCI protection',
+                  'rule': 'Direct dedicated circuit with 30A 2P breaker and ELCB/GFCI protection',
                   'icon': Icons.shower,
                 },
                 {
@@ -1207,7 +1215,7 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
                   'isLighting': false,
                   'isDedicated': true,
                   'citation': 'PEC 2017 Art 2.10.1.11(C)(2)',
-                  'rule': 'Minimum 20A individual branch circuit para sa laundry area',
+                  'rule': 'Minimum 20A individual branch circuit for laundry area',
                   'icon': Icons.local_laundry_service,
                 },
               ]);
@@ -1219,7 +1227,7 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
                   'isLighting': false,
                   'isDedicated': false,
                   'citation': 'PEC 2017 Art 4.6.1.9 & Art 2.10.1.8(A)(2)',
-                  'rule': 'Weather-Resistant (WR) enclosure na may extra-duty while-in-use cover at GFCI',
+                  'rule': 'Weather-Resistant (WR) enclosure with extra-duty while-in-use cover and GFCI',
                   'icon': Icons.power,
                 },
                 {
@@ -1228,7 +1236,7 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
                   'isLighting': false,
                   'isDedicated': false,
                   'citation': 'PEC 2017 Art 2.25.1.1',
-                  'rule': 'Outside branch circuits and feeders para sa architectural lighting',
+                  'rule': 'Outside branch circuits and feeders for architectural lighting',
                   'icon': Icons.flash_on,
                 },
                 {
@@ -1250,7 +1258,7 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
                   'isLighting': false,
                   'isDedicated': false,
                   'citation': 'PEC 2017 Art 2.10.3.3',
-                  'rule': 'General Purpose Receptacle spacing sa living space',
+                  'rule': 'General Purpose Receptacle spacing in living space',
                   'icon': Icons.tv,
                 },
                 {
@@ -1270,7 +1278,7 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
                   'isLighting': false,
                   'isDedicated': false,
                   'citation': 'PEC 2017 Art 2.10.3.3',
-                  'rule': 'Convenience outlets para sa dining and buffet warmers',
+                  'rule': 'Convenience outlets for dining and buffet warmers',
                   'icon': Icons.power,
                 },
                 {
@@ -1285,244 +1293,257 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
               ]);
             }
 
-            return Container(
-              height: MediaQuery.of(context).size.height * 0.86,
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
-              decoration: const BoxDecoration(
-                color: Color(0xFF13171F),
-                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-                border: Border(
-                  top: BorderSide(color: BanaagTheme.primaryAmber, width: 2.0),
-                  left: BorderSide(color: Colors.white12),
-                  right: BorderSide(color: Colors.white12),
+            return SafeArea(
+              child: Container(
+                height: MediaQuery.of(modalContext).size.height * 0.88,
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                decoration: const BoxDecoration(
+                  color: Color(0xFF13171F),
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                  border: Border(
+                    top: BorderSide(color: BanaagTheme.primaryAmber, width: 2.0),
+                    left: BorderSide(color: Colors.white12),
+                    right: BorderSide(color: Colors.white12),
+                  ),
                 ),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Center(
-                    child: Container(
-                      width: 40,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: Colors.white24,
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 40,
+                        height: 4,
                         decoration: BoxDecoration(
-                          color: BanaagTheme.primaryAmber.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: const Icon(Icons.verified_user, color: BanaagTheme.primaryAmber, size: 22),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'PEC Standard Pack: $spaceName (${area.toStringAsFixed(0)} m²)',
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.white),
-                            ),
-                            const Text(
-                              'Code Compliance & Client Budget Tier Sizing',
-                              style: TextStyle(fontSize: 10, color: BanaagTheme.primaryAmber),
-                            ),
-                          ],
+                          color: Colors.white24,
+                          borderRadius: BorderRadius.circular(2),
                         ),
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-
-                  // 3-TIER SPECIFICATION SWITCHER (Standard / Premium / Luxury)
-                  Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: BoxDecoration(
-                      color: Colors.black45,
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: Colors.white12),
                     ),
-                    child: Row(
-                      children: LightingTier.values.map((tier) {
-                        final bool isSelected = tier == selectedTier;
-                        Color activeColor = BanaagTheme.primaryAmber;
-                        if (tier == LightingTier.premium) activeColor = Colors.cyanAccent;
-                        if (tier == LightingTier.luxury) activeColor = Colors.purpleAccent;
-
-                        return Expanded(
-                          child: InkWell(
-                            onTap: () {
-                              setModalState(() {
-                                selectedTier = tier;
-                              });
-                            },
-                            child: AnimatedContainer(
-                              duration: const Duration(milliseconds: 200),
-                              padding: const EdgeInsets.symmetric(vertical: 8),
-                              decoration: BoxDecoration(
-                                color: isSelected ? activeColor.withValues(alpha: 0.2) : Colors.transparent,
-                                borderRadius: BorderRadius.circular(8),
-                                border: isSelected ? Border.all(color: activeColor, width: 1.2) : null,
-                              ),
-                              child: Column(
-                                children: [
-                                  Text(
-                                    tier == LightingTier.standard
-                                        ? 'STANDARD'
-                                        : (tier == LightingTier.premium ? 'PREMIUM ✨' : 'LUXURY 💎'),
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 11,
-                                      color: isSelected ? activeColor : BanaagTheme.textMuted,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    tier == LightingTier.standard
-                                        ? 'Bare Code'
-                                        : (tier == LightingTier.premium ? '+Cove Light' : '+Tracks & Smart'),
-                                    style: TextStyle(
-                                      fontSize: 9,
-                                      color: isSelected ? Colors.white70 : Colors.white24,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        );
-                      }).toList(),
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-
-                  // Dynamic Banner for active tier & ACU note
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: Colors.black26,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.white10),
-                    ),
-                    child: Row(
+                    const SizedBox(height: 8),
+                    Row(
                       children: [
-                        const Icon(Icons.info_outline, size: 16, color: BanaagTheme.primaryAmber),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            'Area: ${area.toStringAsFixed(0)} m² ➔ ACU: ${acuSpec['hp']} • Ilaw: ${selectedTier.description}',
-                            style: const TextStyle(fontSize: 10, color: Colors.white70, height: 1.25),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  const Text('MGA ILALAGAY NA APPLIANCES & BATAYAN:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: BanaagTheme.textMuted)),
-                  const SizedBox(height: 6),
-                  Expanded(
-                    child: ListView.builder(
-                      itemCount: previewItems.length,
-                      itemBuilder: (c, idx) {
-                        final item = previewItems[idx];
-                        return Container(
-                          margin: const EdgeInsets.only(bottom: 8),
-                          padding: const EdgeInsets.all(10),
+                        Container(
+                          padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
-                            color: BanaagTheme.surfaceCard,
+                            color: BanaagTheme.primaryAmber.withValues(alpha: 0.15),
                             borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: BanaagTheme.surfaceCardBorder),
                           ),
+                          child: const Icon(Icons.bolt, color: BanaagTheme.primaryAmber, size: 22),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Row(
-                                children: [
-                                  Icon(item['icon'] as IconData, size: 16, color: BanaagTheme.primaryAmber),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: Text(
-                                      item['name'] as String,
-                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.white),
-                                    ),
-                                  ),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: (item['isDedicated'] as bool)
-                                          ? Colors.purple.withValues(alpha: 0.2)
-                                          : BanaagTheme.primaryAmber.withValues(alpha: 0.2),
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
-                                    child: Text(
-                                      (item['isDedicated'] as bool) ? 'DEDICATED' : '${(item['va'] as double).toStringAsFixed(0)} VA',
+                              Text(
+                                'PEC Standard Pack: $spaceName',
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.white),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              Text(
+                                'Code Compliance & Sizing • ${area.toStringAsFixed(0)} m²',
+                                style: const TextStyle(fontSize: 11, color: BanaagTheme.primaryAmber),
+                              ),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close, color: Colors.white70),
+                          tooltip: 'Close',
+                          onPressed: () => Navigator.pop(ctx),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+
+                    // 3-TIER SPECIFICATION SWITCHER (Standard / Premium / Luxury)
+                    Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: BoxDecoration(
+                        color: Colors.black45,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: Colors.white12),
+                      ),
+                      child: Row(
+                        children: LightingTier.values.map((tier) {
+                          final bool isSelected = tier == selectedTier;
+                          Color activeColor = BanaagTheme.primaryAmber;
+                          if (tier == LightingTier.premium) activeColor = Colors.cyanAccent;
+                          if (tier == LightingTier.luxury) activeColor = Colors.purpleAccent;
+
+                          return Expanded(
+                            child: InkWell(
+                              onTap: () {
+                                setModalState(() {
+                                  selectedTier = tier;
+                                });
+                              },
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 200),
+                                padding: const EdgeInsets.symmetric(vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: isSelected ? activeColor.withValues(alpha: 0.2) : Colors.transparent,
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: isSelected ? Border.all(color: activeColor, width: 1.2) : null,
+                                ),
+                                child: Column(
+                                  children: [
+                                    Text(
+                                      tier == LightingTier.standard
+                                          ? 'STANDARD'
+                                          : (tier == LightingTier.premium ? 'PREMIUM ✨' : 'LUXURY 💎'),
                                       style: TextStyle(
-                                        fontSize: 9,
                                         fontWeight: FontWeight.bold,
-                                        color: (item['isDedicated'] as bool) ? Colors.purpleAccent : BanaagTheme.primaryAmber,
+                                        fontSize: 11,
+                                        color: isSelected ? activeColor : BanaagTheme.textMuted,
                                       ),
                                     ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 4),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                                decoration: BoxDecoration(
-                                  color: Colors.black38,
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: Row(
-                                  children: [
-                                    const Icon(Icons.bookmark_border, size: 11, color: BanaagTheme.primaryAmber),
-                                    const SizedBox(width: 4),
-                                    Expanded(
-                                      child: Text(
-                                        item['citation'] as String,
-                                        style: const TextStyle(fontSize: 10, color: BanaagTheme.primaryAmber, fontWeight: FontWeight.bold),
-                                        overflow: TextOverflow.ellipsis,
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      tier == LightingTier.standard
+                                          ? 'Base Code'
+                                          : (tier == LightingTier.premium ? '+Cove Light' : '+Tracks & Smart'),
+                                      style: TextStyle(
+                                        fontSize: 9,
+                                        color: isSelected ? Colors.white70 : Colors.white24,
                                       ),
                                     ),
                                   ],
                                 ),
                               ),
-                              const SizedBox(height: 3),
-                              Text(
-                                item['rule'] as String,
-                                style: const TextStyle(fontSize: 10, color: BanaagTheme.textMuted, height: 1.25),
-                              ),
-                            ],
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+
+                    // Dynamic Banner for active tier & ACU note
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.black26,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.white10),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.info_outline, size: 16, color: BanaagTheme.primaryAmber),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Area: ${area.toStringAsFixed(0)} m² ➔ ACU: ${acuSpec['hp']} • Lighting: ${selectedTier.description}',
+                              style: const TextStyle(fontSize: 10, color: Colors.white70, height: 1.25),
+                            ),
                           ),
-                        );
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    const Text(
+                      'APPLIANCES & REGULATORY CITATIONS:',
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: BanaagTheme.textMuted),
+                    ),
+                    const SizedBox(height: 6),
+                    Expanded(
+                      child: ListView.builder(
+                        itemCount: previewItems.length,
+                        itemBuilder: (c, idx) {
+                          final item = previewItems[idx];
+                          final bool isDedicated = item['isDedicated'] as bool;
+                          final double itemVA = (item['va'] as num).toDouble();
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: BanaagTheme.surfaceCard,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: BanaagTheme.surfaceCardBorder),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Icon(item['icon'] as IconData, size: 16, color: BanaagTheme.primaryAmber),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        item['name'] as String,
+                                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.white),
+                                      ),
+                                    ),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: isDedicated
+                                            ? Colors.purple.withValues(alpha: 0.2)
+                                            : BanaagTheme.primaryAmber.withValues(alpha: 0.2),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Text(
+                                        isDedicated ? 'DEDICATED' : '${itemVA.toStringAsFixed(0)} VA',
+                                        style: TextStyle(
+                                          fontSize: 9,
+                                          fontWeight: FontWeight.bold,
+                                          color: isDedicated ? Colors.purpleAccent : BanaagTheme.primaryAmber,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 4),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: Colors.black38,
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      const Icon(Icons.bookmark_border, size: 11, color: BanaagTheme.primaryAmber),
+                                      const SizedBox(width: 4),
+                                      Expanded(
+                                        child: Text(
+                                          item['citation'] as String,
+                                          style: const TextStyle(fontSize: 10, color: BanaagTheme.primaryAmber, fontWeight: FontWeight.bold),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(height: 3),
+                                Text(
+                                  item['rule'] as String,
+                                  style: const TextStyle(fontSize: 10, color: BanaagTheme.textMuted, height: 1.25),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: BanaagTheme.primaryAmber,
+                        foregroundColor: Colors.black,
+                        minimumSize: const Size(double.infinity, 48),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                      icon: const Icon(Icons.check_circle_outline, size: 20),
+                      label: Text(
+                        'Apply ${selectedTier.label} (${previewItems.length} Items)',
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                      ),
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        _executeApplyPecStandardPack(spaceName, previewItems);
                       },
                     ),
-                  ),
-                  const SizedBox(height: 10),
-                  ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: BanaagTheme.primaryAmber,
-                      foregroundColor: Colors.black,
-                      minimumSize: const Size(double.infinity, 48),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    ),
-                    icon: const Icon(Icons.check_circle_outline, size: 20),
-                    label: Text(
-                      'I-apply ang ${selectedTier.label} (${previewItems.length} Items)',
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                    ),
-                    onPressed: () {
-                      Navigator.pop(ctx);
-                      _executeApplyPecStandardPack(spaceName, previewItems);
-                    },
-                  ),
-                ],
+                  ],
+                ),
               ),
             );
           },
@@ -1531,15 +1552,15 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
     );
   }
 
-
   void _executeApplyPecStandardPack(String spaceName, List<Map<String, dynamic>> items) {
     for (final item in items) {
       _addOrIncrementAppliance(
         name: item['name'] as String,
-        ratingVA: item['va'] as double,
+        ratingVA: (item['va'] as num).toDouble(),
         isDedicated: item['isDedicated'] as bool,
         isLighting: item['isLighting'] as bool,
         circuitNumber: (item['isLighting'] as bool) ? 1 : null,
+        targetSpace: spaceName,
       );
     }
     ScaffoldMessenger.of(context).showSnackBar(
@@ -2106,8 +2127,8 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
                             children: [
                               Text(
                                 totalSelectedCount > 0
-                                    ? '$totalSelectedCount Items Napili'
-                                    : 'Pumili ng mga ikakabit',
+                                    ? '$totalSelectedCount Items Selected'
+                                    : 'Select appliances to add',
                                 style: TextStyle(
                                   fontWeight: FontWeight.bold,
                                   fontSize: 13,
@@ -2116,8 +2137,8 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
                               ),
                               Text(
                                 totalSelectedCount > 0
-                                    ? 'Dagdag: ${(totalSelectedVA / 1000.0).toStringAsFixed(2)} kVA (${(totalSelectedVA / 230.0).toStringAsFixed(1)} A)'
-                                    : 'Mag-tap ng + para magdagdag',
+                                    ? 'Additional: ${(totalSelectedVA / 1000.0).toStringAsFixed(2)} kVA (${(totalSelectedVA / 230.0).toStringAsFixed(1)} A)'
+                                    : 'Tap + to add appliances',
                                 style: const TextStyle(fontSize: 11, color: BanaagTheme.textMuted),
                               ),
                             ],
@@ -2301,7 +2322,7 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
                         style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.white),
                       ),
                       Text(
-                        'Target: ${lightingRec.targetLumens.toStringAsFixed(0)} lm (${lightingRec.roomType.recommendedLux} Lux standard para sa $_activeSpaceName)',
+                        'Target: ${lightingRec.targetLumens.toStringAsFixed(0)} lm (${lightingRec.roomType.recommendedLux} Lux standard for $_activeSpaceName)',
                         style: const TextStyle(fontSize: 10, color: BanaagTheme.textMuted),
                       ),
                     ],

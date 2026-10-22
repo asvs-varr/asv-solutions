@@ -188,7 +188,7 @@ class DxfIntakeEngine {
         underlayGeometry: entities,
         boundingWidthMeters: width,
         boundingHeightMeters: height,
-        diagnosticMessage: '⚠️ Semi-Compliant: Walang standard layers, ngunit may ${points.length} electrical text tags/blocks na matagumpay na na-extract mula sa CAD file.',
+        diagnosticMessage: '⚠️ Semi-Compliant: No standard layers detected, but successfully extracted ${points.length} electrical text tags/blocks from the CAD file.',
       );
     } else {
       // Student Messy File: Everything on Layer 0 with only architectural lines/shapes

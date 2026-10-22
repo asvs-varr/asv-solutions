@@ -15,6 +15,7 @@ import '../../domain/bom_excel_exporter.dart';
 import '../../domain/blueprint_pdf_exporter.dart';
 import '../../data/project_repository.dart';
 import '../theme/banaag_theme.dart';
+import 'client_needs_analysis_screen.dart';
 
 class SingleLineDiagramScreen extends StatefulWidget {
   final Project project;
@@ -28,6 +29,7 @@ class _SingleLineDiagramScreenState extends State<SingleLineDiagramScreen> with 
   late TabController _tabController;
   late SingleLineDiagramData _sldData;
   bool _isApproved = false;
+  bool _showSampleBaseline = false;
 
   MultiPanelInstitutionalRiser? _multiPanelRiser;
   String _activePanelKey = 'MAIN'; // 'MDP', 'LP-1', 'LP-2' etc.
@@ -642,7 +644,7 @@ class _SingleLineDiagramScreenState extends State<SingleLineDiagramScreen> with 
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Bumalik at I-edit', style: TextStyle(color: BanaagTheme.textMuted)),
+            child: const Text('Back & Edit', style: TextStyle(color: BanaagTheme.textMuted)),
           ),
           ElevatedButton.icon(
             style: ElevatedButton.styleFrom(
@@ -651,7 +653,7 @@ class _SingleLineDiagramScreenState extends State<SingleLineDiagramScreen> with 
             ),
             icon: const Icon(Icons.auto_fix_high, size: 16),
             label: const Text(
-              'Auto-Fix sa PEC 2017 & Export',
+              'Auto-Fix to PEC 2017 & Export',
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
             ),
             onPressed: () async {
@@ -662,7 +664,7 @@ class _SingleLineDiagramScreenState extends State<SingleLineDiagramScreen> with 
               if (mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
-                    content: Text('🛡️ Auto-Healed lahat ng circuits sa 100% Verbatim PEC 2017 Standard!'),
+                    content: Text('🛡️ Auto-Healed all circuits to 100% Verbatim PEC 2017 Standards!'),
                     backgroundColor: BanaagTheme.successGreen,
                   ),
                 );
@@ -1212,7 +1214,132 @@ class _SingleLineDiagramScreenState extends State<SingleLineDiagramScreen> with 
 
   final TransformationController _transformController = TransformationController();
 
+  Widget _buildDemoPreviewBanner() {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.fromLTRB(16, 10, 16, 8),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.amber.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: BanaagTheme.primaryAmber, width: 1.2),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.info_outline, color: BanaagTheme.primaryAmber, size: 20),
+          const SizedBox(width: 10),
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Demo Baseline Preview (0 Loads in Project)',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: BanaagTheme.primaryAmber),
+                ),
+                Text(
+                  'Showing standard 2-Bedroom baseline. Add actual appliances in Phase 1 to compute custom sizing.',
+                  style: TextStyle(fontSize: 10, color: Colors.white70),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: BanaagTheme.primaryAmber,
+              foregroundColor: Colors.black,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              minimumSize: const Size(0, 32),
+            ),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => ClientNeedsAnalysisScreen(project: widget.project)),
+              ).then((_) {
+                setState(() {
+                  _sldData = SldEngine.generateFromProject(widget.project);
+                  _panelsMap[_activePanelKey] = _sldData;
+                });
+              });
+            },
+            child: const Text('Add Loads', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyLoadsPrompt() {
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 32.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: BanaagTheme.primaryAmber.withValues(alpha: 0.12),
+                shape: BoxShape.circle,
+                border: Border.all(color: BanaagTheme.primaryAmber.withValues(alpha: 0.3), width: 1.5),
+              ),
+              child: const Icon(Icons.account_tree_outlined, color: BanaagTheme.primaryAmber, size: 52),
+            ),
+            const SizedBox(height: 20),
+            const Text(
+              'No Electrical Loads Tallied Yet',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.white),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 10),
+            const Text(
+              'The Single-Line Diagram and Schedule of Loads calculate your service entrance, feeder conductors, and branch circuit breakers directly from the electrical loads configured in Phase 1 (Client Needs Analysis).\n\nAdd spaces and appliances, or apply a PEC Standard Pack to generate your project-specific diagram.',
+              style: TextStyle(color: Colors.white70, fontSize: 13, height: 1.4),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: BanaagTheme.primaryAmber,
+                foregroundColor: Colors.black,
+                minimumSize: const Size(260, 48),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              icon: const Icon(Icons.add_task, size: 18),
+              label: const Text('Go to Phase 1 (Client Needs)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => ClientNeedsAnalysisScreen(project: widget.project)),
+                ).then((_) {
+                  setState(() {
+                    _sldData = SldEngine.generateFromProject(widget.project);
+                    _panelsMap[_activePanelKey] = _sldData;
+                  });
+                });
+              },
+            ),
+            const SizedBox(height: 12),
+            TextButton.icon(
+              icon: const Icon(Icons.visibility_outlined, size: 16, color: BanaagTheme.primaryAmber),
+              label: const Text('Preview Standard 2-Bedroom Baseline', style: TextStyle(color: BanaagTheme.primaryAmber, fontSize: 13)),
+              onPressed: () {
+                setState(() {
+                  _showSampleBaseline = true;
+                });
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildSchematicView() {
+    if (widget.project.applianceLoads.isEmpty && _multiPanelRiser == null && !_showSampleBaseline) {
+      return _buildEmptyLoadsPrompt();
+    }
     final canvasWidth = 760.0;
     final canvasHeight = 240.0 + (_sldData.branchCircuits.length * 84.0);
     return Stack(
@@ -1237,6 +1364,13 @@ class _SingleLineDiagramScreenState extends State<SingleLineDiagramScreen> with 
             ),
           ),
         ),
+        if (widget.project.applianceLoads.isEmpty && _multiPanelRiser == null && _showSampleBaseline)
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: _buildDemoPreviewBanner(),
+          ),
         // Floating Zoom & Reset Toolbar
         Positioned(
           top: 12,
@@ -1300,11 +1434,16 @@ class _SingleLineDiagramScreenState extends State<SingleLineDiagramScreen> with 
   }
 
   Widget _buildScheduleOfLoadsView() {
+    if (widget.project.applianceLoads.isEmpty && _multiPanelRiser == null && !_showSampleBaseline) {
+      return _buildEmptyLoadsPrompt();
+    }
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (widget.project.applianceLoads.isEmpty && _multiPanelRiser == null && _showSampleBaseline)
+            _buildDemoPreviewBanner(),
           // Header summary card
           Container(
             padding: const EdgeInsets.all(12),
@@ -1483,7 +1622,7 @@ class _SingleLineDiagramScreenState extends State<SingleLineDiagramScreen> with 
             child: const Icon(Icons.menu_book, color: BanaagTheme.primaryAmber, size: 18),
           ),
           title: const Text(
-            'Mga Opisyal na Batayan sa PEC 2017 Book',
+            'Official References in PEC 2017 Codebook',
             style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.white),
           ),
           subtitle: const Text(

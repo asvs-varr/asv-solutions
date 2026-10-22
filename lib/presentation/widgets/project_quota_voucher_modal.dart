@@ -3,17 +3,17 @@ import '../theme/banaag_theme.dart';
 import '../../domain/banaag_auth_service.dart';
 
 class ProjectQuotaVoucherModal extends StatefulWidget {
-  final VoidCallback onTopUpSuccess;
+  final VoidCallback? onTopUpSuccess;
 
   const ProjectQuotaVoucherModal({
     super.key,
-    required this.onTopUpSuccess,
+    this.onTopUpSuccess,
   });
 
-  static Future<bool?> show(BuildContext context, {required VoidCallback onTopUpSuccess}) {
+  static Future<bool?> show(BuildContext context, {VoidCallback? onTopUpSuccess}) {
     return showDialog<bool>(
       context: context,
-      barrierDismissible: false,
+      barrierDismissible: true,
       builder: (_) => ProjectQuotaVoucherModal(onTopUpSuccess: onTopUpSuccess),
     );
   }
@@ -82,7 +82,7 @@ class _ProjectQuotaVoucherModalState extends State<ProjectQuotaVoucherModal> {
           ),
         ),
       );
-      widget.onTopUpSuccess();
+      widget.onTopUpSuccess?.call();
       Navigator.of(context).pop(true);
     } else {
       setState(() {

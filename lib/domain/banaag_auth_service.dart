@@ -3,6 +3,7 @@
 // Guarantees 100% offline functionality while preventing unauthorized APK sharing.
 
 import 'dart:convert';
+import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'security_engine.dart';
 
@@ -138,5 +139,76 @@ class BanaagAuthService {
       isGuest: true,
     );
     _currentLease = null;
+  }
+
+  static const String _supabaseUrl = 'https://cvuympdpkbuftqdzlwrw.supabase.co';
+  static const String _anonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2dXltcGRwa2J1ZnRxZHpsd3J3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI2NjIxNDYsImV4cCI6MjEwODIzODE0Nn0.sQkiMvyy0quSnG8lW-O12uAsvnTWpyby9ZBciLl8bvU';
+
+  /// Fetches project quota from cloud with offline fallback
+  Future<Map<String, dynamic>> getProjectQuota() async {
+    if (_currentUser == null || _currentUser!.isGuest) {
+      return {'success': true, 'remaining': 1, 'isGuest': true};
+    }
+
+    try {
+      final url = Uri.parse('$_supabaseUrl/rest/v1/rpc/get_project_quota');
+      final response = await http.post(
+        url,
+        headers: {
+          'apikey': _anonKey,
+          'Authorization': 'Bearer $_anonKey',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({'p_email': _currentUser!.email}),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data is Map<String, dynamic>) {
+          return data;
+        }
+      }
+    } catch (_) {}
+
+    // Fallback if offline
+    return {'success': true, 'remaining': 1, 'isOffline': true};
+  }
+
+  /// Redeems a voucher code via Supabase RPC
+  Future<Map<String, dynamic>> redeemVoucher({
+    required String email,
+    required String code,
+  }) async {
+    try {
+      final url = Uri.parse('$_supabaseUrl/rest/v1/rpc/redeem_project_voucher');
+      final response = await http.post(
+        url,
+        headers: {
+          'apikey': _anonKey,
+          'Authorization': 'Bearer $_anonKey',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'p_email': email,
+          'p_code': code,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data is Map<String, dynamic>) {
+          return data;
+        }
+      }
+      return {
+        'success': false,
+        'message': 'Failed to validate voucher with server. Status: ' + response.statusCode.toString(),
+      };
+    } catch (e) {
+      return {
+        'success': false,
+        'message': 'Offline: Unable to verify voucher without internet connection.',
+      };
+    }
   }
 }

@@ -212,7 +212,7 @@ class _RawPlanCalibrationModalState extends State<RawPlanCalibrationModal> {
               ),
               const SizedBox(height: 4),
               Text(
-                hasFile ? (fileName ?? '') : 'Kahit walang electrical layout (architectural walls lang)',
+                hasFile ? (fileName ?? '') : 'Even without electrical layout (architectural walls only)',
                 style: const TextStyle(fontSize: 11, color: BanaagTheme.textMuted),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,

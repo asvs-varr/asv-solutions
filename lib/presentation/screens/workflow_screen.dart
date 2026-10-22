@@ -287,7 +287,7 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
           ),
           const SizedBox(height: 10),
           const Text(
-            'Bago mag-upload ng plano sa Stage 2 (Plan Takeoff), siguraduhing sumunod ang CAD file sa EXPLODE, AUDIT, at standard layer naming conventions.',
+            'Before uploading plans to Stage 2 (Plan Takeoff), ensure CAD files follow EXPLODE, AUDIT, and standard layer naming conventions.',
             style: TextStyle(fontSize: 11, color: BanaagTheme.textMuted, height: 1.3),
           ),
           const SizedBox(height: 10),
@@ -747,7 +747,7 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Pumili o mag-drop ng AutoCAD 2018 ASCII .DXF file para sa automated layer extraction & takeoff.',
+              'Select or drop an AutoCAD 2018 ASCII .DXF file for automated layer extraction & takeoff.',
               style: TextStyle(fontSize: 12, color: Colors.white70),
             ),
             const SizedBox(height: 12),

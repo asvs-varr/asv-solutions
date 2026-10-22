@@ -212,7 +212,7 @@ class _PecCalculatorScreenState extends State<PecCalculatorScreen> with SingleTi
           const SizedBox(height: 16),
 
           // Wire Selector (Allows testing Under-Specs & Over-Specs manually)
-          const Text('Subukan ang ibang Conductor Size (Manual Testing):',
+          const Text('Test Alternative Conductor Size (Manual Sizing):',
               style: TextStyle(color: BanaagTheme.primaryAmber, fontWeight: FontWeight.bold, fontSize: 13)),
           const SizedBox(height: 6),
           Container(

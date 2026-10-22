@@ -242,12 +242,12 @@ class _SiteInspectionAssessmentDialogState extends State<SiteInspectionAssessmen
                   padding: const EdgeInsets.all(20),
                   children: [
                     const Text(
-                      'Pumili ng Uri ng Istruktura sa Site:',
+                      'Select Site Structural Type:',
                       style: TextStyle(color: BanaagTheme.primaryAmber, fontWeight: FontWeight.bold, fontSize: 13),
                     ),
                     const SizedBox(height: 8),
                     const Text(
-                      'I-tap ang naaayon na istraktura (maaaring pumili ng higit sa isa kung combination, e.g. Concrete ground floor + Timber 2nd floor).',
+                      'Tap applicable structural frame (multiple selection supported for mixed structures, e.g. Concrete ground floor + Timber 2nd floor).',
                       style: TextStyle(color: BanaagTheme.textMuted, fontSize: 12),
                     ),
                     const SizedBox(height: 14),
@@ -409,7 +409,7 @@ class _SiteInspectionAssessmentDialogState extends State<SiteInspectionAssessmen
                       ),
                       icon: const Icon(Icons.check_circle, size: 20),
                       label: const Text(
-                        'I-APPLY MATERIAL ASSESSMENT & COMPLETE CHECK',
+                        'APPLY MATERIAL ASSESSMENT & COMPLETE CHECK',
                         style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                       ),
                       onPressed: _saveAssessment,

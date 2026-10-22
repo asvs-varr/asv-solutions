@@ -6,7 +6,7 @@ enum BanaagThemeMode {
 }
 
 class BanaagTheme {
-  // Global ValueNotifier para sa dynamic runtime theme switching
+  // Global ValueNotifier for dynamic runtime theme switching
   static final ValueNotifier<BanaagThemeMode> currentThemeMode =
       ValueNotifier<BanaagThemeMode>(BanaagThemeMode.obsidianThermal);
 
@@ -35,7 +35,7 @@ class BanaagTheme {
   static const Color alertRed = Color(0xFFFF5252);
   static const Color warningOrange = Color(0xFFFF9100);
 
-  // Getter para sa Theme base sa pinili
+  // Getter for Theme based on selection
   static ThemeData getTheme(BanaagThemeMode mode) {
     switch (mode) {
       case BanaagThemeMode.obsidianThermal:

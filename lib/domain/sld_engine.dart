@@ -185,13 +185,13 @@ class SingleLineDiagramData {
       'topic': 'Branch Circuit Voltage Drop Limit (3.0% Max)',
       'citation': 'PEC 2017 Sec. 2.10.2.2(A) FPN No. 4 (Page 42) & Sec. 2.15.1.2(A)(1) FPN No. 2 (Page 50)',
       'formula': '%VD = (2 × L_run × I_load × R_wire / 1000 / 230) × 100%. Max allowable: 3.0% for branch circuit, 5.0% total overall system.',
-      'computed': 'Lahat ng branch circuits ay sinusukat gamit ang 3D Manhattan Run (panel drop + horizontal run + device drop + 150mm splice per Sec. 3.0.1.14). Ang mga lagpas sa 3.0% ay awtomatikong ina-upsize sa kasunod na standard wire size.',
+      'computed': 'All branch circuits are calculated using 3D Manhattan Run (panel drop + horizontal run + device drop + 150mm splice per Sec. 3.0.1.14). Circuits exceeding 3.0% are automatically upsized to the next standard wire size.',
     },
     {
       'topic': 'Spare Circuit Provision',
       'citation': 'PEC 2017 Sec. 4.8.2.7 & Sec. 2.10.1.11',
       'formula': 'Spare overcurrent devices for panelboard future load expansion without rewiring enclosure.',
-      'computed': 'Kasama ang 2 Spare Breakers (20A at 30A 2P) sa active schedule.',
+      'computed': 'Includes 2 Spare Breakers (20A and 30A 2P) in the active schedule.',
     },
   ];
 }
