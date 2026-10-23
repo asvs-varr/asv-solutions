@@ -1467,6 +1467,30 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                 spacing: 6,
                 children: [
                   ActionChip(
+                    label: const Text('15500 mm (15.5m)', style: TextStyle(fontSize: 10, color: BanaagTheme.primaryAmber)),
+                    onPressed: () => setDlgState(() {
+                      distCtrl.text = isMm ? '15500' : '15.500';
+                    }),
+                  ),
+                  ActionChip(
+                    label: const Text('18480 mm (18.5m)', style: TextStyle(fontSize: 10, color: BanaagTheme.primaryAmber)),
+                    onPressed: () => setDlgState(() {
+                      distCtrl.text = isMm ? '18480' : '18.480';
+                    }),
+                  ),
+                  ActionChip(
+                    label: const Text('3400 mm (3.4m)', style: TextStyle(fontSize: 10)),
+                    onPressed: () => setDlgState(() {
+                      distCtrl.text = isMm ? '3400' : '3.400';
+                    }),
+                  ),
+                  ActionChip(
+                    label: const Text('4800 mm (4.8m)', style: TextStyle(fontSize: 10)),
+                    onPressed: () => setDlgState(() {
+                      distCtrl.text = isMm ? '4800' : '4.800';
+                    }),
+                  ),
+                  ActionChip(
                     label: const Text('3000 mm (3m)', style: TextStyle(fontSize: 10)),
                     onPressed: () => setDlgState(() {
                       distCtrl.text = isMm ? '3000' : '3.000';

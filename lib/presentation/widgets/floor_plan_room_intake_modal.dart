@@ -47,15 +47,16 @@ class _FloorPlanRoomIntakeModalState extends State<FloorPlanRoomIntakeModal> {
   bool _isScanning = true;
   bool _isSaving = false;
   List<RoomSpace> _rooms = [];
-  double _calibratedLength = 9.0;
-  double _calibratedWidth = 8.8;
+  double _calibratedLength = 18.48;
+  double _calibratedWidth = 15.50;
+  List<String> _ocrCandidateTags = [];
 
   int _selectedPageIndex = 0;
   List<PdfBlueprintPageInfo> _pdfPages = [];
   String? _rasterizedImagePath;
 
-  final TextEditingController _lenController = TextEditingController(text: '9.0');
-  final TextEditingController _widController = TextEditingController(text: '8.8');
+  final TextEditingController _lenController = TextEditingController(text: '18.48');
+  final TextEditingController _widController = TextEditingController(text: '15.50');
 
   @override
   void initState() {
@@ -66,7 +67,7 @@ class _FloorPlanRoomIntakeModalState extends State<FloorPlanRoomIntakeModal> {
   Future<void> _performAutoScan() async {
     setState(() => _isScanning = true);
 
-    List<RoomSpace> scanned = [];
+    FloorPlanScanResult scanResult = FloorPlanScanResult(rooms: []);
     final isPdf = PdfBlueprintEngine.isPdf(widget.blueprintPath);
 
     if (isPdf) {
@@ -79,20 +80,20 @@ class _FloorPlanRoomIntakeModalState extends State<FloorPlanRoomIntakeModal> {
         dpi: 150.0,
       );
       if (_rasterizedImagePath != null) {
-        scanned = await FloorPlanScannerEngine.scanFloorPlanImage(_rasterizedImagePath!);
+        scanResult = await FloorPlanScannerEngine.scanFloorPlanImageWithMetadata(_rasterizedImagePath!);
       }
     } else {
-      scanned = await FloorPlanScannerEngine.scanFloorPlanImage(widget.blueprintPath);
-    }
-
-    if (scanned.isEmpty) {
-      // Use standard reference floor plan rooms as high-confidence baseline
-      scanned = FloorPlanScannerEngine.getDefaultReferenceRooms();
+      scanResult = await FloorPlanScannerEngine.scanFloorPlanImageWithMetadata(widget.blueprintPath);
     }
 
     if (mounted) {
       setState(() {
-        _rooms = scanned;
+        _rooms = scanResult.rooms;
+        _calibratedLength = scanResult.detectedBuildingLengthMeters;
+        _calibratedWidth = scanResult.detectedBuildingWidthMeters;
+        _lenController.text = _calibratedLength.toStringAsFixed(2);
+        _widController.text = _calibratedWidth.toStringAsFixed(2);
+        _ocrCandidateTags = scanResult.candidateQuickAddTags;
         _isScanning = false;
       });
     }
@@ -511,23 +512,32 @@ class _FloorPlanRoomIntakeModalState extends State<FloorPlanRoomIntakeModal> {
                       const SizedBox(height: 16),
 
                       // Quick Add Chips Ribbon
-                      const Text(
-                        '1-Tap Quick Add Chips:',
-                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white70),
+                      Text(
+                        _ocrCandidateTags.isNotEmpty
+                            ? 'OCR Detected CAD Rooms (1-Tap Add):'
+                            : '1-Tap Quick Add Chips:',
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white70),
                       ),
                       const SizedBox(height: 6),
                       SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
                         child: Row(
                           children: [
+                            if (_ocrCandidateTags.isNotEmpty) ...[
+                              ..._ocrCandidateTags.map((tag) => _chip('+ $tag', () {
+                                final est = FloorPlanScannerEngine.estimateAreaForLabel(tag);
+                                _addQuickRoom(tag, est);
+                              })),
+                            ],
+                            _chip('+ Function Hall (79.9m²)', () => _addQuickRoom('Function Hall', 79.91)),
+                            _chip('+ Staff Room (11.6m²)', () => _addQuickRoom('Staff Room', 11.55)),
+                            _chip('+ Office Rooms (46.1m²)', () => _addQuickRoom('Office Rooms', 46.10)),
+                            _chip('+ Landing / Stairs (6.8m²)', () => _addQuickRoom('Landing / Stairs', 6.80)),
+                            _chip('+ Corridor (22.0m²)', () => _addQuickRoom('Corridor', 21.96)),
                             _chip('+ Living (23.8m²)', () => _addQuickRoom('Living Room', 23.81)),
                             _chip('+ Kitchen (23.5m²)', () => _addQuickRoom('Kitchen', 23.51)),
                             _chip('+ Master Bed (12.5m²)', () => _addQuickRoom('Master Bedroom', 12.52)),
-                            _chip('+ Bed 2 (8.4m²)', () => _addQuickRoom('Bedroom 2', 8.40)),
-                            _chip('+ Bathroom (7.0m²)', () => _addQuickRoom('Bathroom', 7.04)),
-                            _chip('+ Hall (3.5m²)', () => _addQuickRoom('Hall', 3.52)),
-                            _chip('+ Dining', () => _addQuickRoom('Dining Area', 12.0)),
-                            _chip('+ Balcony', () => _addQuickRoom('Balcony', 6.0)),
+                            _chip('+ Restroom (7.0m²)', () => _addQuickRoom('Restroom', 7.04)),
                             _chip('+ Custom', () => _addQuickRoom('New Space', 10.0)),
                           ],
                         ),
