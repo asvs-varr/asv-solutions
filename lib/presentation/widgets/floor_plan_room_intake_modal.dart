@@ -79,9 +79,10 @@ class _FloorPlanRoomIntakeModalState extends State<FloorPlanRoomIntakeModal> {
         pageIndex: _selectedPageIndex,
         dpi: 150.0,
       );
-      if (_rasterizedImagePath != null) {
-        scanResult = await FloorPlanScannerEngine.scanFloorPlanImageWithMetadata(_rasterizedImagePath!);
-      }
+      scanResult = await FloorPlanScannerEngine.scanFloorPlanWithMetadata(
+        widget.blueprintPath,
+        pdfPageIndex: _selectedPageIndex,
+      );
     } else {
       scanResult = await FloorPlanScannerEngine.scanFloorPlanImageWithMetadata(widget.blueprintPath);
     }

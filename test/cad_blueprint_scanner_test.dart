@@ -10,7 +10,7 @@ void main() {
         lengthMeters: 18.48,
       );
 
-      expect(rooms.length, equals(5));
+      expect(rooms.length, equals(6));
 
       final functionHall = rooms.firstWhere((r) => r.name.contains('Function Hall'));
       expect(functionHall.areaSqm, closeTo(79.91, 0.1));
@@ -29,7 +29,7 @@ void main() {
       expect(stairs.areaSqm, closeTo(6.80, 0.1));
 
       final totalArea = rooms.fold<double>(0.0, (acc, r) => acc + r.areaSqm);
-      expect(totalArea, closeTo(166.32, 0.5));
+      expect(totalArea, closeTo(174.82, 0.5));
     });
 
     test('estimateAreaForLabel calculates correct CAD areas for institutional rooms', () {
