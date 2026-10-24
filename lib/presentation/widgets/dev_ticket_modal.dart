@@ -12,6 +12,7 @@ void showDevTicketSheet(BuildContext context, {String? projectContext}) {
   showModalBottomSheet(
     context: context,
     isScrollControlled: true,
+    useSafeArea: true,
     backgroundColor: const Color(0xFF161922),
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
@@ -129,6 +130,9 @@ class _DevTicketModalContentState extends State<DevTicketModalContent> {
   @override
   Widget build(BuildContext context) {
     return Container(
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.88,
+      ),
       padding: EdgeInsets.only(
         top: 20,
         left: 20,
@@ -188,10 +192,11 @@ class _DevTicketModalContentState extends State<DevTicketModalContent> {
           ),
           const SizedBox(height: 16),
 
-          if (_showListView)
-            _buildQueueView()
-          else
-            _buildCreateForm(),
+          Flexible(
+            child: SingleChildScrollView(
+              child: _showListView ? _buildQueueView() : _buildCreateForm(),
+            ),
+          ),
         ],
       ),
     );
