@@ -1,6 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:banaag/domain/floor_plan_scanner_engine.dart';
-import 'package:banaag/domain/models.dart';
 
 void main() {
   group('CAD Blueprint Scanner Engine Tests', () {

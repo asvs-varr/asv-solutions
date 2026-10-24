@@ -177,9 +177,16 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
   /// (e.g. x > 266 outside the right exterior wall) so all items sit strictly inside the rooms.
   void _sanitizeAndFitExistingPointsIfNeeded() {
     final panelCount = _points.where((p) => p.type == 'PANEL').length;
-    final hasOutOfBounds = _points.any((p) => p.x > 266.0 || p.y < 150.0 || p.y > 395.0);
+    final bool hasCadBlueprint = _hasBlueprintFile &&
+        _blueprintPath != null &&
+        PdfBlueprintEngine.isPdf(_blueprintPath!);
+    // Auto-migrate if trapped in legacy 266px box while having an institutional CAD blueprint
+    final bool isTrappedInLegacyBox = hasCadBlueprint &&
+        _points.isNotEmpty &&
+        _points.every((p) => p.x <= 270.0 && p.y >= 140.0 && p.y <= 400.0);
+    final hasOutOfBounds = _points.any((p) => p.x > 380.0 || p.y < 40.0 || p.y > 470.0);
 
-    if (panelCount > 1 || hasOutOfBounds) {
+    if (panelCount > 1 || hasOutOfBounds || isTrappedInLegacyBox) {
       if (widget.project != null && widget.project!.applianceLoads.isNotEmpty) {
         _autoGenerateFromAppliances(widget.project!.applianceLoads);
       } else {
@@ -193,8 +200,8 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
               id: pt.id,
               type: pt.type,
               label: 'MDP',
-              x: 42.0,
-              y: 280.0,
+              x: hasCadBlueprint ? 155.0 : 42.0,
+              y: hasCadBlueprint ? 285.0 : 280.0,
               circuitNumber: pt.circuitNumber,
             ));
             continue;
@@ -209,14 +216,14 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
           if (pt.type == 'LIGHT' || pt.type == 'FAN') {
             final anchor = _roomCeilingAnchors[lightIdx % _roomCeilingAnchors.length];
             final int cycle = lightIdx ~/ _roomCeilingAnchors.length;
-            pt.x = (anchor.dx + (cycle * 12.0)).clamp(52.0, 248.0);
-            pt.y = (anchor.dy + (cycle * 10.0)).clamp(160.0, 380.0);
+            pt.x = (anchor.dx + (cycle * 12.0)).clamp(52.0, 360.0);
+            pt.y = (anchor.dy + (cycle * 10.0)).clamp(60.0, 440.0);
             lightIdx++;
           } else {
             final anchor = _wallPerimeterAnchors[wallIdx % _wallPerimeterAnchors.length];
             final int cycle = wallIdx ~/ _wallPerimeterAnchors.length;
-            pt.x = (anchor.dx - (cycle * 10.0)).clamp(48.0, 258.0);
-            pt.y = (anchor.dy + (cycle * 8.0)).clamp(156.0, 386.0);
+            pt.x = (anchor.dx - (cycle * 10.0)).clamp(48.0, 360.0);
+            pt.y = (anchor.dy + (cycle * 8.0)).clamp(60.0, 440.0);
             wallIdx++;
           }
         }
@@ -275,7 +282,200 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
   }
 
   void _autoGenerateFromAppliances(List<ApplianceItem> appliances) {
-    // Place MDP on the left entrance/kitchen wall inside the floor plan
+    final bool hasCadBlueprint = _hasBlueprintFile &&
+        _blueprintPath != null &&
+        PdfBlueprintEngine.isPdf(_blueprintPath!);
+
+    if (hasCadBlueprint) {
+      _autoGenerateForCadBuildingBlueprint(appliances);
+      return;
+    }
+
+    _autoGenerateForStandardDwelling(appliances);
+  }
+
+  /// High-Precision PEC 2017 & IESNA Placement for CAD Institutional / Commercial Blueprints
+  void _autoGenerateForCadBuildingBlueprint(List<ApplianceItem> appliances) {
+    // 1. Service Entrance / Landing / Electrical Closet MDP position
+    final panelPt = CanvasPoint(id: 'pt-panel', type: 'PANEL', label: 'MDP', x: 155.0, y: 285.0);
+    _points = [panelPt];
+    _routes = [];
+
+    // Distinct room zone anchors on cropped canvas coordinates (~393 x 480 px):
+    final Map<String, List<Offset>> roomCeilingMap = {
+      'function': [
+        const Offset(115.0, 75.0),
+        const Offset(155.0, 75.0),
+        const Offset(195.0, 75.0),
+        const Offset(115.0, 115.0),
+        const Offset(155.0, 115.0),
+        const Offset(195.0, 115.0),
+        const Offset(135.0, 95.0),
+        const Offset(175.0, 95.0),
+      ],
+      'staff': [
+        const Offset(290.0, 105.0),
+        const Offset(325.0, 105.0),
+        const Offset(308.0, 125.0),
+      ],
+      'office': [
+        const Offset(260.0, 195.0),
+        const Offset(298.0, 195.0),
+        const Offset(260.0, 225.0),
+        const Offset(298.0, 225.0),
+        const Offset(278.0, 210.0),
+      ],
+      'storage': [
+        const Offset(295.0, 355.0),
+        const Offset(320.0, 355.0),
+      ],
+      'landing': [
+        const Offset(198.0, 275.0),
+        const Offset(198.0, 305.0),
+      ],
+    };
+
+    final Map<String, List<Offset>> roomWallMap = {
+      'function': [
+        const Offset(82.0, 75.0),   // West perimeter wall
+        const Offset(82.0, 115.0),  // West perimeter wall lower
+        const Offset(120.0, 38.0),  // North exterior wall
+        const Offset(170.0, 38.0),  // North exterior wall
+        const Offset(215.0, 38.0),  // North exterior wall
+        const Offset(225.0, 75.0),  // East partition wall
+        const Offset(225.0, 115.0), // East partition wall
+        const Offset(82.0, 138.0),  // Entry switch area near D2
+      ],
+      'staff': [
+        const Offset(270.0, 105.0), // Interior partition wall
+        const Offset(308.0, 68.0),  // North exterior wall
+        const Offset(348.0, 105.0), // East exterior wall (ACU)
+        const Offset(308.0, 138.0), // South corridor partition
+      ],
+      'office': [
+        const Offset(240.0, 205.0), // West corridor wall
+        const Offset(278.0, 168.0), // North partition wall
+        const Offset(335.0, 205.0), // East window wall (W5 ACU)
+        const Offset(278.0, 248.0), // South partition wall
+      ],
+      'storage': [
+        const Offset(270.0, 355.0), // West partition wall
+        const Offset(308.0, 325.0), // North partition wall
+        const Offset(345.0, 355.0), // East exterior wall
+        const Offset(308.0, 382.0), // South exterior wall
+      ],
+      'landing': [
+        const Offset(175.0, 285.0), // Landing west wall beside stairs
+        const Offset(220.0, 285.0), // Landing east wall
+        const Offset(198.0, 255.0), // Stair landing head
+        const Offset(198.0, 325.0), // Stair landing foot
+      ],
+    };
+
+    final Map<String, int> roomCeilIdx = {};
+    final Map<String, int> roomWallIdx = {};
+
+    String getRoomKey(String roomCategory) {
+      final lower = roomCategory.toLowerCase();
+      if (lower.contains('hall') || lower.contains('event')) return 'function';
+      if (lower.contains('staff')) return 'staff';
+      if (lower.contains('office')) return 'office';
+      if (lower.contains('storage') || lower.contains('store')) return 'storage';
+      if (lower.contains('landing') || lower.contains('stair')) return 'landing';
+      return 'function';
+    }
+
+    int devCounter = 1;
+    int routeCounter = 1;
+    final Map<String, String> lastRoomLightId = {};
+    final Map<String, String> lastRoomOutletId = {};
+
+    for (final app in appliances) {
+      final rKey = getRoomKey(app.roomCategory);
+      for (int i = 0; i < app.quantity; i++) {
+        String pointType = 'OUTLET_DUPLEX';
+        if (app.name.toLowerCase().contains('aircon') || app.name.toLowerCase().contains('acu')) {
+          pointType = 'ACU';
+        } else if (app.name.toLowerCase().contains('light') ||
+            app.name.toLowerCase().contains('fan') ||
+            app.name.toLowerCase().contains('luminaire') ||
+            app.name.toLowerCase().contains('led') ||
+            app.name.toLowerCase().contains('pinlight') ||
+            app.name.toLowerCase().contains('panel')) {
+          pointType = 'LIGHT';
+        } else if (app.name.toLowerCase().contains('switch')) {
+          pointType = 'SWITCH_1G';
+        }
+
+        final pId = 'pt-$devCounter';
+        final compactLabel = _getShorthandLabel(pointType, app.name, devCounter);
+        final bool isCeiling = pointType == 'LIGHT' || pointType == 'FAN';
+
+        double px = 155.0;
+        double py = 285.0;
+
+        if (isCeiling) {
+          final anchors = roomCeilingMap[rKey] ?? roomCeilingMap['function']!;
+          final idx = roomCeilIdx[rKey] ?? 0;
+          final base = anchors[idx % anchors.length];
+          final cycle = idx ~/ anchors.length;
+          px = (base.dx + (cycle * 8.0)).clamp(40.0, 360.0);
+          py = (base.dy + (cycle * 8.0)).clamp(40.0, 460.0);
+          roomCeilIdx[rKey] = idx + 1;
+        } else {
+          final anchors = roomWallMap[rKey] ?? roomWallMap['function']!;
+          final idx = roomWallIdx[rKey] ?? 0;
+          final base = anchors[idx % anchors.length];
+          final cycle = idx ~/ anchors.length;
+          px = (base.dx - (cycle * 6.0)).clamp(40.0, 360.0);
+          py = (base.dy + (cycle * 6.0)).clamp(40.0, 460.0);
+          roomWallIdx[rKey] = idx + 1;
+        }
+
+        _points.add(CanvasPoint(
+          id: pId,
+          type: pointType,
+          label: compactLabel,
+          x: px,
+          y: py,
+          circuitNumber: app.circuitNumber,
+        ));
+
+        // Conduit routing: Home-run for dedicated ACU, daisy-chain per room for lights and outlets
+        if (pointType == 'ACU' || app.isDedicatedCircuit) {
+          _routes.add(ConduitRoute(
+            id: 'rt-${routeCounter++}',
+            fromPointId: 'pt-panel',
+            toPointId: pId,
+            measuredLengthMeters: 6.5,
+          ));
+        } else if (isCeiling) {
+          final fromId = lastRoomLightId[rKey] ?? 'pt-panel';
+          _routes.add(ConduitRoute(
+            id: 'rt-${routeCounter++}',
+            fromPointId: fromId,
+            toPointId: pId,
+            measuredLengthMeters: fromId == 'pt-panel' ? 5.0 : 2.8,
+          ));
+          lastRoomLightId[rKey] = pId;
+        } else {
+          final fromId = lastRoomOutletId[rKey] ?? 'pt-panel';
+          _routes.add(ConduitRoute(
+            id: 'rt-${routeCounter++}',
+            fromPointId: fromId,
+            toPointId: pId,
+            measuredLengthMeters: fromId == 'pt-panel' ? 4.5 : 3.2,
+          ));
+          lastRoomOutletId[rKey] = pId;
+        }
+
+        devCounter++;
+      }
+    }
+  }
+
+  /// Standard Residential 4-Room Fallback Auto-Placement
+  void _autoGenerateForStandardDwelling(List<ApplianceItem> appliances) {
     final panelPt = CanvasPoint(id: 'pt-panel', type: 'PANEL', label: 'MDP', x: 42.0, y: 280.0);
     _points = [panelPt];
     _routes = [];
@@ -320,7 +520,6 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
     String lastOutletPointId = 'pt-panel';
     int routeCounter = 1;
 
-    // 1. Place Ceiling Luminaires in Room Centers & Daisy-Chain Room-to-Room
     for (int i = 0; i < ceilingDevices.length; i++) {
       final dev = ceilingDevices[i];
       final String pId = dev['id'];
@@ -353,7 +552,6 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
       lastLightingPointId = pId;
     }
 
-    // 2. Place Outlets, Switches & ACUs Along Perimeter/Interior Walls Clockwise
     for (int i = 0; i < wallDevices.length; i++) {
       final dev = wallDevices[i];
       final String pId = dev['id'];
@@ -379,7 +577,6 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
       ));
 
       if (isDedicated) {
-        // Dedicated equipment: Home-run conduit back to MDP (rendered as CAD Home-Run Arrowhead!)
         _routes.add(ConduitRoute(
           id: 'rt-${routeCounter++}',
           fromPointId: 'pt-panel',
@@ -387,7 +584,6 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
           measuredLengthMeters: 7.5,
         ));
       } else {
-        // Convenience outlet branch circuit daisy-chain along perimeter walls
         _routes.add(ConduitRoute(
           id: 'rt-${routeCounter++}',
           fromPointId: lastOutletPointId,
@@ -398,7 +594,6 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
       }
     }
   }
-
   void _handlePanStart(DragStartDetails details) {
     final tapX = details.localPosition.dx;
     final tapY = details.localPosition.dy;
@@ -1714,11 +1909,15 @@ class CanvasPainter extends CustomPainter {
       canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
     }
 
-    // Draw Auto-Recreated CAD Floor Plan Walls (Always visible to frame electrical layout)
-    if (roomGeometry != null && !hasBlueprintUnderlay) {
-      _drawRoomWalls(canvas, size, roomGeometry!);
-    } else {
-      _drawArchitecturalFloorPlan(canvas, size);
+    // Draw Auto-Recreated CAD Floor Plan Walls only when no real blueprint underlay exists
+    if (!hasBlueprintUnderlay) {
+      if (roomGeometry != null) {
+        _drawRoomWalls(canvas, size, roomGeometry!);
+      } else {
+        _drawArchitecturalFloorPlan(canvas, size);
+      }
+    } else if (isCalibrating) {
+      _drawCalibrationOverlay(canvas, size);
     }
 
     // In-Canvas Optical Lux Heatmap Layer
