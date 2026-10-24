@@ -7,6 +7,9 @@ import 'package:share_plus/share_plus.dart';
 import 'package:file_picker/file_picker.dart';
 import '../../domain/models.dart';
 import '../../domain/takeoff_engine.dart';
+import '../../domain/lighting_engine.dart';
+import '../../domain/pec_safety_auditor.dart';
+import '../../domain/sld_engine.dart';
 import '../../domain/dxf_cad_engine.dart';
 import '../../domain/institutional_building_presets.dart';
 import '../../domain/pdf_blueprint_engine.dart';
@@ -477,11 +480,11 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
 
     if (proj.spaces.isEmpty) {
       proj.spaces.addAll([
-        RoomSpace(id: 'sp-func', name: 'Function Hall / Event Place', areaSqm: 64.5, ceilingHeight: 3.0),
+        RoomSpace(id: 'sp-func', name: 'Function Hall / Event Place', areaSqm: 64.5, ceilingHeight: 3.5),
         RoomSpace(id: 'sp-staff', name: 'Staff Room', areaSqm: 9.6, ceilingHeight: 2.8),
         RoomSpace(id: 'sp-off', name: 'Office Rooms', areaSqm: 37.4, ceilingHeight: 2.8),
         RoomSpace(id: 'sp-land', name: 'Landing', areaSqm: 24.1, ceilingHeight: 2.8),
-        RoomSpace(id: 'sp-stor', name: 'Storage Room', areaSqm: 5.5, ceilingHeight: 2.8),
+        RoomSpace(id: 'sp-stor', name: 'Storage Room', areaSqm: 5.5, ceilingHeight: 2.6),
       ]);
     }
 
@@ -537,31 +540,71 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
     }
   }
 
-  /// 3D-Aware Orthogonal Manhattan Distance (|ΔX| + |ΔY| in calibrated meters + PEC 3D Vertical Wall Drops)
+  /// Resolves the confirmed ceiling height (in meters) of the room containing [pt]
+  double _resolveRoomCeilingHeightAt(Offset pt) {
+    final spaces = widget.project?.spaces ?? [];
+    for (int i = 0; i < spaces.length; i++) {
+      final sp = spaces[i];
+      final poly = _roomPolygons[sp.id];
+      if (poly != null && poly.length >= 3 && _isPointInPolygon(pt, poly)) {
+        return sp.ceilingHeight > 1.8 ? sp.ceilingHeight : LightingEngine.suggestDefaultCeilingHeight(sp.name);
+      }
+    }
+    // Fallback nearest bounding box check if point is slightly on wall perimeter
+    for (int i = 0; i < spaces.length; i++) {
+      final sp = spaces[i];
+      final rect = _roomBoxes[sp.id];
+      if (rect != null && rect.inflate(16.0).contains(pt)) {
+        return sp.ceilingHeight > 1.8 ? sp.ceilingHeight : LightingEngine.suggestDefaultCeilingHeight(sp.name);
+      }
+    }
+    return 2.8;
+  }
+
+  /// 3D-Aware Orthogonal Manhattan Distance (|ΔX| + |ΔY| in calibrated meters + Per-Room 3D Vertical Wall Drops + ΔH Inter-Room Slab Transition)
   double _computeRouteLengthMeters(CanvasPoint p1, CanvasPoint p2) {
     final double ppm = _pixelsPerMeter > 5.0 ? _pixelsPerMeter : 44.77;
     final double horizMeters = ((p1.x - p2.x).abs() + (p1.y - p2.y).abs()) / ppm;
 
+    final double h1 = _resolveRoomCeilingHeightAt(Offset(p1.x, p1.y));
+    final double h2 = _resolveRoomCeilingHeightAt(Offset(p2.x, p2.y));
+
     double vertMeters = 0.0;
-    if (p1.type == 'PANEL' || p2.type == 'PANEL') {
-      // MDP vertical rise to ceiling slab (1.5m) + panelboard termination slack (1.0m)
-      vertMeters += 2.5;
+
+    // 1. Inter-room ceiling elevation step |H_1 - H_2| when conduit crosses rooms of different heights!
+    if ((h1 - h2).abs() >= 0.05) {
+      vertMeters += (h1 - h2).abs();
     }
-    if (p1.type == 'SWITCH_1G' || p2.type == 'SWITCH_1G') {
-      // Ceiling slab down to wall switch at 1.4m mounting height
-      vertMeters += 1.5;
+
+    // 2. Endpoint 1 & Endpoint 2 Exact Vertical Wall Drops based on each room's confirmed Ceiling Height H_room
+    double dropForPoint(CanvasPoint pt, double roomH) {
+      if (pt.type == 'PANEL') {
+        // Panel mounted at 1.50m AFF -> rise to ceiling (roomH - 1.50m) + 1.00m panelboard termination slack
+        return math.max(0.8, roomH - 1.50) + 1.00;
+      }
+      if (pt.type == 'SWITCH_1G') {
+        // Wall switch mounted at 1.40m AFF -> drop from ceiling (roomH - 1.40m) + 0.25m utility box slack
+        return math.max(0.6, roomH - 1.40) + 0.25;
+      }
+      if (pt.type == 'OUTLET_DUPLEX') {
+        // Convenience outlet mounted at 0.30m AFF -> drop from ceiling (roomH - 0.30m) + 0.25m box slack
+        return math.max(1.2, roomH - 0.30) + 0.25;
+      }
+      if (pt.type == 'ACU') {
+        // High-wall split ACU disconnect drop (~0.60m below ceiling slab + 0.25m whip allowance)
+        return 0.85;
+      }
+      return 0.20; // Ceiling luminaire / fan octagonal box loop slack
     }
-    if (p1.type == 'OUTLET_DUPLEX' || p2.type == 'OUTLET_DUPLEX') {
-      // Drop to convenience receptacle (0.3m above floor)
-      vertMeters += 2.4;
-    }
-    if (p1.type == 'ACU' || p2.type == 'ACU') {
-      // High-wall ACU disconnect drop
-      vertMeters += 0.8;
-    }
+
     if (p1.type == 'LIGHT' && p2.type == 'LIGHT') {
-      // Ceiling octagonal junction box loop slack
-      vertMeters += 0.4;
+      vertMeters += 0.40;
+    } else if (p1.type == 'OUTLET_DUPLEX' && p2.type == 'OUTLET_DUPLEX') {
+      // Daisy-chained convenience receptacles along wall raceway
+      vertMeters += 0.90;
+    } else {
+      if (p1.type != 'LIGHT') vertMeters += dropForPoint(p1, h1);
+      if (p2.type != 'LIGHT') vertMeters += dropForPoint(p2, h2);
     }
 
     return double.parse((horizMeters + vertMeters).clamp(1.2, 180.0).toStringAsFixed(2));
@@ -1887,6 +1930,15 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                   },
                 );
               } else if (val == 'dxf_export') {
+                if (widget.project != null) {
+                  final sld = SldEngine.generateFromProject(widget.project!);
+                  final powerAudit = PecSafetyAuditor.auditSchedule(sld);
+                  final lightAudit = IesnaLightingAuditor.auditProject(widget.project!);
+                  if (powerAudit.isExportBlocked || lightAudit.isExportBlocked) {
+                    _showUnifiedPowerAndLightingAuditSheet();
+                    return;
+                  }
+                }
                 try {
                   final preset = InstitutionalBuildingPreset.sanLorenzoRuizCollege();
                   final dxfString = DxfCadEngine.generateDxf(
@@ -2058,6 +2110,13 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
             tooltip: 'Lock Contract Amount from Takeoff',
             onPressed: () {
               if (widget.project != null) {
+                final sld = SldEngine.generateFromProject(widget.project!);
+                final powerAudit = PecSafetyAuditor.auditSchedule(sld);
+                final lightAudit = IesnaLightingAuditor.auditProject(widget.project!);
+                if (powerAudit.isExportBlocked || lightAudit.isExportBlocked) {
+                  _showUnifiedPowerAndLightingAuditSheet();
+                  return;
+                }
                 setState(() {
                   widget.project!.contractAmount = takeoff.grandTotalEstimatedCost;
                   widget.project!.canvasPoints = _points;
@@ -2273,8 +2332,8 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                         children: [
                           Expanded(
                             child: Text(
-                              'Net Area: ${metrics.netAreaSqm} m² • Perim: ${metrics.perimeterMeters} m • IESNA RCR: ${metrics.rcrValue} (${poly.length} pts)',
-                              style: const TextStyle(color: Colors.cyanAccent, fontSize: 10.8, fontWeight: FontWeight.w600),
+                              'Net: ${metrics.netAreaSqm} m² • Perim: ${metrics.perimeterMeters} m • H: ${activeSp.ceilingHeight.toStringAsFixed(1)}m • RCR: ${metrics.rcrValue}',
+                              style: const TextStyle(color: Colors.cyanAccent, fontSize: 10.6, fontWeight: FontWeight.w600),
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
@@ -2296,6 +2355,87 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                               ),
                             ),
                         ],
+                      ),
+                      const SizedBox(height: 5),
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
+                            const Text(
+                              '📐 Ceiling Ht:',
+                              style: TextStyle(color: Colors.white70, fontSize: 10.0, fontWeight: FontWeight.bold),
+                            ),
+                            const SizedBox(width: 6),
+                            for (final double hPreset in [2.6, 2.8, 3.0, 3.5, 4.2])
+                              Padding(
+                                padding: const EdgeInsets.only(right: 5),
+                                child: GestureDetector(
+                                  onTap: () {
+                                    setState(() {
+                                      spaces[activeIdx] = RoomSpace(
+                                        id: activeSp.id,
+                                        name: activeSp.name,
+                                        areaSqm: activeSp.areaSqm,
+                                        ceilingHeight: hPreset,
+                                        shapeType: activeSp.shapeType,
+                                        cutoutDepth: activeSp.cutoutDepth,
+                                        cutoutWidth: activeSp.cutoutWidth,
+                                        canvasX: activeSp.canvasX,
+                                        canvasY: activeSp.canvasY,
+                                        canvasWidth: activeSp.canvasWidth,
+                                        canvasHeight: activeSp.canvasHeight,
+                                        perimeterMeters: activeSp.perimeterMeters,
+                                        rcrValue: activeSp.rcrValue,
+                                        polygonVertices: activeSp.polygonVertices,
+                                      );
+                                      _syncRoomSpacesFromBoxes(persist: true);
+                                      _recalculateAllRouteLengths();
+                                    });
+                                    HapticFeedback.selectionClick();
+                                  },
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                                    decoration: BoxDecoration(
+                                      color: (activeSp.ceilingHeight - hPreset).abs() < 0.05
+                                          ? BanaagTheme.primaryAmber
+                                          : Colors.white10,
+                                      borderRadius: BorderRadius.circular(5),
+                                      border: Border.all(
+                                        color: (activeSp.ceilingHeight - hPreset).abs() < 0.05
+                                            ? BanaagTheme.primaryAmber
+                                            : Colors.white24,
+                                      ),
+                                    ),
+                                    child: Text(
+                                      '${hPreset.toStringAsFixed(1)}m',
+                                      style: TextStyle(
+                                        color: (activeSp.ceilingHeight - hPreset).abs() < 0.05
+                                            ? Colors.black
+                                            : Colors.white70,
+                                        fontSize: 9.8,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            GestureDetector(
+                              onTap: _showRenameSelectedRoomDialog,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                                decoration: BoxDecoration(
+                                  color: Colors.cyanAccent.withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(5),
+                                  border: Border.all(color: Colors.cyanAccent),
+                                ),
+                                child: const Text(
+                                  '✏️ Custom m/ft',
+                                  style: TextStyle(color: Colors.cyanAccent, fontSize: 9.8, fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ],
                   );
@@ -2514,6 +2654,68 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                       _layerFilterChip('POWER', '🔌 E-2'),
                     ],
                   ),
+                  const SizedBox(height: 6),
+                  Builder(builder: (ctx) {
+                    final sld = SldEngine.generateFromProject(widget.project!);
+                    final powerAudit = PecSafetyAuditor.auditSchedule(sld);
+                    final lightAudit = IesnaLightingAuditor.auditProject(widget.project!);
+                    final bool hasHazard = powerAudit.isExportBlocked || lightAudit.isExportBlocked;
+                    final bool hasAdvisory = !hasHazard &&
+                        (powerAudit.overallSeverity == PecAuditSeverity.advisory ||
+                            lightAudit.overallSeverity == PecAuditSeverity.advisory);
+                    final Color shieldColor = hasHazard
+                        ? BanaagTheme.alertRed
+                        : (hasAdvisory ? Colors.orangeAccent : BanaagTheme.successGreen);
+
+                    return GestureDetector(
+                      onTap: _showUnifiedPowerAndLightingAuditSheet,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: shieldColor.withValues(alpha: 0.14),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: shieldColor.withValues(alpha: 0.7), width: 1.1),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              hasHazard ? Icons.gpp_bad : Icons.verified_user,
+                              size: 16,
+                              color: shieldColor,
+                            ),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                hasHazard
+                                    ? '🚨 AUDIT BLOCKED: ${lightAudit.criticalHazardRoomsCount} Lighting / ${powerAudit.criticalHazardCount} Power Hazards'
+                                    : '🛡️ PEC Power (${powerAudit.assurancePercent.toStringAsFixed(0)}%) & IESNA Lighting (${lightAudit.compliantRoomsCount}/${lightAudit.totalRooms} Rooms) Verified',
+                                style: TextStyle(
+                                  color: shieldColor,
+                                  fontSize: 10.5,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            if (hasHazard || hasAdvisory)
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: shieldColor,
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: const Text(
+                                  '⚡ AUTO-HEAL',
+                                  style: TextStyle(color: Colors.black, fontSize: 9.5, fontWeight: FontWeight.w900),
+                                ),
+                              )
+                            else
+                              const Icon(Icons.chevron_right, size: 15, color: Colors.white60),
+                          ],
+                        ),
+                      ),
+                    );
+                  }),
                 ],
               ],
             ),
@@ -3489,91 +3691,355 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
     final idx = _selectedRoomIndex.clamp(0, spaces.length - 1);
     final sp = spaces[idx];
     final nameCtrl = TextEditingController(text: sp.name);
-    final heightCtrl = TextEditingController(text: sp.ceilingHeight.toStringAsFixed(1));
+    final heightCtrl = TextEditingController(text: sp.ceilingHeight.toStringAsFixed(2));
+    bool useFeet = false;
 
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: BanaagTheme.surfaceCard,
-        title: const Text('Edit Room Details', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: nameCtrl,
-              decoration: const InputDecoration(labelText: 'Room Name (e.g. Function Hall, Office)'),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: heightCtrl,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(labelText: 'Ceiling Height (m)', suffixText: 'm'),
-            ),
-          ],
-        ),
-        actions: [
-          if (spaces.length > 1)
-            TextButton(
-              onPressed: () {
-                setState(() {
-                  _roomBoxes.remove(sp.id);
-                  spaces.removeAt(idx);
-                  _selectedRoomIndex = 0;
-                  _syncRoomSpacesFromBoxes(persist: true);
-                });
-                Navigator.pop(ctx);
-              },
-              child: const Text('Delete Room', style: TextStyle(color: BanaagTheme.alertRed)),
-            ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel', style: TextStyle(color: Colors.white70)),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: BanaagTheme.primaryAmber, foregroundColor: Colors.black),
-            onPressed: () {
-              final newName = nameCtrl.text.trim();
-              final newH = double.tryParse(heightCtrl.text.trim()) ?? sp.ceilingHeight;
-              if (newName.isNotEmpty) {
-                setState(() {
-                  for (int i = 0; i < widget.project!.applianceLoads.length; i++) {
-                    final a = widget.project!.applianceLoads[i];
-                    if (a.roomCategory.toLowerCase() == sp.name.toLowerCase()) {
-                      widget.project!.applianceLoads[i] = ApplianceItem(
-                        id: a.id,
-                        name: a.name,
-                        roomCategory: newName,
-                        ratingVA: a.ratingVA,
-                        quantity: a.quantity,
-                        isDedicatedCircuit: a.isDedicatedCircuit,
-                        isLighting: a.isLighting,
-                        circuitNumber: a.circuitNumber,
-                      );
-                    }
-                  }
-                  spaces[idx] = RoomSpace(
-                    id: sp.id,
-                    name: newName,
-                    areaSqm: sp.areaSqm,
-                    ceilingHeight: newH,
-                    canvasX: sp.canvasX,
-                    canvasY: sp.canvasY,
-                    canvasWidth: sp.canvasWidth,
-                    canvasHeight: sp.canvasHeight,
-                  );
-                  _syncRoomSpacesFromBoxes(persist: true);
-                });
-              }
-                  Navigator.pop(ctx);
-                },
-                child: const Text('Save'),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDlgState) => AlertDialog(
+          backgroundColor: BanaagTheme.surfaceCard,
+          title: const Text('Edit Room ID & Ceiling Height', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TextField(
+                controller: nameCtrl,
+                decoration: const InputDecoration(labelText: 'Room Name (e.g. Function Hall, Office)'),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: heightCtrl,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      decoration: InputDecoration(
+                        labelText: useFeet ? 'Ceiling Height (ft)' : 'Ceiling Height (m)',
+                        suffixText: useFeet ? 'ft' : 'm',
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  ChoiceChip(
+                    label: Text(useFeet ? 'feet (ft)' : 'meters (m)', style: const TextStyle(fontSize: 11)),
+                    selected: true,
+                    selectedColor: BanaagTheme.primaryAmber,
+                    onSelected: (_) {
+                      setDlgState(() {
+                        final cur = double.tryParse(heightCtrl.text.trim()) ?? (useFeet ? 9.2 : 2.8);
+                        if (!useFeet) {
+                          heightCtrl.text = (cur * 3.28084).toStringAsFixed(1);
+                        } else {
+                          heightCtrl.text = (cur / 3.28084).toStringAsFixed(2);
+                        }
+                        useFeet = !useFeet;
+                      });
+                    },
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 6,
+                children: [
+                  for (final double presetM in [2.6, 2.8, 3.0, 3.5, 4.2, 5.0])
+                    ActionChip(
+                      label: Text(
+                        useFeet ? '${(presetM * 3.28084).toStringAsFixed(1)} ft' : '${presetM.toStringAsFixed(1)} m',
+                        style: const TextStyle(fontSize: 10.5),
+                      ),
+                      onPressed: () => setDlgState(() {
+                        heightCtrl.text = useFeet
+                            ? (presetM * 3.28084).toStringAsFixed(1)
+                            : presetM.toStringAsFixed(2);
+                      }),
+                    ),
+                ],
               ),
             ],
           ),
-        );
-      }
+          actions: [
+            if (spaces.length > 1)
+              TextButton(
+                onPressed: () {
+                  setState(() {
+                    _roomBoxes.remove(sp.id);
+                    spaces.removeAt(idx);
+                    _selectedRoomIndex = 0;
+                    _syncRoomSpacesFromBoxes(persist: true);
+                  });
+                  Navigator.pop(ctx);
+                },
+                child: const Text('Delete Room', style: TextStyle(color: BanaagTheme.alertRed)),
+              ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel', style: TextStyle(color: Colors.white70)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: BanaagTheme.primaryAmber, foregroundColor: Colors.black),
+              onPressed: () {
+                final newName = nameCtrl.text.trim();
+                final parsedVal = double.tryParse(heightCtrl.text.trim()) ?? (useFeet ? sp.ceilingHeight * 3.28084 : sp.ceilingHeight);
+                final double newH = (useFeet ? (parsedVal / 3.28084) : parsedVal).clamp(2.1, 9.0);
+                if (newName.isNotEmpty) {
+                  setState(() {
+                    for (int i = 0; i < widget.project!.applianceLoads.length; i++) {
+                      final a = widget.project!.applianceLoads[i];
+                      if (a.roomCategory.toLowerCase() == sp.name.toLowerCase()) {
+                        widget.project!.applianceLoads[i] = ApplianceItem(
+                          id: a.id,
+                          name: a.name,
+                          roomCategory: newName,
+                          ratingVA: a.ratingVA,
+                          quantity: a.quantity,
+                          isDedicatedCircuit: a.isDedicatedCircuit,
+                          isLighting: a.isLighting,
+                          circuitNumber: a.circuitNumber,
+                        );
+                      }
+                    }
+                    spaces[idx] = RoomSpace(
+                      id: sp.id,
+                      name: newName,
+                      areaSqm: sp.areaSqm,
+                      ceilingHeight: double.parse(newH.toStringAsFixed(2)),
+                      shapeType: sp.shapeType,
+                      cutoutDepth: sp.cutoutDepth,
+                      cutoutWidth: sp.cutoutWidth,
+                      canvasX: sp.canvasX,
+                      canvasY: sp.canvasY,
+                      canvasWidth: sp.canvasWidth,
+                      canvasHeight: sp.canvasHeight,
+                      perimeterMeters: sp.perimeterMeters,
+                      rcrValue: sp.rcrValue,
+                      polygonVertices: sp.polygonVertices,
+                    );
+                    _syncRoomSpacesFromBoxes(persist: true);
+                    _recalculateAllRouteLengths();
+                  });
+                }
+                Navigator.pop(ctx);
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
-      Widget _layerFilterChip(String mode, String label) {
+  void _showUnifiedPowerAndLightingAuditSheet() {
+    if (widget.project == null) return;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: BanaagTheme.surfaceCard,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) {
+          final sld = SldEngine.generateFromProject(widget.project!);
+          final powerAudit = PecSafetyAuditor.auditSchedule(sld);
+          final lightAudit = IesnaLightingAuditor.auditProject(widget.project!);
+          final bool isBlocked = powerAudit.isExportBlocked || lightAudit.isExportBlocked;
+
+          return SafeArea(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxHeight: MediaQuery.of(ctx).size.height * 0.86),
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          isBlocked ? Icons.gpp_bad : Icons.verified_user,
+                          color: isBlocked ? BanaagTheme.alertRed : BanaagTheme.successGreen,
+                          size: 24,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            isBlocked
+                                ? 'Export Interlock: Power & Illumination Audit'
+                                : '100% Verbatim PEC 2017 & IESNA 10th Ed. Verified',
+                            style: const TextStyle(color: Colors.white, fontSize: 15.5, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close, color: Colors.white60),
+                          onPressed: () => Navigator.pop(ctx),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Power Assurance: ${powerAudit.assurancePercent.toStringAsFixed(0)}% (${powerAudit.criticalHazardCount} hazards)  •  '
+                      'Lighting Assurance: ${lightAudit.assurancePercent.toStringAsFixed(0)}% (${lightAudit.compliantRoomsCount}/${lightAudit.totalRooms} rooms compliant)',
+                      style: const TextStyle(color: Colors.cyanAccent, fontSize: 11.5, fontWeight: FontWeight.w600),
+                    ),
+                    const Divider(color: Colors.white24, height: 18),
+                    Expanded(
+                      child: ListView(
+                        children: [
+                          const Text(
+                            '💡 IESNA 10TH ED. & DOLE RULE 1075 ROOM ILLUMINATION AUDIT',
+                            style: TextStyle(color: BanaagTheme.primaryAmber, fontSize: 11.5, fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(height: 6),
+                          ...lightAudit.roomFindings.map((rf) {
+                            final Color c = rf.severity == PecAuditSeverity.criticalHazard
+                                ? BanaagTheme.alertRed
+                                : (rf.severity == PecAuditSeverity.advisory ? Colors.orangeAccent : BanaagTheme.successGreen);
+                            return Container(
+                              margin: const EdgeInsets.only(bottom: 8),
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: c.withValues(alpha: 0.08),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: c.withValues(alpha: 0.5)),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Icon(
+                                        rf.severity == PecAuditSeverity.criticalHazard
+                                            ? Icons.warning_amber_rounded
+                                            : Icons.lightbulb_outline,
+                                        size: 16,
+                                        color: c,
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Expanded(
+                                        child: Text(
+                                          '${rf.roomName} (${rf.areaSqm.toStringAsFixed(1)} m² • H=${rf.ceilingHeightMeters.toStringAsFixed(1)}m)',
+                                          style: const TextStyle(color: Colors.white, fontSize: 12.5, fontWeight: FontWeight.bold),
+                                        ),
+                                      ),
+                                      Text(
+                                        '${rf.actualMaintainedLux.toStringAsFixed(0)} / ${rf.targetLux} Lux',
+                                        style: TextStyle(color: c, fontSize: 11.5, fontWeight: FontWeight.bold),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    rf.mathTrace,
+                                    style: const TextStyle(color: Colors.white70, fontSize: 10.0),
+                                  ),
+                                  if (rf.issues.isNotEmpty) ...[
+                                    const SizedBox(height: 4),
+                                    ...rf.issues.map(
+                                      (iss) => Padding(
+                                        padding: const EdgeInsets.only(top: 2),
+                                        child: Text('• $iss', style: TextStyle(color: c, fontSize: 10.5, fontWeight: FontWeight.w600)),
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            );
+                          }),
+                          if (lightAudit.branchCircuitIssues.isNotEmpty) ...[
+                            const SizedBox(height: 6),
+                            ...lightAudit.branchCircuitIssues.map(
+                              (bIss) => Padding(
+                                padding: const EdgeInsets.only(bottom: 6),
+                                child: Text('⚠️ $bIss', style: const TextStyle(color: BanaagTheme.alertRed, fontSize: 11, fontWeight: FontWeight.bold)),
+                              ),
+                            ),
+                          ],
+                          const SizedBox(height: 12),
+                          const Text(
+                            '⚡ PEC 2017 PART 1 BRANCH CIRCUIT & FEEDER POWER AUDIT',
+                            style: TextStyle(color: Colors.cyanAccent, fontSize: 11.5, fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(height: 6),
+                          ...powerAudit.circuitFindings.map((cf) {
+                            final Color c = cf.severity == PecAuditSeverity.criticalHazard
+                                ? BanaagTheme.alertRed
+                                : (cf.severity == PecAuditSeverity.advisory ? Colors.orangeAccent : BanaagTheme.successGreen);
+                            return Container(
+                              margin: const EdgeInsets.only(bottom: 6),
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.04),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(color: c.withValues(alpha: 0.45)),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    cf.severity == PecAuditSeverity.criticalHazard ? Icons.error_outline : Icons.check_circle_outline,
+                                    size: 15,
+                                    color: c,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      'Ckt #${cf.circuitNumber} (${cf.description}): ${cf.headline}',
+                                      style: const TextStyle(color: Colors.white, fontSize: 11.2),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 44,
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: BanaagTheme.primaryAmber,
+                          foregroundColor: Colors.black,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                        icon: const Icon(Icons.auto_fix_high, size: 18),
+                        label: const Text(
+                          '⚡ 1-Click Auto-Heal All Lighting & Power (IESNA + PEC 2017)',
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12.2),
+                        ),
+                        onPressed: () {
+                          setState(() {
+                            IesnaLightingAuditor.autoHealProjectLighting(widget.project!);
+                            _autoGenerateFromAppliances(widget.project!.applianceLoads);
+                            _recalculateAllRouteLengths();
+                            widget.project!.canvasPoints = _points;
+                            widget.project!.conduitRoutes = _routes;
+                            ProjectRepository.instance.updateProject(widget.project!);
+                          });
+                          setSheetState(() {});
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('✅ All Rooms Healed to 100% IESNA 10th Ed. Lux & Spacing + PEC 2017 Compliance!'),
+                              backgroundColor: BanaagTheme.successGreen,
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _layerFilterChip(String mode, String label) {
     final bool isSel = _activeLayerFilter == mode;
     return GestureDetector(
       onTap: () => setState(() => _activeLayerFilter = mode),
@@ -3944,11 +4410,11 @@ class CanvasPainter extends CustomPainter {
           canvas.drawCircle(activeSnapPoint!, 14.0, snapPaint);
         }
 
-        // 5. Center Room Info Badge (Name + Net Area + Perimeter + IESNA RCR)
+        // 5. Center Room Info Badge (Name + Net Area + Perimeter + Ceiling Height + IESNA RCR)
         final Rect bounds = polyPath.getBounds();
         final String titleLine = sp.name.toUpperCase();
         final String dimLine =
-            'Net ${sp.areaSqm.toStringAsFixed(1)} m² • Perim ${(sp.perimeterMeters ?? 0).toStringAsFixed(1)}m\nIESNA RCR: ${(sp.rcrValue ?? 0).toStringAsFixed(2)}';
+            'Net ${sp.areaSqm.toStringAsFixed(1)} m² • H=${sp.ceilingHeight.toStringAsFixed(1)}m\nPerim ${(sp.perimeterMeters ?? 0).toStringAsFixed(1)}m • RCR: ${(sp.rcrValue ?? 0).toStringAsFixed(2)}';
 
         final tp = TextPainter(
           text: TextSpan(

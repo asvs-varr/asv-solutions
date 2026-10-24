@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../../domain/models.dart';
 import '../../domain/lighting_engine.dart';
+import '../../domain/pec_safety_auditor.dart';
 import '../../domain/illuminance_grid_engine.dart';
 import '../../data/project_repository.dart';
 import '../theme/banaag_theme.dart';
@@ -1086,37 +1087,43 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
               tier: selectedTier,
             );
 
-            // 2. Dynamic ACU Horsepower Sizing based on room floor area
+            // 2. Dynamic ACU Horsepower Sizing based on 3D Volumetric Thermal Load (Area_eff = Area * max(1.0, H_room / 2.80m))
+            final double volumetricMultiplier = math.max(1.0, ceilingHeight / 2.80);
+            final double effectiveCoolingArea = area * volumetricMultiplier;
+            final String volTag = ceilingHeight > 2.85
+                ? ' [3D Vol ×${volumetricMultiplier.toStringAsFixed(2)} at H=${ceilingHeight.toStringAsFixed(1)}m]'
+                : '';
+
             final Map<String, dynamic> acuSpec;
-            if (area <= 10.0) {
+            if (effectiveCoolingArea <= 10.0) {
               acuSpec = {
                 'hp': '0.75 HP Inverter ACU (Compact)',
                 'va': 750.0,
-                'note': 'Optimal for compact spaces (≤10 m²) to prevent short-cycling and excessive starting inrush',
+                'note': 'Optimal for compact spaces (≤10 m² eq.)$volTag to prevent short-cycling and starting inrush',
               };
-            } else if (area <= 16.0) {
+            } else if (effectiveCoolingArea <= 16.0) {
               acuSpec = {
                 'hp': '1.0 HP Inverter ACU',
                 'va': 950.0,
-                'note': 'Standard branch circuit sizing for 11-16 m² spaces based on nominal thermal load',
+                'note': 'Standard branch circuit sizing for 11-16 m² eq. spaces$volTag based on 3D thermal volume',
               };
-            } else if (area <= 23.0) {
+            } else if (effectiveCoolingArea <= 23.0) {
               acuSpec = {
                 'hp': '1.5 HP Inverter ACU',
                 'va': 1650.0,
-                'note': 'Recommended branch feeder for 17-23 m² Master Bedroom or expansive living zones',
+                'note': 'Recommended branch feeder for 17-23 m² eq. zones$volTag',
               };
-            } else if (area <= 32.0) {
+            } else if (effectiveCoolingArea <= 32.0) {
               acuSpec = {
                 'hp': '2.0 HP Inverter Split ACU',
                 'va': 1950.0,
-                'note': 'Adequate for 24-32 m² Living & Dining open floor plan layouts',
+                'note': 'Adequate for 24-32 m² eq. open layouts$volTag',
               };
             } else {
               acuSpec = {
                 'hp': '2.5 HP Inverter Heavy Split ACU',
                 'va': 2600.0,
-                'note': 'High-capacity cooling for open-concept or expansive spaces (≥33 m²)',
+                'note': 'High-capacity cooling for expansive or high-ceiling spaces (≥33 m² eq.)$volTag',
               };
             }
 
@@ -2340,6 +2347,10 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
       perimeterMeters: _currentSpace.perimeterMeters,
       rcrOverride: _currentSpace.rcrValue,
     );
+    final roomLightingAudit = IesnaLightingAuditor.auditRoom(
+      space: _currentSpace,
+      roomAppliances: currentSpaceItems,
+    );
 
     return Scaffold(
       appBar: AppBar(
@@ -2437,7 +2448,7 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
             ),
           ),
 
-          // Smart Lighting Sizer Suggestion Ribbon
+          // Smart Lighting Sizer Suggestion & Live IESNA 10th Ed. + PEC 2017 Illumination Audit Ribbon
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
             color: const Color(0xFF1E2430),
@@ -2458,7 +2469,7 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
                             overflow: TextOverflow.ellipsis,
                           ),
                           Text(
-                            'IESNA 10th Ed. Eq. 10.31: ${lightingRec.roomType.recommendedLux} Lux • Net ${_currentSpace.areaSqm.toStringAsFixed(1)} m² • RCR ${lightingRec.rcrValue.toStringAsFixed(2)} • CU ${lightingRec.cuValue.toStringAsFixed(2)}',
+                            'IESNA 10th Ed. Eq. 10.31: ${lightingRec.roomType.recommendedLux} Lux • Net ${_currentSpace.areaSqm.toStringAsFixed(1)} m² • H ${_currentSpace.ceilingHeight.toStringAsFixed(1)}m • RCR ${lightingRec.rcrValue.toStringAsFixed(2)} • CU ${lightingRec.cuValue.toStringAsFixed(2)}',
                             style: const TextStyle(fontSize: 10, color: BanaagTheme.textMuted),
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -2467,6 +2478,73 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
                     ),
                   ],
                 ),
+                const SizedBox(height: 6),
+                // Live IESNA 10th Ed. & PEC 2017 Illumination Shield Badge + 1-Tap Auto-Heal Room Lighting
+                Builder(builder: (ctx) {
+                  final Color auditColor = roomLightingAudit.severity == PecAuditSeverity.criticalHazard
+                      ? BanaagTheme.alertRed
+                      : (roomLightingAudit.severity == PecAuditSeverity.advisory
+                          ? Colors.orangeAccent
+                          : BanaagTheme.successGreen);
+                  return Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: auditColor.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: auditColor.withValues(alpha: 0.65)),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          roomLightingAudit.severity == PecAuditSeverity.criticalHazard
+                              ? Icons.warning_amber_rounded
+                              : Icons.verified_user,
+                          size: 15,
+                          color: auditColor,
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            roomLightingAudit.severity == PecAuditSeverity.criticalHazard
+                                ? '🚨 ${roomLightingAudit.headline} • Spacing ${roomLightingAudit.actualSpacingMeters.toStringAsFixed(1)}m/${roomLightingAudit.maxAllowedSpacingMeters.toStringAsFixed(1)}m'
+                                : '🛡️ ${roomLightingAudit.headline} • S=${roomLightingAudit.actualSpacingMeters.toStringAsFixed(2)}m ≤ ${roomLightingAudit.maxAllowedSpacingMeters.toStringAsFixed(2)}m',
+                            style: TextStyle(color: auditColor, fontSize: 10.2, fontWeight: FontWeight.bold),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (roomLightingAudit.severity != PecAuditSeverity.compliant)
+                          GestureDetector(
+                            onTap: () {
+                              setState(() {
+                                IesnaLightingAuditor.autoHealRoomLighting(widget.project, _currentSpace);
+                                ProjectRepository.instance.updateProject(widget.project);
+                              });
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    '⚡ Auto-Healed ${_currentSpace.name} to 100% IESNA 10th Ed. (${lightingRec.fixtureCount}x ${lightingRec.recommendedWattagePerFixture}W ${lightingRec.primaryFixtureName})!',
+                                  ),
+                                  backgroundColor: BanaagTheme.successGreen,
+                                ),
+                              );
+                            },
+                            child: Container(
+                              margin: const EdgeInsets.only(left: 6),
+                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: auditColor,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: const Text(
+                                '⚡ Auto-Heal Lighting',
+                                style: TextStyle(color: Colors.black, fontSize: 9.5, fontWeight: FontWeight.w900),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  );
+                }),
                 const SizedBox(height: 6),
                 Row(
                   children: [

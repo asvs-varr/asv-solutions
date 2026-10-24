@@ -454,5 +454,88 @@ void main() {
       expect(takeoff.totalConduitMeters, closeTo(11.1, 0.01));
       expect(takeoff.conduitClampsCount, equals(17));
     });
+
+    test('13. Lock #4: Verbatim IESNA 10th Ed. (Eq. 10.31, Eq. 10.32, Sec. 8.4.2.7 Spacing) & IesnaLightingAuditor Auto-Heal', () {
+      // 1. Verify Polygon Room Cavity Ratio (Eq. 10.32: RCR = 2.5 * h_RC * Perimeter / Area_net)
+      // L-Shaped Function Hall: Net Area = 64.5 m², Perimeter = 36.2 m, Ceiling Height = 3.50m (h_RC = 2.70m)
+      // RCR = (2.5 * 2.70 * 36.2) / 64.5 = 244.35 / 64.5 = 3.78837
+      final recLow = LightingEngine.calculate(
+        roomType: RoomType.classroom,
+        areaSqm: 64.5,
+        ceilingHeightMeters: 2.8,
+        perimeterMeters: 36.2,
+      );
+      final recHigh = LightingEngine.calculate(
+        roomType: RoomType.classroom,
+        areaSqm: 64.5,
+        ceilingHeightMeters: 4.5, // High ceiling >= 4.0m triggers High-Output / High-Bay upgrade & higher RCR
+        perimeterMeters: 36.2,
+      );
+      expect(recHigh.rcrValue, greaterThan(recLow.rcrValue));
+      expect(recHigh.cuValue, lessThan(recLow.cuValue));
+      expect(recHigh.targetLumens, greaterThan(recLow.targetLumens));
+
+      // 2. Verify IesnaLightingAuditor detects UNDER-ILLUMINATED & DARK SPOTS violations, blocks export, and Auto-Heals to 100%
+      final hallSpace = RoomSpace(
+        id: 'sp-hall',
+        name: 'Function Hall / Event Place',
+        areaSqm: 64.5,
+        ceilingHeight: 3.5,
+        perimeterMeters: 36.2,
+      );
+      final officeSpace = RoomSpace(
+        id: 'sp-off',
+        name: 'Office Rooms',
+        areaSqm: 37.4,
+        ceilingHeight: 2.8,
+        perimeterMeters: 25.0,
+      );
+      final testProject = Project(
+        id: 'test-lighting-audit',
+        title: 'IESNA 10th Ed Lighting Audit',
+        clientName: 'Engr. Test',
+        clientContact: '09170000000',
+        siteAddress: 'Manila',
+        contractAmount: 0,
+        createdAt: DateTime.now(),
+        spaces: [hallSpace, officeSpace],
+        applianceLoads: [
+          // Intentionally under-lit Function Hall: only 1x 12W LED Downlight for 64.5 m² (produces ~10 Lux vs 400 Lux target & S = 8.03m > 3.38m max spacing!)
+          ApplianceItem(
+            id: 'under-1',
+            name: 'LED Downlight (12W x 1 pcs)',
+            roomCategory: 'Function Hall / Event Place',
+            ratingVA: 15.0,
+            quantity: 1,
+            isLighting: true,
+            circuitNumber: 1,
+          ),
+        ],
+        phases: [],
+      );
+
+      final beforeAudit = IesnaLightingAuditor.auditProject(testProject);
+      expect(beforeAudit.overallSeverity, equals(PecAuditSeverity.criticalHazard));
+      expect(beforeAudit.criticalHazardRoomsCount, equals(2)); // Both Hall (under-lit + dark spots) & Office (0 luminaires)
+      expect(beforeAudit.isExportBlocked, isTrue);
+
+      // Verify Spacing Criterion violation (S_actual = sqrt(64.5/1) = 8.03m > 1.25 * 2.70m = 3.375m)
+      final hallFinding = beforeAudit.roomFindings.first;
+      expect(hallFinding.actualSpacingMeters, greaterThan(hallFinding.maxAllowedSpacingMeters));
+
+      // Execute 1-Click Auto-Heal for Project Lighting
+      final healedRooms = IesnaLightingAuditor.autoHealProjectLighting(testProject);
+      expect(healedRooms, equals(2));
+
+      // Re-audit after Auto-Heal: must be 100% compliant (E_actual >= E_target AND S_actual <= 1.25 * h_RC) and export unblocked!
+      final afterAudit = IesnaLightingAuditor.auditProject(testProject);
+      expect(afterAudit.criticalHazardRoomsCount, equals(0));
+      expect(afterAudit.isExportBlocked, isFalse);
+      expect(afterAudit.assurancePercent, equals(100.0));
+      for (final rf in afterAudit.roomFindings) {
+        expect(rf.actualMaintainedLux, greaterThanOrEqualTo(rf.targetLux * 0.95));
+        expect(rf.actualSpacingMeters, lessThanOrEqualTo(rf.maxAllowedSpacingMeters * 1.05));
+      }
+    });
   });
 }
