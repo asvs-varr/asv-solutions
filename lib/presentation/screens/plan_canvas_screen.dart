@@ -52,12 +52,13 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
   double _pixelsPerMeter = 30.0;
   bool _showLabels = true;
   bool _showConduits = true;
+  String _activeLayerFilter = 'ALL'; // 'ALL', 'LIGHTING', 'POWER'
   CanvasPoint? _selectedPoint;
   CanvasPoint? _draggedPoint;
   Offset? _dragStartOffset;
   bool _hasMovedSignificantly = false;
   final TransformationController _zoomController = TransformationController();
-  double _currentZoom = 1.0;
+  double _currentZoom = 0.39;
 
   // Room-Zone Ceiling Centers (strictly inside house walls [x: 68..230, y: 168..358])
   static const List<Offset> _roomCeilingAnchors = [
@@ -119,6 +120,134 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
     super.dispose();
   }
 
+  void _fitSheetToViewport() {
+    // 1000 x 1220 unconstrained CAD sheet fitted to ~393px mobile screen width
+    const double fitScale = 0.39;
+    _currentZoom = fitScale;
+    _zoomController.value = Matrix4.identity()
+      ..translateByDouble(2.0, 6.0, 0.0, 1.0)
+      ..scaleByDouble(fitScale, fitScale, 1.0, 1.0);
+  }
+
+  /// Purges orphaned residential loads and fixes legacy misclassified room appliances
+  bool _sanitizeProjectApplianceLoads(Project proj) {
+    if (proj.spaces.isEmpty) return false;
+    bool modified = false;
+    final validRoomNames = proj.spaces.map((s) => s.name.trim().toLowerCase()).toSet();
+
+    final int beforeLen = proj.applianceLoads.length;
+    proj.applianceLoads.removeWhere((app) {
+      final cat = app.roomCategory.trim().toLowerCase();
+      if (cat.isEmpty) return false;
+      return !validRoomNames.contains(cat);
+    });
+    if (proj.applianceLoads.length != beforeLen) {
+      modified = true;
+    }
+
+    // Remove accidental residential loads (TV, Dining, Fan, ACU, WM, REF, RO, GFCI) from Storage & Landing
+    final int beforeSpecialClean = proj.applianceLoads.length;
+    proj.applianceLoads.removeWhere((app) {
+      final cat = app.roomCategory.toLowerCase();
+      final nm = app.name.toLowerCase();
+      if (cat.contains('storage') || cat.contains('store') || cat.contains('landing') || cat.contains('stair')) {
+        if (nm.contains('tv') ||
+            nm.contains('dining') ||
+            nm.contains('aircon') ||
+            nm.contains('acu') ||
+            nm.contains('fan') ||
+            nm.contains('refrigerator') ||
+            nm.contains('washing') ||
+            nm.contains('range') ||
+            nm.contains('heater') ||
+            nm.contains('shaver')) {
+          return true;
+        }
+      }
+      return false;
+    });
+    if (proj.applianceLoads.length != beforeSpecialClean) {
+      modified = true;
+    }
+
+    // Rename legacy Living Room TV / Dining Table in commercial rooms to Convenience Outlet
+    for (int i = 0; i < proj.applianceLoads.length; i++) {
+      final app = proj.applianceLoads[i];
+      final cat = app.roomCategory.toLowerCase();
+      final nm = app.name.toLowerCase();
+      if (cat.contains('hall') || cat.contains('event') || cat.contains('office') || cat.contains('staff')) {
+        if (nm.contains('living room tv') || nm.contains('dining table')) {
+          proj.applianceLoads[i] = ApplianceItem(
+            id: app.id,
+            name: 'Convenience Outlet (Duplex)',
+            roomCategory: app.roomCategory,
+            ratingVA: 180.0,
+            quantity: 2,
+            isDedicatedCircuit: false,
+            isLighting: false,
+            circuitNumber: app.circuitNumber,
+          );
+          modified = true;
+        }
+      }
+    }
+
+    // Ensure Storage and Landing have sensible PEC loads if emptied
+    for (final sp in proj.spaces) {
+      final lower = sp.name.toLowerCase();
+      final hasLoads = proj.applianceLoads.any((a) => a.roomCategory.toLowerCase() == lower);
+      if (!hasLoads) {
+        if (lower.contains('storage') || lower.contains('store')) {
+          proj.applianceLoads.addAll([
+            ApplianceItem(
+              id: 'auto-stor-l-${sp.id}',
+              name: 'Utility LED Tube Luminaire (18W x 2 pcs)',
+              roomCategory: sp.name,
+              ratingVA: 36.0,
+              isLighting: true,
+              quantity: 1,
+              circuitNumber: 1,
+            ),
+            ApplianceItem(
+              id: 'auto-stor-c-${sp.id}',
+              name: 'Utility Convenience Outlet (Duplex)',
+              roomCategory: sp.name,
+              ratingVA: 180.0,
+              isLighting: false,
+              quantity: 1,
+              circuitNumber: 2,
+            ),
+          ]);
+          modified = true;
+        } else if (lower.contains('landing') || lower.contains('stair')) {
+          proj.applianceLoads.addAll([
+            ApplianceItem(
+              id: 'auto-land-l-${sp.id}',
+              name: 'Stairwell / Landing LED Light (18W x 2 pcs)',
+              roomCategory: sp.name,
+              ratingVA: 36.0,
+              isLighting: true,
+              quantity: 1,
+              circuitNumber: 1,
+            ),
+            ApplianceItem(
+              id: 'auto-land-c-${sp.id}',
+              name: 'Emergency Light / Corridor Receptacle',
+              roomCategory: sp.name,
+              ratingVA: 180.0,
+              isLighting: false,
+              quantity: 1,
+              circuitNumber: 2,
+            ),
+          ]);
+          modified = true;
+        }
+      }
+    }
+
+    return modified;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -126,25 +255,35 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
     _blueprintPath = widget.project?.blueprintImagePath;
     _invertBlueprint = widget.project?.invertBlueprint ?? false;
     _pixelsPerMeter = widget.project?.calibrationPixelsPerMeter ?? 30.0;
-    if (widget.project != null && widget.project!.canvasPoints.isNotEmpty) {
+    _fitSheetToViewport();
+
+    bool loadsCleaned = false;
+    if (widget.project != null) {
+      loadsCleaned = _sanitizeProjectApplianceLoads(widget.project!);
+    }
+
+    if (widget.project != null && widget.project!.canvasPoints.isNotEmpty && !loadsCleaned) {
       _points = List<CanvasPoint>.from(widget.project!.canvasPoints);
       _routes = List<ConduitRoute>.from(widget.project!.conduitRoutes);
       _sanitizeAndFitExistingPointsIfNeeded();
     } else if (widget.project != null && widget.project!.applianceLoads.isNotEmpty) {
       _autoGenerateFromAppliances(widget.project!.applianceLoads);
+      widget.project!.canvasPoints = _points;
+      widget.project!.conduitRoutes = _routes;
+      ProjectRepository.instance.updateProject(widget.project!);
     } else {
       _points = [
-        CanvasPoint(id: 'pt-1', type: 'PANEL', label: 'MDP', x: 42, y: 285),
-        CanvasPoint(id: 'pt-2', type: 'SWITCH_1G', label: 'S1-1', x: 110, y: 225),
-        CanvasPoint(id: 'pt-3', type: 'LIGHT', label: 'L-1', x: 190, y: 225),
-        CanvasPoint(id: 'pt-4', type: 'OUTLET_DUPLEX', label: 'CO-1', x: 140, y: 335),
-        CanvasPoint(id: 'pt-5', type: 'ACU', label: 'ACU-1', x: 254, y: 170),
+        CanvasPoint(id: 'pt-1', type: 'PANEL', label: 'MDP', x: 585, y: 535),
+        CanvasPoint(id: 'pt-2', type: 'SWITCH_1G', label: 'S1-1', x: 645, y: 290),
+        CanvasPoint(id: 'pt-3', type: 'LIGHT', label: 'L-1', x: 675, y: 345),
+        CanvasPoint(id: 'pt-4', type: 'OUTLET_DUPLEX', label: 'CO-1', x: 604, y: 355),
+        CanvasPoint(id: 'pt-5', type: 'ACU', label: 'ACU-1', x: 882, y: 435),
       ];
       _routes = [
         ConduitRoute(id: 'rt-1', fromPointId: 'pt-1', toPointId: 'pt-2', measuredLengthMeters: 4.5),
         ConduitRoute(id: 'rt-2', fromPointId: 'pt-2', toPointId: 'pt-3', measuredLengthMeters: 3.2),
         ConduitRoute(id: 'rt-3', fromPointId: 'pt-1', toPointId: 'pt-4', measuredLengthMeters: 5.0),
-        ConduitRoute(id: 'rt-4', fromPointId: 'pt-4', toPointId: 'pt-5', measuredLengthMeters: 4.8),
+        ConduitRoute(id: 'rt-4', fromPointId: 'pt-1', toPointId: 'pt-5', measuredLengthMeters: 6.5),
       ];
     }
     if (_blueprintPath != null && PdfBlueprintEngine.isPdf(_blueprintPath)) {
@@ -179,66 +318,24 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
     }
   }
 
-  /// Automatically cleans up duplicate MDP panels or out-of-bounds coordinates
-  /// (e.g. x > 266 outside the right exterior wall) so all items sit strictly inside the rooms.
+  /// Automatically cleans up duplicate MDP panels, legacy residential artifacts, or misaligned coordinates
   void _sanitizeAndFitExistingPointsIfNeeded() {
     final panelCount = _points.where((p) => p.type == 'PANEL').length;
     final bool hasCadBlueprint = _hasBlueprintFile &&
         _blueprintPath != null &&
         PdfBlueprintEngine.isPdf(_blueprintPath!);
-    // Auto-migrate if trapped in legacy 266px box while having an institutional CAD blueprint
-    final bool isTrappedInLegacyBox = hasCadBlueprint &&
-        _points.isNotEmpty &&
-        _points.every((p) => p.x <= 270.0 && p.y >= 140.0 && p.y <= 400.0);
-    final hasOutOfBounds = _points.any((p) => p.x > 380.0 || p.y < 40.0 || p.y > 470.0);
 
-    if (panelCount > 1 || hasOutOfBounds || isTrappedInLegacyBox) {
+    // Detect if points were generated under old coordinate map (e.g. MDP at 480,690 or 155,285, or missing room switches, or containing orphaned WM/REF/RO)
+    final bool hasLegacyCadCoords = hasCadBlueprint && (
+        _points.any((p) => p.type == 'PANEL' && ((p.x - 585.0).abs() > 5.0 || (p.y - 535.0).abs() > 5.0)) ||
+        !_points.any((p) => p.type == 'SWITCH_1G') ||
+        _points.any((p) => p.label.startsWith('WM-') || p.label.startsWith('REF-') || p.label.startsWith('RO-'))
+    );
+
+    if (panelCount > 1 || hasLegacyCadCoords) {
       if (widget.project != null && widget.project!.applianceLoads.isNotEmpty) {
+        _sanitizeProjectApplianceLoads(widget.project!);
         _autoGenerateFromAppliances(widget.project!.applianceLoads);
-      } else {
-        bool keptFirstPanel = false;
-        final List<CanvasPoint> cleaned = [];
-        for (final pt in _points) {
-          if (pt.type == 'PANEL') {
-            if (keptFirstPanel) continue;
-            keptFirstPanel = true;
-            cleaned.add(CanvasPoint(
-              id: pt.id,
-              type: pt.type,
-              label: 'MDP',
-              x: hasCadBlueprint ? 155.0 : 42.0,
-              y: hasCadBlueprint ? 285.0 : 280.0,
-              circuitNumber: pt.circuitNumber,
-            ));
-            continue;
-          }
-          cleaned.add(pt);
-        }
-
-        int lightIdx = 0;
-        int wallIdx = 0;
-        for (final pt in cleaned) {
-          if (pt.type == 'PANEL') continue;
-          if (pt.type == 'LIGHT' || pt.type == 'FAN') {
-            final anchor = _roomCeilingAnchors[lightIdx % _roomCeilingAnchors.length];
-            final int cycle = lightIdx ~/ _roomCeilingAnchors.length;
-            pt.x = (anchor.dx + (cycle * 12.0)).clamp(52.0, 360.0);
-            pt.y = (anchor.dy + (cycle * 10.0)).clamp(60.0, 440.0);
-            lightIdx++;
-          } else {
-            final anchor = _wallPerimeterAnchors[wallIdx % _wallPerimeterAnchors.length];
-            final int cycle = wallIdx ~/ _wallPerimeterAnchors.length;
-            pt.x = (anchor.dx - (cycle * 10.0)).clamp(48.0, 360.0);
-            pt.y = (anchor.dy + (cycle * 8.0)).clamp(60.0, 440.0);
-            wallIdx++;
-          }
-        }
-        _points = cleaned;
-        final validIds = _points.map((p) => p.id).toSet();
-        _routes.removeWhere((r) => !validIds.contains(r.fromPointId) || !validIds.contains(r.toPointId));
-      }
-
-      if (widget.project != null) {
         widget.project!.canvasPoints = _points;
         widget.project!.conduitRoutes = _routes;
         ProjectRepository.instance.updateProject(widget.project!);
@@ -248,25 +345,21 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
 
   void _cycleZoomLevel() {
     setState(() {
-      if (_currentZoom < 1.4) {
-        _currentZoom = 1.75;
-      } else if (_currentZoom < 2.2) {
-        _currentZoom = 2.4;
-      } else {
-        _currentZoom = 1.0;
-      }
-
-      if (_currentZoom == 1.0) {
-        _zoomController.value = Matrix4.identity();
-      } else {
-        // Zoom toward the center of the floor plan (approx x: 160, y: 275)
-        const double centerX = 160.0;
-        const double centerY = 275.0;
-        final double dx = -centerX * (_currentZoom - 1.0);
-        final double dy = -centerY * (_currentZoom - 1.0);
+      if (_currentZoom < 0.55) {
+        // Zoom to 0.85x centered on building
+        _currentZoom = 0.85;
         _zoomController.value = Matrix4.identity()
-          ..translateByDouble(dx, dy, 0.0, 1.0)
+          ..translateByDouble(-240.0, -80.0, 0.0, 1.0)
           ..scaleByDouble(_currentZoom, _currentZoom, 1.0, 1.0);
+      } else if (_currentZoom < 1.25) {
+        // Zoom to 1.45x for detailed room inspection
+        _currentZoom = 1.45;
+        _zoomController.value = Matrix4.identity()
+          ..translateByDouble(-540.0, -220.0, 0.0, 1.0)
+          ..scaleByDouble(_currentZoom, _currentZoom, 1.0, 1.0);
+      } else {
+        // Reset to Full Sheet Fit (0.39x)
+        _fitSheetToViewport();
       }
     });
   }
@@ -275,7 +368,10 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
     if (pointType == 'PANEL') return 'MDP';
     if (pointType == 'ACU') return 'ACU-$index';
     if (pointType == 'LIGHT') return 'L-$index';
-    if (pointType == 'SWITCH_1G') return 'S1-$index';
+    if (pointType == 'SWITCH_1G') {
+      if (originalName.startsWith('S')) return originalName;
+      return 'S-$index';
+    }
     if (pointType == 'OUTLET_DUPLEX') {
       final lower = originalName.toLowerCase();
       if (lower.contains('gfci') || lower.contains('shaver') || lower.contains('bath')) return 'GFCI-$index';
@@ -288,6 +384,10 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
   }
 
   void _autoGenerateFromAppliances(List<ApplianceItem> appliances) {
+    if (widget.project != null) {
+      _sanitizeProjectApplianceLoads(widget.project!);
+      appliances = widget.project!.applianceLoads;
+    }
     final bool hasCadBlueprint = _hasBlueprintFile &&
         _blueprintPath != null &&
         PdfBlueprintEngine.isPdf(_blueprintPath!);
@@ -300,96 +400,104 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
     _autoGenerateForStandardDwelling(appliances);
   }
 
-  /// High-Precision PEC 2017 & IESNA Placement for CAD Institutional / Commercial Blueprints
+  /// High-Precision PEC 2017 & IESNA Placement for 1000 x 1220 Cropped CAD Building Blueprint
   void _autoGenerateForCadBuildingBlueprint(List<ApplianceItem> appliances) {
-    // Service Entrance / Landing MDP position (near stairs landing at x: 480, y: 690)
-    final panelPt = CanvasPoint(id: 'pt-panel', type: 'PANEL', label: 'MDP', x: 480.0, y: 690.0);
+    // Main Distribution Panel (MDP) at Landing / Central Corridor structural wall (x: 585, y: 535)
+    final panelPt = CanvasPoint(id: 'pt-panel', type: 'PANEL', label: 'MDP', x: 585.0, y: 535.0, circuitNumber: 0);
     _points = [panelPt];
     _routes = [];
 
-    // Exact architectural room anchors matching the 1000 x 1220 CAD world space
+    // Visually Verified Room Ceiling Luminaire Grids on 1000 x 1220 Cropped CAD Sheet
     final Map<String, List<Offset>> roomCeilingMap = {
       'function': [
-        // Symmetrical luminaire grid across the spacious Function Hall (Grids 1-5, Bays A-D)
-        const Offset(220.0, 180.0),
-        const Offset(340.0, 180.0),
-        const Offset(440.0, 180.0),
-        const Offset(220.0, 290.0),
-        const Offset(340.0, 290.0),
-        const Offset(440.0, 290.0),
-        const Offset(280.0, 390.0),
-        const Offset(380.0, 390.0),
+        // 2x4 Symmetrical Ceiling Grid inside Function Hall (Grids 1-7, Bays A-C: x=210..730, y=55..265)
+        const Offset(270.0, 105.0),
+        const Offset(400.0, 105.0),
+        const Offset(530.0, 105.0),
+        const Offset(660.0, 105.0),
+        const Offset(270.0, 210.0),
+        const Offset(400.0, 210.0),
+        const Offset(530.0, 210.0),
+        const Offset(660.0, 210.0),
       ],
       'staff': [
-        // Staff Room (Grids 7-10 upper right)
-        const Offset(750.0, 220.0),
-        const Offset(840.0, 220.0),
-        const Offset(795.0, 280.0),
+        // Staff Room Ceiling (Grids 7-10, Bays B-C: x=755..880, y=160..265)
+        const Offset(790.0, 210.0),
+        const Offset(850.0, 210.0),
       ],
       'office': [
-        // Office Rooms (Grids 7-10 mid right)
-        const Offset(720.0, 460.0),
-        const Offset(840.0, 460.0),
-        const Offset(720.0, 540.0),
-        const Offset(840.0, 540.0),
-      ],
-      'storage': [
-        // Storage Room (Grids 8-10 bottom right, beside stairs)
-        const Offset(760.0, 860.0),
-        const Offset(850.0, 860.0),
+        // 2x2 Symmetrical Ceiling Grid inside Office Rooms (Grids 5-10, Bays C-E: x=600..880, y=290..515)
+        const Offset(675.0, 345.0),
+        const Offset(810.0, 345.0),
+        const Offset(675.0, 455.0),
+        const Offset(810.0, 455.0),
       ],
       'landing': [
-        // Stairs & Landing (Grids 6-8 mid-lower)
-        const Offset(520.0, 680.0),
-        const Offset(620.0, 680.0),
-        const Offset(570.0, 740.0),
+        // Stairs & Landing Ceiling (Grids 5-9, Bays E-G: x=515..850, y=535..655)
+        const Offset(555.0, 585.0),
+        const Offset(795.0, 595.0),
+      ],
+      'storage': [
+        // Storage Room Ceiling (Grids 7-10, Bays G-H: x=755..880, y=675..735)
+        const Offset(790.0, 706.0),
+        const Offset(850.0, 706.0),
       ],
     };
 
-    final Map<String, List<Offset>> roomWallMap = {
+    // Visually Verified Door Switch Positions per Room
+    final Map<String, Map<String, dynamic>> roomSwitchMap = {
+      'function': {'pos': const Offset(255.0, 262.0), 'label': 'S3', 'ckt': 1},
+      'staff':    {'pos': const Offset(755.0, 255.0), 'label': 'S1', 'ckt': 1},
+      'office':   {'pos': const Offset(645.0, 290.0), 'label': 'S2', 'ckt': 2},
+      'landing':  {'pos': const Offset(530.0, 545.0), 'label': 'S3w', 'ckt': 2},
+      'storage':  {'pos': const Offset(795.0, 676.0), 'label': 'S1', 'ckt': 2},
+    };
+
+    // Visually Verified Wall Convenience Outlet Anchors per Room
+    final Map<String, List<Offset>> roomOutletMap = {
       'function': [
-        // Wall convenience outlets (<= 3.6m spacing) & ACU on exterior walls
-        const Offset(145.0, 180.0), // West exterior wall
-        const Offset(145.0, 290.0), // West exterior wall
-        const Offset(260.0, 95.0),  // North exterior wall
-        const Offset(380.0, 95.0),  // North exterior wall
-        const Offset(500.0, 95.0),  // North exterior wall
-        const Offset(525.0, 220.0), // East partition wall
-        const Offset(525.0, 330.0), // East partition wall
-        const Offset(145.0, 380.0), // Entrance D2 switch
+        const Offset(208.0, 105.0), // West exterior wall upper
+        const Offset(208.0, 210.0), // West exterior wall lower
+        const Offset(335.0, 52.0),  // North exterior wall left
+        const Offset(595.0, 52.0),  // North exterior wall right
+        const Offset(732.0, 155.0), // East partition wall
+        const Offset(465.0, 268.0), // South partition wall
       ],
       'staff': [
-        const Offset(665.0, 220.0), // West partition wall
-        const Offset(780.0, 140.0), // North exterior wall
-        const Offset(895.0, 220.0), // East exterior wall (ACU)
-        const Offset(780.0, 320.0), // South corridor partition
+        const Offset(755.0, 180.0), // West partition wall
+        const Offset(820.0, 158.0), // North wall
       ],
       'office': [
-        const Offset(665.0, 490.0), // West corridor partition
-        const Offset(780.0, 410.0), // North partition wall
-        const Offset(895.0, 490.0), // East exterior wall (W5 ACU)
-        const Offset(780.0, 580.0), // South partition wall
-      ],
-      'storage': [
-        const Offset(690.0, 860.0), // West partition wall
-        const Offset(790.0, 820.0), // North partition wall
-        const Offset(895.0, 860.0), // East exterior wall
-        const Offset(790.0, 905.0), // South exterior wall
+        const Offset(604.0, 355.0), // West corridor partition upper
+        const Offset(604.0, 455.0), // West corridor partition lower
+        const Offset(740.0, 515.0), // South partition wall
+        const Offset(880.0, 345.0), // East exterior wall upper
       ],
       'landing': [
-        const Offset(460.0, 690.0), // West landing wall (beside MDP)
-        const Offset(580.0, 690.0), // East stair wall
-        const Offset(520.0, 630.0), // Top stair landing
-        const Offset(520.0, 750.0), // Bottom stair landing
+        const Offset(650.0, 536.0), // Landing corridor wall
+      ],
+      'storage': [
+        const Offset(755.0, 706.0), // Storage west wall
       ],
     };
 
-    final Map<String, int> roomCeilIdx = {};
-    final Map<String, int> roomWallIdx = {};
+    // Visually Verified Exterior Window/Wall ACU Anchors per Room
+    final Map<String, List<Offset>> roomAcuMap = {
+      'function': [
+        const Offset(270.0, 52.0),  // North exterior wall Bay 1-3
+        const Offset(475.0, 52.0),  // North exterior wall Bay 3-5
+      ],
+      'staff': [
+        const Offset(882.0, 210.0), // East exterior wall
+      ],
+      'office': [
+        const Offset(882.0, 435.0), // East exterior wall W5
+      ],
+    };
 
     String getRoomKey(String roomCategory) {
       final lower = roomCategory.toLowerCase();
-      if (lower.contains('hall') || lower.contains('event')) return 'function';
+      if (lower.contains('hall') || lower.contains('event') || lower.contains('function')) return 'function';
       if (lower.contains('staff')) return 'staff';
       if (lower.contains('office')) return 'office';
       if (lower.contains('storage') || lower.contains('store')) return 'storage';
@@ -397,90 +505,150 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
       return 'function';
     }
 
-    int devCounter = 1;
-    int routeCounter = 1;
-    final Map<String, String> lastRoomLightId = {};
-    final Map<String, String> lastRoomOutletId = {};
+    // Group expanded fixture counts per room
+    final Map<String, int> roomLightCounts = {};
+    final Map<String, int> roomOutletCounts = {};
+    final Map<String, int> roomAcuCounts = {};
 
     for (final app in appliances) {
       final rKey = getRoomKey(app.roomCategory);
-      for (int i = 0; i < app.quantity; i++) {
-        String pointType = 'OUTLET_DUPLEX';
-        if (app.name.toLowerCase().contains('aircon') || app.name.toLowerCase().contains('acu')) {
-          pointType = 'ACU';
-        } else if (app.name.toLowerCase().contains('light') ||
-            app.name.toLowerCase().contains('fan') ||
-            app.name.toLowerCase().contains('luminaire') ||
-            app.name.toLowerCase().contains('led') ||
-            app.name.toLowerCase().contains('pinlight') ||
-            app.name.toLowerCase().contains('panel')) {
-          pointType = 'LIGHT';
-        } else if (app.name.toLowerCase().contains('switch')) {
-          pointType = 'SWITCH_1G';
+      final lowerName = app.name.toLowerCase();
+      final pcsMatch = RegExp(r'(?:x|\()\s*(\d+)\s*pcs', caseSensitive: false).firstMatch(app.name);
+      final int packMult = pcsMatch != null ? (int.tryParse(pcsMatch.group(1)!) ?? 1) : 1;
+
+      if (lowerName.contains('aircon') || lowerName.contains('acu')) {
+        // Storage and Landing never get ACUs
+        if (rKey != 'storage' && rKey != 'landing') {
+          roomAcuCounts[rKey] = (roomAcuCounts[rKey] ?? 0) + app.quantity;
         }
+      } else if (lowerName.contains('light') ||
+          lowerName.contains('luminaire') ||
+          lowerName.contains('led') ||
+          lowerName.contains('pinlight') ||
+          lowerName.contains('panel') ||
+          lowerName.contains('chandelier') ||
+          lowerName.contains('tube')) {
+        roomLightCounts[rKey] = (roomLightCounts[rKey] ?? 0) + (app.quantity * packMult);
+      } else if (!lowerName.contains('fan')) {
+        roomOutletCounts[rKey] = (roomOutletCounts[rKey] ?? 0) + app.quantity;
+      }
+    }
 
-        final pId = 'pt-$devCounter';
-        final compactLabel = _getShorthandLabel(pointType, app.name, devCounter);
-        final bool isCeiling = pointType == 'LIGHT' || pointType == 'FAN';
+    int lightCounter = 1;
+    int outletCounter = 1;
+    int acuCounter = 1;
+    int routeCounter = 1;
 
-        double px = 480.0;
-        double py = 690.0;
+    final orderedRooms = ['function', 'staff', 'office', 'landing', 'storage'];
 
-        if (isCeiling) {
-          final anchors = roomCeilingMap[rKey] ?? roomCeilingMap['function']!;
-          final idx = roomCeilIdx[rKey] ?? 0;
-          final base = anchors[idx % anchors.length];
-          final cycle = idx ~/ anchors.length;
-          px = (base.dx + (cycle * 16.0)).clamp(100.0, 920.0);
-          py = (base.dy + (cycle * 16.0)).clamp(80.0, 950.0);
-          roomCeilIdx[rKey] = idx + 1;
-        } else {
-          final anchors = roomWallMap[rKey] ?? roomWallMap['function']!;
-          final idx = roomWallIdx[rKey] ?? 0;
-          final base = anchors[idx % anchors.length];
-          final cycle = idx ~/ anchors.length;
-          px = (base.dx - (cycle * 14.0)).clamp(100.0, 920.0);
-          py = (base.dy + (cycle * 14.0)).clamp(80.0, 950.0);
-          roomWallIdx[rKey] = idx + 1;
-        }
+    for (final rKey in orderedRooms) {
+      final ceilAnchors = roomCeilingMap[rKey]!;
+      final rawLights = roomLightCounts[rKey] ?? 0;
+      // Cap ceiling lights to room's architectural grid capacity so icons never overlap
+      final int numLights = rawLights > 0 ? math.min(rawLights, ceilAnchors.length) : 0;
+
+      // 1. Place Room Wall Switch + Symmetrical Ceiling Lights (Lighting Layer E-1)
+      if (numLights > 0) {
+        final swInfo = roomSwitchMap[rKey]!;
+        final Offset swPos = swInfo['pos'] as Offset;
+        final String swLabel = swInfo['label'] as String;
+        final int swCkt = swInfo['ckt'] as int;
+        final String swId = 'pt-sw-$rKey';
 
         _points.add(CanvasPoint(
-          id: pId,
-          type: pointType,
-          label: compactLabel,
-          x: px,
-          y: py,
-          circuitNumber: app.circuitNumber,
+          id: swId,
+          type: 'SWITCH_1G',
+          label: swLabel,
+          x: swPos.dx,
+          y: swPos.dy,
+          circuitNumber: swCkt,
         ));
 
-        if (pointType == 'ACU' || app.isDedicatedCircuit) {
-          _routes.add(ConduitRoute(
-            id: 'rt-${routeCounter++}',
-            fromPointId: 'pt-panel',
-            toPointId: pId,
-            measuredLengthMeters: 6.5,
-          ));
-        } else if (isCeiling) {
-          final fromId = lastRoomLightId[rKey] ?? 'pt-panel';
-          _routes.add(ConduitRoute(
-            id: 'rt-${routeCounter++}',
-            fromPointId: fromId,
-            toPointId: pId,
-            measuredLengthMeters: fromId == 'pt-panel' ? 5.0 : 2.8,
-          ));
-          lastRoomLightId[rKey] = pId;
-        } else {
-          final fromId = lastRoomOutletId[rKey] ?? 'pt-panel';
-          _routes.add(ConduitRoute(
-            id: 'rt-${routeCounter++}',
-            fromPointId: fromId,
-            toPointId: pId,
-            measuredLengthMeters: fromId == 'pt-panel' ? 4.5 : 3.2,
-          ));
-          lastRoomOutletId[rKey] = pId;
-        }
+        // Home-run from MDP to Room Switch (renders as crisp CAD Home-Run Arrowhead)
+        _routes.add(ConduitRoute(
+          id: 'rt-${routeCounter++}',
+          fromPointId: 'pt-panel',
+          toPointId: swId,
+          measuredLengthMeters: 5.5,
+        ));
 
-        devCounter++;
+        String prevLightId = swId;
+        for (int i = 0; i < numLights; i++) {
+          final pos = ceilAnchors[i];
+          final String lId = 'pt-l-$lightCounter';
+          _points.add(CanvasPoint(
+            id: lId,
+            type: 'LIGHT',
+            label: 'L-${lightCounter++}',
+            x: pos.dx,
+            y: pos.dy,
+            circuitNumber: swCkt,
+          ));
+
+          // Intra-room conduit from Switch -> Light 1 -> Light 2...
+          _routes.add(ConduitRoute(
+            id: 'rt-${routeCounter++}',
+            fromPointId: prevLightId,
+            toPointId: lId,
+            measuredLengthMeters: 2.6,
+          ));
+          prevLightId = lId;
+        }
+      }
+
+      // 2. Place Room Convenience Outlets (Power Layer E-2)
+      final outAnchors = roomOutletMap[rKey]!;
+      final rawOutlets = roomOutletCounts[rKey] ?? 0;
+      final int numOutlets = rawOutlets > 0 ? math.min(rawOutlets, outAnchors.length) : 0;
+      final int powerCkt = rKey == 'function' ? 3 : (rKey == 'office' ? 4 : 5);
+
+      String prevOutletId = 'pt-panel';
+      for (int i = 0; i < numOutlets; i++) {
+        final pos = outAnchors[i];
+        final String cId = 'pt-co-$outletCounter';
+        _points.add(CanvasPoint(
+          id: cId,
+          type: 'OUTLET_DUPLEX',
+          label: 'CO-${outletCounter++}',
+          x: pos.dx,
+          y: pos.dy,
+          circuitNumber: powerCkt,
+        ));
+
+        _routes.add(ConduitRoute(
+          id: 'rt-${routeCounter++}',
+          fromPointId: prevOutletId,
+          toPointId: cId,
+          measuredLengthMeters: prevOutletId == 'pt-panel' ? 6.0 : 3.2,
+        ));
+        prevOutletId = cId;
+      }
+
+      // 3. Place Dedicated Air Conditioning Units (Power Layer E-2)
+      final acuAnchors = roomAcuMap[rKey] ?? const [];
+      final rawAcus = roomAcuCounts[rKey] ?? 0;
+      final int numAcus = rawAcus > 0 ? math.min(rawAcus, acuAnchors.length) : 0;
+
+      for (int i = 0; i < numAcus; i++) {
+        final pos = acuAnchors[i];
+        final String aId = 'pt-acu-$acuCounter';
+        final int acuCkt = 5 + acuCounter;
+        _points.add(CanvasPoint(
+          id: aId,
+          type: 'ACU',
+          label: 'ACU-${acuCounter++}',
+          x: pos.dx,
+          y: pos.dy,
+          circuitNumber: acuCkt,
+        ));
+
+        // Dedicated Home-run from MDP (renders as crisp CAD Home-Run Arrowhead)
+        _routes.add(ConduitRoute(
+          id: 'rt-${routeCounter++}',
+          fromPointId: 'pt-panel',
+          toPointId: aId,
+          measuredLengthMeters: 7.5,
+        ));
       }
     }
   }
@@ -1523,146 +1691,163 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                 ),
                 if (widget.project != null && widget.project!.applianceLoads.isNotEmpty) ...[
                   const SizedBox(height: 8),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 32,
-                    child: ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: BanaagTheme.primaryAmber,
-                        foregroundColor: Colors.black,
-                        padding: const EdgeInsets.symmetric(horizontal: 10),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                      ),
-                      icon: const Icon(Icons.flash_on, size: 16),
-                      label: Text(
-                        '⚡ Populate from Load Schedule (${widget.project!.applianceLoads.fold(0, (sum, a) => sum + a.quantity)} Devices)',
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11.5),
-                      ),
-                      onPressed: () {
-                        setState(() {
-                          _autoGenerateFromAppliances(widget.project!.applianceLoads);
-                          widget.project!.canvasPoints = _points;
-                          widget.project!.conduitRoutes = _routes;
-                          ProjectRepository.instance.updateProject(widget.project!);
-                          _selectedPoint = null;
-                        });
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('⚡ ${_points.length} devices auto-populated across rooms according to PEC 2017 & IESNA!'),
-                            backgroundColor: BanaagTheme.successGreen,
+                  Row(
+                    children: [
+                      Expanded(
+                        child: SizedBox(
+                          height: 30,
+                          child: ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: BanaagTheme.primaryAmber,
+                              foregroundColor: Colors.black,
+                              padding: const EdgeInsets.symmetric(horizontal: 8),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                            ),
+                            icon: const Icon(Icons.flash_on, size: 15),
+                            label: Text(
+                              '⚡ Populate Plan (${_points.length} pts)',
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            onPressed: () {
+                              setState(() {
+                                _autoGenerateFromAppliances(widget.project!.applianceLoads);
+                                widget.project!.canvasPoints = _points;
+                                widget.project!.conduitRoutes = _routes;
+                                ProjectRepository.instance.updateProject(widget.project!);
+                                _selectedPoint = null;
+                                _fitSheetToViewport();
+                              });
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('⚡ ${_points.length} devices auto-populated across rooms according to PEC 2017 & IESNA!'),
+                                  backgroundColor: BanaagTheme.successGreen,
+                                ),
+                              );
+                            },
                           ),
-                        );
-                      },
-                    ),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      _layerFilterChip('ALL', 'All'),
+                      const SizedBox(width: 4),
+                      _layerFilterChip('LIGHTING', '💡 E-1'),
+                      const SizedBox(width: 4),
+                      _layerFilterChip('POWER', '🔌 E-2'),
+                    ],
                   ),
                 ],
               ],
             ),
           ),
 
-          // Interactive 2D Grid Canvas with Blueprint Floor Plan Underlay + Zoom & Fit Controls
+          // Interactive 2D Grid Canvas with Unconstrained 1000x1220 CAD Sheet
           Expanded(
             child: Container(
               color: const Color(0xFF16191F),
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  // Zoomable Interactive Canvas (Floor Plan + Electrical Vector Layer move/scale together)
+                  // Unconstrained 1000x1220 CAD World Sheet: Floor Plan + Electrical Symbols locked 1:1
                   InteractiveViewer(
                     transformationController: _zoomController,
-                    minScale: 0.5,
-                    maxScale: 5.0,
+                    constrained: false,
+                    minScale: 0.25,
+                    maxScale: 4.5,
                     panEnabled: _selectedTool == 'PAN' || _draggedPoint == null,
                     scaleEnabled: true,
                     panAxis: PanAxis.free,
-                    boundaryMargin: const EdgeInsets.all(800.0),
+                    boundaryMargin: const EdgeInsets.all(600.0),
                     onInteractionEnd: (_) {
                       setState(() {
                         _currentZoom = _zoomController.value.getMaxScaleOnAxis();
                       });
                     },
-                    child: Center(
-                      child: SizedBox(
-                        width: 1000.0,
-                        height: 1220.0,
-                        child: GestureDetector(
-                          behavior: HitTestBehavior.translucent,
-                          onTapUp: _handleCanvasTap,
-                          onPanStart: _selectedTool == 'PAN' ? null : _handlePanStart,
-                          onPanUpdate: _selectedTool == 'PAN' ? null : _handlePanUpdate,
-                          onPanEnd: _selectedTool == 'PAN' ? null : _handlePanEnd,
-                          child: Stack(
-                            fit: StackFit.expand,
-                            children: [
-                              // 1. Blueprint Floor Plan Underlay
-                              if (_hasBlueprintFile && _isUnderlayVisible)
-                                Positioned.fill(
-                                  child: Opacity(
-                                    opacity: _underlayOpacity,
-                                    child: _blueprintPath!.toLowerCase().endsWith('.pdf')
-                                        ? (_renderedPdfImagePath != null && File(_renderedPdfImagePath!).existsSync()
-                                            ? ColorFiltered(
-                                                colorFilter: _invertBlueprint
-                                                    ? const ColorFilter.matrix([
-                                                        -1.0,  0.0,  0.0, 0.0, 255.0,
-                                                         0.0, -1.0,  0.0, 0.0, 255.0,
-                                                         0.0,  0.0, -1.0, 0.0, 255.0,
-                                                         0.0,  0.0,  0.0, 1.0,   0.0,
-                                                      ])
-                                                    : const ColorFilter.mode(Colors.transparent, BlendMode.dst),
-                                                child: Image.file(
-                                                  File(_renderedPdfImagePath!),
-                                                  fit: BoxFit.fill,
-                                                  errorBuilder: (ctx, err, stack) => _buildPdfUnderlayPlaceholder(),
-                                                ),
-                                              )
-                                            : (_isRenderingPdf
-                                                ? const Center(
-                                                    child: Column(
-                                                      mainAxisSize: MainAxisSize.min,
-                                                      children: [
-                                                        CircularProgressIndicator(color: BanaagTheme.primaryAmber),
-                                                        SizedBox(height: 12),
-                                                        Text(
-                                                          'Rendering Architectural Blueprint...',
-                                                          style: TextStyle(color: BanaagTheme.primaryAmber, fontSize: 12),
-                                                        ),
-                                                      ],
-                                                    ),
-                                                  )
-                                                : _buildPdfUnderlayPlaceholder()))
-                                        : Image.file(
-                                            File(_blueprintPath!),
-                                            fit: BoxFit.fill,
-                                            errorBuilder: (ctx, err, stack) => const SizedBox.shrink(),
-                                          ),
-                                  ),
+                    child: SizedBox(
+                      width: 1000.0,
+                      height: 1220.0,
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.translucent,
+                        onTapUp: _handleCanvasTap,
+                        onPanStart: _selectedTool == 'PAN' ? null : _handlePanStart,
+                        onPanUpdate: _selectedTool == 'PAN' ? null : _handlePanUpdate,
+                        onPanEnd: _selectedTool == 'PAN' ? null : _handlePanEnd,
+                        child: Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            // 1. Blueprint Floor Plan Underlay locked to 1000 x 1220
+                            if (_hasBlueprintFile && _isUnderlayVisible)
+                              Positioned.fill(
+                                child: Opacity(
+                                  opacity: _underlayOpacity,
+                                  child: _blueprintPath!.toLowerCase().endsWith('.pdf')
+                                      ? (_renderedPdfImagePath != null && File(_renderedPdfImagePath!).existsSync()
+                                          ? ColorFiltered(
+                                              colorFilter: _invertBlueprint
+                                                  ? const ColorFilter.matrix([
+                                                      -1.0,  0.0,  0.0, 0.0, 255.0,
+                                                       0.0, -1.0,  0.0, 0.0, 255.0,
+                                                       0.0,  0.0, -1.0, 0.0, 255.0,
+                                                       0.0,  0.0,  0.0, 1.0,   0.0,
+                                                    ])
+                                                  : const ColorFilter.mode(Colors.transparent, BlendMode.dst),
+                                              child: Image.file(
+                                                File(_renderedPdfImagePath!),
+                                                width: 1000.0,
+                                                height: 1220.0,
+                                                fit: BoxFit.fill,
+                                                errorBuilder: (ctx, err, stack) => _buildPdfUnderlayPlaceholder(),
+                                              ),
+                                            )
+                                          : (_isRenderingPdf
+                                              ? const Center(
+                                                  child: Column(
+                                                    mainAxisSize: MainAxisSize.min,
+                                                    children: [
+                                                      CircularProgressIndicator(color: BanaagTheme.primaryAmber),
+                                                      SizedBox(height: 12),
+                                                      Text(
+                                                        'Rendering Architectural Blueprint...',
+                                                        style: TextStyle(color: BanaagTheme.primaryAmber, fontSize: 12),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                )
+                                              : _buildPdfUnderlayPlaceholder()))
+                                      : Image.file(
+                                          File(_blueprintPath!),
+                                          width: 1000.0,
+                                          height: 1220.0,
+                                          fit: BoxFit.fill,
+                                          errorBuilder: (ctx, err, stack) => const SizedBox.shrink(),
+                                        ),
                                 ),
-
-                              // 2. Interactive Vector Electrical Layer
-                              CustomPaint(
-                                painter: CanvasPainter(
-                                  points: _points,
-                                  routes: _routes,
-                                  roomGeometry: _roomGeometry,
-                                  spaces: widget.project?.spaces ?? [],
-                                  isHeatmap: _isHeatmapVisible,
-                                  showLabels: _showLabels,
-                                  showConduits: _showConduits,
-                                  hasBlueprintUnderlay: _hasBlueprintFile && _isUnderlayVisible,
-                                  selectedPoint: _selectedPoint,
-                                  isCalibrating: _selectedTool == 'CALIBRATE',
-                                  pinA: _pinA,
-                                  pinB: _pinB,
-                                  activeSnapPoint: _activeSnapPoint,
-                                  pixelsPerMeter: _pixelsPerMeter,
-                                  activePolygonPoints: _activePolygonPoints,
-                                  calibratedRoomPolygons: _calibratedRoomPolygons,
-                                ),
-                                child: Container(),
                               ),
-                            ],
-                          ),
+
+                            // 2. Interactive Vector Electrical Layer locked to 1000 x 1220
+                            CustomPaint(
+                              size: const Size(1000.0, 1220.0),
+                              painter: CanvasPainter(
+                                points: _points,
+                                routes: _routes,
+                                roomGeometry: _roomGeometry,
+                                spaces: widget.project?.spaces ?? [],
+                                isHeatmap: _isHeatmapVisible,
+                                showLabels: _showLabels,
+                                showConduits: _showConduits,
+                                activeLayerFilter: _activeLayerFilter,
+                                hasBlueprintUnderlay: _hasBlueprintFile && _isUnderlayVisible,
+                                selectedPoint: _selectedPoint,
+                                isCalibrating: _selectedTool == 'CALIBRATE',
+                                pinA: _pinA,
+                                pinB: _pinB,
+                                activeSnapPoint: _activeSnapPoint,
+                                pixelsPerMeter: _pixelsPerMeter,
+                                activePolygonPoints: _activePolygonPoints,
+                                calibratedRoomPolygons: _calibratedRoomPolygons,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ),
@@ -1807,7 +1992,7 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        // 1-Tap Auto-Fit Items to Plan Button
+                        // 1-Tap Auto-Fit Items & Sheet to Plan Button
                         GestureDetector(
                           onTap: () {
                             setState(() {
@@ -1820,10 +2005,11 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                                 _sanitizeAndFitExistingPointsIfNeeded();
                               }
                               _selectedPoint = null;
+                              _fitSheetToViewport();
                             });
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
-                                content: Text('🎯 Items fitted strictly inside Floor Plan bounds!'),
+                                content: Text('🎯 Sheet & Devices fitted strictly inside Floor Plan rooms!'),
                                 backgroundColor: BanaagTheme.successGreen,
                                 duration: Duration(seconds: 2),
                               ),
@@ -2104,6 +2290,34 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
     );
   }
 
+  Widget _layerFilterChip(String mode, String label) {
+    final bool isSel = _activeLayerFilter == mode;
+    return GestureDetector(
+      onTap: () => setState(() => _activeLayerFilter = mode),
+      child: Container(
+        height: 30,
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: isSel ? Colors.cyanAccent.withValues(alpha: 0.22) : const Color(0xFF262C38),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(
+            color: isSel ? Colors.cyanAccent : Colors.white24,
+            width: isSel ? 1.3 : 0.8,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: isSel ? Colors.cyanAccent : Colors.white70,
+            fontSize: 10.5,
+            fontWeight: isSel ? FontWeight.bold : FontWeight.normal,
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _metricMini(String label, String value, String sub, {Color color = BanaagTheme.textHighEmphasis}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -2202,6 +2416,7 @@ class CanvasPainter extends CustomPainter {
   final bool isHeatmap;
   final bool showLabels;
   final bool showConduits;
+  final String activeLayerFilter;
   final bool hasBlueprintUnderlay;
   final CanvasPoint? selectedPoint;
   final bool isCalibrating;
@@ -2220,6 +2435,7 @@ class CanvasPainter extends CustomPainter {
     this.isHeatmap = false,
     this.showLabels = true,
     this.showConduits = true,
+    this.activeLayerFilter = 'ALL',
     this.hasBlueprintUnderlay = false,
     this.selectedPoint,
     this.isCalibrating = false,
@@ -2320,18 +2536,36 @@ class CanvasPainter extends CustomPainter {
       }
     }
 
-    // Draw Conduit Routes (Sleek Orthogonal 90-degree CAD Routing + AutoCAD Home-Run Arrowheads)
+    bool isPointVisibleInLayer(CanvasPoint pt) {
+      if (pt.type == 'PANEL') return true;
+      if (activeLayerFilter == 'LIGHTING') {
+        return pt.type == 'LIGHT' || pt.type == 'FAN' || pt.type == 'SWITCH_1G';
+      }
+      if (activeLayerFilter == 'POWER') {
+        return pt.type == 'OUTLET_DUPLEX' || pt.type == 'ACU';
+      }
+      return true;
+    }
+
+    // Draw Conduit Routes (Intra-Room Orthogonal CAD Conduits + Short Home-Run Arrowheads)
     if (showConduits) {
-      final routePaint = Paint()
-        ..color = BanaagTheme.primaryAmber.withValues(alpha: 0.62)
-        ..strokeWidth = 1.2
+      final lightingRoutePaint = Paint()
+        ..color = BanaagTheme.primaryAmber.withValues(alpha: 0.78)
+        ..strokeWidth = 1.6
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round;
+
+      final powerRoutePaint = Paint()
+        ..color = Colors.lightBlueAccent.withValues(alpha: 0.78)
+        ..strokeWidth = 1.6
         ..style = PaintingStyle.stroke
         ..strokeCap = StrokeCap.round
         ..strokeJoin = StrokeJoin.round;
 
       final homerunStubPaint = Paint()
-        ..color = Colors.cyanAccent.withValues(alpha: 0.85)
-        ..strokeWidth = 1.3
+        ..color = Colors.cyanAccent
+        ..strokeWidth = 1.7
         ..style = PaintingStyle.stroke
         ..strokeCap = StrokeCap.round;
 
@@ -2340,16 +2574,14 @@ class CanvasPainter extends CustomPainter {
         final p2 = points.firstWhere((p) => p.id == r.toPointId, orElse: () => points.first);
 
         if (p1.id == p2.id) continue;
+        if (!isPointVisibleInLayer(p1) || !isPointVisibleInLayer(p2)) continue;
 
-        final bool isDedicatedHomerun =
-            p1.type == 'PANEL' && (p2.type == 'ACU' || p2.circuitNumber > 2);
-
-        if (isDedicatedHomerun) {
-          // AutoCAD Standard: Draw a short Home-Run Arrowhead stub pointing toward MDP
-          // instead of cluttering the floor plan with long crossing lines
+        // Every home-run from MDP (PANEL) is drawn as a crisp CAD Home-Run Arrowhead (───► Ckt)
+        // at the room's entry point (Switch, First Outlet, or ACU) so cross-building lines never clutter the plan!
+        if (p1.type == 'PANEL') {
           final angle = math.atan2(p1.y - p2.y, p1.x - p2.x);
-          const double startDist = 7.5;
-          const double endDist = 18.0;
+          const double startDist = 9.0;
+          const double endDist = 23.0;
           final stubStart = Offset(
             p2.x + math.cos(angle) * startDist,
             p2.y + math.sin(angle) * startDist,
@@ -2362,7 +2594,7 @@ class CanvasPainter extends CustomPainter {
           canvas.drawLine(stubStart, stubTip, homerunStubPaint);
 
           // Arrowhead wings at stubTip
-          const double wingLen = 4.5;
+          const double wingLen = 5.5;
           const double wingAngle = 0.55;
           final wing1 = Offset(
             stubTip.dx - math.cos(angle - wingAngle) * wingLen,
@@ -2375,17 +2607,34 @@ class CanvasPainter extends CustomPainter {
           canvas.drawLine(stubTip, wing1, homerunStubPaint);
           canvas.drawLine(stubTip, wing2, homerunStubPaint);
 
-          // Tiny conductor slash tick across the midpoint of the homerun stub
+          // Conductor slash ticks + Circuit Tag (e.g. C1, C2)
           final midStub = Offset(
             (stubStart.dx + stubTip.dx) / 2,
             (stubStart.dy + stubTip.dy) / 2,
           );
           final perpAngle = angle + (math.pi / 4);
           canvas.drawLine(
-            Offset(midStub.dx - math.cos(perpAngle) * 3.0, midStub.dy - math.sin(perpAngle) * 3.0),
-            Offset(midStub.dx + math.cos(perpAngle) * 3.0, midStub.dy + math.sin(perpAngle) * 3.0),
+            Offset(midStub.dx - math.cos(perpAngle) * 3.5, midStub.dy - math.sin(perpAngle) * 3.5),
+            Offset(midStub.dx + math.cos(perpAngle) * 3.5, midStub.dy + math.sin(perpAngle) * 3.5),
             homerunStubPaint,
           );
+
+          if (showLabels && p2.circuitNumber > 0) {
+            final cktSpan = TextSpan(
+              text: 'C${p2.circuitNumber}',
+              style: const TextStyle(
+                color: Colors.cyanAccent,
+                fontSize: 7.5,
+                fontWeight: FontWeight.bold,
+              ),
+            );
+            final cktTp = TextPainter(text: cktSpan, textDirection: TextDirection.ltr)..layout();
+            final tagOffset = Offset(
+              stubTip.dx + math.cos(angle) * 6.0 - cktTp.width / 2,
+              stubTip.dy + math.sin(angle) * 6.0 - cktTp.height / 2,
+            );
+            cktTp.paint(canvas, tagOffset);
+          }
           continue;
         }
 
@@ -2403,15 +2652,17 @@ class CanvasPainter extends CustomPainter {
           path.lineTo(p2.x, p2.y);
         }
 
-        canvas.drawPath(path, routePaint);
+        final bool isPowerRun = p2.type == 'OUTLET_DUPLEX' || p2.type == 'ACU';
+        canvas.drawPath(path, isPowerRun ? powerRoutePaint : lightingRoutePaint);
       }
     }
 
-    // Draw Micro-CAD Points (6.5px radius so rooms & walls remain clearly visible)
+    // Draw Crisp CAD Points (scaled cleanly for the 1000 x 1220 CAD sheet)
     for (final pt in points) {
+      if (!isPointVisibleInLayer(pt)) continue;
       final isSel = selectedPoint?.id == pt.id;
       final bool isPanel = pt.type == 'PANEL';
-      final double radius = isSel ? 7.5 : (isPanel ? 6.2 : 5.0);
+      final double radius = isSel ? 11.0 : (isPanel ? 9.5 : 7.5);
       final pointPaint = Paint()..color = getColorForType(pt.type);
 
       // Selection halo
@@ -2451,9 +2702,9 @@ class CanvasPainter extends CustomPainter {
           text: displayLabel,
           style: const TextStyle(
             color: Colors.white,
-            fontSize: 6.4,
+            fontSize: 8.5,
             fontWeight: FontWeight.w700,
-            letterSpacing: 0.1,
+            letterSpacing: 0.2,
           ),
         );
         final textPainter = TextPainter(text: textSpan, textDirection: TextDirection.ltr);

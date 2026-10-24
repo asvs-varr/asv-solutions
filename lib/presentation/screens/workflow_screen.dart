@@ -965,6 +965,10 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
       onConfirmed: (scannedSpaces, lengthM, widthM) {
         setState(() {
           _project.spaces = scannedSpaces;
+          final validSpaceNames = scannedSpaces.map((s) => s.name.trim().toLowerCase()).toSet();
+          _project.applianceLoads.removeWhere((a) => !validSpaceNames.contains(a.roomCategory.trim().toLowerCase()));
+          _project.canvasPoints.clear();
+          _project.conduitRoutes.clear();
           _project.blueprintImagePath = path;
           _project.roomGeometry = RoomGeometry(
             roomType: 'RECTANGULAR',

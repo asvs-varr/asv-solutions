@@ -95,6 +95,29 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
         RoomSpace(id: 'sp-4', name: 'Bath & Laundry', areaSqm: 8.0, ceilingHeight: 2.6),
       ]);
       ProjectRepository.instance.updateProject(widget.project);
+    } else {
+      // Purge any orphaned applianceLoads whose roomCategory no longer exists in _spaces
+      final validNames = _spaces.map((s) => s.name.trim().toLowerCase()).toSet();
+      final beforeCount = widget.project.applianceLoads.length;
+      widget.project.applianceLoads.removeWhere(
+        (a) => !validNames.contains(a.roomCategory.trim().toLowerCase()),
+      );
+      // Also remove accidental residential TV/Dining/ACU items inside Storage or Landing
+      widget.project.applianceLoads.removeWhere((a) {
+        final r = a.roomCategory.toLowerCase();
+        final n = a.name.toLowerCase();
+        if (r.contains('storage') || r.contains('landing') || r.contains('stair')) {
+          return n.contains('living room tv') ||
+              n.contains('dining table') ||
+              n.contains('ceiling fan') ||
+              n.contains('acu') ||
+              n.contains('aircon');
+        }
+        return false;
+      });
+      if (widget.project.applianceLoads.length != beforeCount) {
+        ProjectRepository.instance.updateProject(widget.project);
+      }
     }
     _activeSpaceName = _spaces.first.name;
   }
@@ -111,8 +134,11 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
     if (lower.contains('kitchen')) return RoomType.kitchen;
     if (lower.contains('bed')) return RoomType.bedroom;
     if (lower.contains('bath') || lower.contains('laundry')) return RoomType.bathroom;
-    if (lower.contains('office') || lower.contains('study')) return RoomType.homeOffice;
-    if (lower.contains('garage') || lower.contains('outdoor') || lower.contains('deck')) return RoomType.garageStorage;
+    if (lower.contains('office') || lower.contains('faculty') || lower.contains('admin')) return RoomType.facultyOffice;
+    if (lower.contains('staff') || lower.contains('study')) return RoomType.homeOffice;
+    if (lower.contains('hall') || lower.contains('event') || lower.contains('function') || lower.contains('class')) return RoomType.classroom;
+    if (lower.contains('landing') || lower.contains('stair') || lower.contains('corridor')) return RoomType.hallwayCorridor;
+    if (lower.contains('storage') || lower.contains('store') || lower.contains('garage') || lower.contains('outdoor') || lower.contains('deck')) return RoomType.garageStorage;
     return RoomType.livingDining;
   }
 
@@ -1217,6 +1243,111 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
                   'citation': 'PEC 2017 Art 2.10.1.11(C)(2)',
                   'rule': 'Minimum 20A individual branch circuit for laundry area',
                   'icon': Icons.local_laundry_service,
+                },
+              ]);
+            } else if (lower.contains('storage') || lower.contains('store')) {
+              previewItems.addAll([
+                {
+                  'name': 'Utility & Maintenance Convenience Outlet (Duplex)',
+                  'va': 180.0,
+                  'isLighting': false,
+                  'isDedicated': false,
+                  'citation': 'PEC 2017 Art 2.10.3.14',
+                  'rule': 'At least one convenience receptacle outlet required for storage & utility spaces',
+                  'icon': Icons.power,
+                },
+              ]);
+            } else if (lower.contains('landing') || lower.contains('stair') || lower.contains('corridor')) {
+              previewItems.addAll([
+                {
+                  'name': 'Emergency Exit & Corridor Maintenance Outlet',
+                  'va': 180.0,
+                  'isLighting': false,
+                  'isDedicated': false,
+                  'citation': 'PEC 2017 Art 2.10.3.3 & Art 7.0.1.1',
+                  'rule': 'Corridor & stairwell receptacle for emergency battery luminaire and maintenance equipment',
+                  'icon': Icons.emergency_share_outlined,
+                },
+              ]);
+            } else if (lower.contains('office')) {
+              previewItems.addAll([
+                {
+                  'name': 'Workstation & Computer Duplex Outlets (4 pcs)',
+                  'va': 720.0,
+                  'isLighting': false,
+                  'isDedicated': false,
+                  'citation': 'PEC 2017 Art 2.20.2.5(I)',
+                  'rule': '180 VA per duplex receptacle yoke for office desktop workstations & printers',
+                  'icon': Icons.computer,
+                },
+                {
+                  'name': 'Dedicated ${acuSpec['hp']} Outlet',
+                  'va': (acuSpec['va'] as num).toDouble(),
+                  'isLighting': false,
+                  'isDedicated': true,
+                  'citation': 'PEC 2017 Art 4.40.4.2 & ASHRAE Sizing',
+                  'rule': '${acuSpec['note']} (${area.toStringAsFixed(0)} m² office)',
+                  'icon': Icons.ac_unit,
+                },
+              ]);
+            } else if (lower.contains('staff')) {
+              previewItems.addAll([
+                {
+                  'name': 'Staff Desk & Lounge Convenience Outlets (2 pcs)',
+                  'va': 360.0,
+                  'isLighting': false,
+                  'isDedicated': false,
+                  'citation': 'PEC 2017 Art 2.10.3.3',
+                  'rule': 'Perimeter convenience receptacles for staff tables and charging stations',
+                  'icon': Icons.power,
+                },
+                {
+                  'name': 'Pantry Dispenser & Appliance Outlet',
+                  'va': 360.0,
+                  'isLighting': false,
+                  'isDedicated': false,
+                  'citation': 'PEC 2017 Art 2.10.2.5',
+                  'rule': 'Receptacle for staff pantry water dispenser / coffee maker',
+                  'icon': Icons.coffee_maker,
+                },
+                {
+                  'name': 'Dedicated ${acuSpec['hp']} Outlet',
+                  'va': (acuSpec['va'] as num).toDouble(),
+                  'isLighting': false,
+                  'isDedicated': true,
+                  'citation': 'PEC 2017 Art 4.40.4.2 & ASHRAE Sizing',
+                  'rule': '${acuSpec['note']} (${area.toStringAsFixed(0)} m² staff room)',
+                  'icon': Icons.ac_unit,
+                },
+              ]);
+            } else if (lower.contains('hall') || lower.contains('event') || lower.contains('function')) {
+              previewItems.addAll([
+                {
+                  'name': 'Perimeter Event & PA System Convenience Outlets (6 pcs)',
+                  'va': 1080.0,
+                  'isLighting': false,
+                  'isDedicated': false,
+                  'citation': 'PEC 2017 Art 2.10.3.3 & Art 5.18.1.1',
+                  'rule': 'Assembly hall perimeter receptacles spaced <= 3.6m for sound system and podium equipment',
+                  'icon': Icons.speaker_group_outlined,
+                },
+                {
+                  'name': 'Dedicated 2.5 HP Inverter Heavy Split ACU Outlet (Unit 1)',
+                  'va': 2600.0,
+                  'isLighting': false,
+                  'isDedicated': true,
+                  'citation': 'PEC 2017 Art 4.40.4.2',
+                  'rule': 'Individual branch circuit #1 for high-capacity Function Hall cooling',
+                  'icon': Icons.ac_unit,
+                },
+                {
+                  'name': 'Dedicated 2.5 HP Inverter Heavy Split ACU Outlet (Unit 2)',
+                  'va': 2600.0,
+                  'isLighting': false,
+                  'isDedicated': true,
+                  'citation': 'PEC 2017 Art 4.40.4.2',
+                  'rule': 'Individual branch circuit #2 for balanced dual-zone Function Hall cooling',
+                  'icon': Icons.ac_unit,
                 },
               ]);
             } else if (lower.contains('garage') || lower.contains('outdoor')) {
