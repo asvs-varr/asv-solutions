@@ -50,9 +50,9 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
   String? _renderedPdfImagePath;
   bool _isRenderingPdf = false;
   bool _invertBlueprint = false;
-  // Default Reference Scale Pins along the 15,500 mm top exterior wall (x: 198..892, y: 42)
-  Offset _pinA = const Offset(198, 42);
-  Offset _pinB = const Offset(892, 42);
+  // Default Reference Scale Pins along the 15,500 mm top exterior wall (centered on 1400x1600 sheet)
+  Offset _pinA = const Offset(338, 162);
+  Offset _pinB = const Offset(1032, 162);
 
   // 3-Stage Engineering Flow State:
   // Stage 1 = Blank Floor Plan Scale (Step 0) & 1-by-1 Polygon Room Wizard (Step 1)
@@ -73,9 +73,9 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
   int? _activeDraggingRoomCorner; // 0=TL, 1=TR, 2=BR, 3=BL, 4=CenterMove
   int? _activeDraggingVertexIndex; // Active polygon vertex index being dragged in Step 1
 
-  // Scanned CAD Structural Wall Grid Lines on 1000x1220 Sheet (for Magnetic Wall Snapping)
-  static const List<double> _cadSnapGridX = [198.0, 378.0, 510.0, 592.0, 744.0, 855.0, 892.0];
-  static const List<double> _cadSnapGridY = [42.0, 148.0, 278.0, 342.0, 528.0, 598.0, 668.0, 742.0];
+  // Scanned CAD Structural Wall Grid Lines on 1400x1600 Sheet (for Magnetic Wall Snapping)
+  static const List<double> _cadSnapGridX = [338.0, 518.0, 650.0, 732.0, 884.0, 995.0, 1032.0];
+  static const List<double> _cadSnapGridY = [162.0, 268.0, 398.0, 462.0, 648.0, 718.0, 788.0, 862.0];
 
   // Multi-Point Polygon Calibration Engine for Real Rooms
   final List<Offset> _activePolygonPoints = [];
@@ -155,9 +155,14 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
     super.dispose();
   }
 
+  static const double _cadCanvasWidth = 1400.0;
+  static const double _cadCanvasHeight = 1600.0;
+  static const double _planOriginX = 140.0;
+  static const double _planOriginY = 120.0;
+
   void _fitSheetToViewport() {
-    // 1000 x 1220 unconstrained CAD sheet fitted to ~393px mobile screen width
-    const double fitScale = 0.39;
+    // 1400 x 1600 unconstrained CAD sheet fitted cleanly to mobile screen (~393px width)
+    const double fitScale = 0.28;
     _currentZoom = fitScale;
     _zoomController.value = Matrix4.identity()
       ..translateByDouble(2.0, 6.0, 0.0, 1.0)
@@ -286,69 +291,69 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
   Rect _defaultCadRectForRoom(String roomName, int index) {
     final lower = roomName.toLowerCase();
     if (lower.contains('hall') || lower.contains('event') || lower.contains('function')) {
-      return const Rect.fromLTWH(198.0, 42.0, 546.0, 300.0);
+      return const Rect.fromLTWH(198.0 + _planOriginX, 42.0 + _planOriginY, 546.0, 300.0);
     }
     if (lower.contains('staff')) {
-      return const Rect.fromLTWH(744.0, 148.0, 148.0, 130.0);
+      return const Rect.fromLTWH(744.0 + _planOriginX, 148.0 + _planOriginY, 148.0, 130.0);
     }
     if (lower.contains('office')) {
-      return const Rect.fromLTWH(592.0, 278.0, 300.0, 250.0);
+      return const Rect.fromLTWH(592.0 + _planOriginX, 278.0 + _planOriginY, 300.0, 250.0);
     }
     if (lower.contains('landing') || lower.contains('stair')) {
-      return const Rect.fromLTWH(510.0, 528.0, 345.0, 140.0);
+      return const Rect.fromLTWH(510.0 + _planOriginX, 528.0 + _planOriginY, 345.0, 140.0);
     }
     if (lower.contains('storage') || lower.contains('store')) {
-      return const Rect.fromLTWH(744.0, 668.0, 148.0, 74.0);
+      return const Rect.fromLTWH(744.0 + _planOriginX, 668.0 + _planOriginY, 148.0, 74.0);
     }
-    final double col = (index % 2) * 320.0 + 200.0;
-    final double row = (index ~/ 2) * 220.0 + 80.0;
+    final double col = (index % 2) * 320.0 + 200.0 + _planOriginX;
+    final double row = (index ~/ 2) * 220.0 + 80.0 + _planOriginY;
     return Rect.fromLTWH(col, row, 280.0, 190.0);
   }
 
-  /// Default Multi-Vertex Polygon on the 1000x1220 CAD Sheet (supports L-shapes & alcoves)
+  /// Default Multi-Vertex Polygon on the expanded 1400x1600 CAD Sheet (supports L-shapes & alcoves)
   List<Offset> _defaultCadPolygonForRoom(String roomName, int index) {
     final lower = roomName.toLowerCase();
     if (lower.contains('hall') || lower.contains('event') || lower.contains('function')) {
       // L-Shaped Function Hall / Event Place matching the scanned CAD floor plan walls!
       return [
-        const Offset(198.0, 42.0),
-        const Offset(744.0, 42.0),
-        const Offset(744.0, 278.0),
-        const Offset(378.0, 278.0),
-        const Offset(378.0, 342.0),
-        const Offset(198.0, 342.0),
+        const Offset(198.0 + _planOriginX, 42.0 + _planOriginY),
+        const Offset(744.0 + _planOriginX, 42.0 + _planOriginY),
+        const Offset(744.0 + _planOriginX, 278.0 + _planOriginY),
+        const Offset(378.0 + _planOriginX, 278.0 + _planOriginY),
+        const Offset(378.0 + _planOriginX, 342.0 + _planOriginY),
+        const Offset(198.0 + _planOriginX, 342.0 + _planOriginY),
       ];
     }
     if (lower.contains('staff')) {
       return [
-        const Offset(744.0, 148.0),
-        const Offset(892.0, 148.0),
-        const Offset(892.0, 278.0),
-        const Offset(744.0, 278.0),
+        const Offset(744.0 + _planOriginX, 148.0 + _planOriginY),
+        const Offset(892.0 + _planOriginX, 148.0 + _planOriginY),
+        const Offset(892.0 + _planOriginX, 278.0 + _planOriginY),
+        const Offset(744.0 + _planOriginX, 278.0 + _planOriginY),
       ];
     }
     if (lower.contains('office')) {
       return [
-        const Offset(592.0, 278.0),
-        const Offset(892.0, 278.0),
-        const Offset(892.0, 528.0),
-        const Offset(592.0, 528.0),
+        const Offset(592.0 + _planOriginX, 278.0 + _planOriginY),
+        const Offset(892.0 + _planOriginX, 278.0 + _planOriginY),
+        const Offset(892.0 + _planOriginX, 528.0 + _planOriginY),
+        const Offset(592.0 + _planOriginX, 528.0 + _planOriginY),
       ];
     }
     if (lower.contains('landing') || lower.contains('stair')) {
       return [
-        const Offset(510.0, 528.0),
-        const Offset(855.0, 528.0),
-        const Offset(855.0, 668.0),
-        const Offset(510.0, 668.0),
+        const Offset(510.0 + _planOriginX, 528.0 + _planOriginY),
+        const Offset(855.0 + _planOriginX, 528.0 + _planOriginY),
+        const Offset(855.0 + _planOriginX, 668.0 + _planOriginY),
+        const Offset(510.0 + _planOriginX, 668.0 + _planOriginY),
       ];
     }
     if (lower.contains('storage') || lower.contains('store')) {
       return [
-        const Offset(744.0, 668.0),
-        const Offset(892.0, 668.0),
-        const Offset(892.0, 742.0),
-        const Offset(744.0, 742.0),
+        const Offset(744.0 + _planOriginX, 668.0 + _planOriginY),
+        const Offset(892.0 + _planOriginX, 668.0 + _planOriginY),
+        const Offset(892.0 + _planOriginX, 742.0 + _planOriginY),
+        const Offset(744.0 + _planOriginX, 742.0 + _planOriginY),
       ];
     }
     final r = _defaultCadRectForRoom(roomName, index);
@@ -834,20 +839,26 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
 
   void _cycleZoomLevel() {
     setState(() {
-      if (_currentZoom < 0.55) {
-        // Zoom to 0.85x centered on building
-        _currentZoom = 0.85;
+      if (_currentZoom < 0.40) {
+        // Zoom to 0.75x centered on building
+        _currentZoom = 0.75;
         _zoomController.value = Matrix4.identity()
-          ..translateByDouble(-240.0, -80.0, 0.0, 1.0)
+          ..translateByDouble(-260.0, -100.0, 0.0, 1.0)
           ..scaleByDouble(_currentZoom, _currentZoom, 1.0, 1.0);
-      } else if (_currentZoom < 1.25) {
-        // Zoom to 1.45x for detailed room inspection
-        _currentZoom = 1.45;
+      } else if (_currentZoom < 1.10) {
+        // Zoom to 1.60x for detailed room inspection & dimension reading
+        _currentZoom = 1.60;
         _zoomController.value = Matrix4.identity()
-          ..translateByDouble(-540.0, -220.0, 0.0, 1.0)
+          ..translateByDouble(-580.0, -260.0, 0.0, 1.0)
+          ..scaleByDouble(_currentZoom, _currentZoom, 1.0, 1.0);
+      } else if (_currentZoom < 2.50) {
+        // Ultra-Precision 3.20x zoom for exact wall/dimension calibration
+        _currentZoom = 3.20;
+        _zoomController.value = Matrix4.identity()
+          ..translateByDouble(-1100.0, -500.0, 0.0, 1.0)
           ..scaleByDouble(_currentZoom, _currentZoom, 1.0, 1.0);
       } else {
-        // Reset to Full Sheet Fit (0.39x)
+        // Reset to Full Sheet Fit (0.28x)
         _fitSheetToViewport();
       }
     });
@@ -2742,20 +2753,20 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                   InteractiveViewer(
                     transformationController: _zoomController,
                     constrained: false,
-                    minScale: 0.25,
-                    maxScale: 4.5,
-                    panEnabled: _selectedTool == 'PAN' || _draggedPoint == null,
+                    minScale: 0.15,
+                    maxScale: 10.0,
+                    panEnabled: _selectedTool == 'PAN' || (_activeDraggingPin == null && _draggedPoint == null),
                     scaleEnabled: true,
                     panAxis: PanAxis.free,
-                    boundaryMargin: const EdgeInsets.all(600.0),
+                    boundaryMargin: const EdgeInsets.all(900.0),
                     onInteractionEnd: (_) {
                       setState(() {
                         _currentZoom = _zoomController.value.getMaxScaleOnAxis();
                       });
                     },
                     child: SizedBox(
-                      width: 1000.0,
-                      height: 1220.0,
+                      width: _cadCanvasWidth,
+                      height: _cadCanvasHeight,
                       child: GestureDetector(
                         behavior: HitTestBehavior.translucent,
                         onTapUp: _handleCanvasTap,
@@ -2765,7 +2776,7 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                         child: Stack(
                           fit: StackFit.expand,
                           children: [
-                            // 1. Blueprint Floor Plan Underlay locked to 1000 x 1220
+                            // 1. Blueprint Floor Plan Underlay locked to expanded 1400 x 1600 CAD canvas with contain aspect fit
                             if (_hasBlueprintFile && _isUnderlayVisible)
                               Positioned.fill(
                                 child: Opacity(
@@ -2783,9 +2794,10 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                                                   : const ColorFilter.mode(Colors.transparent, BlendMode.dst),
                                               child: Image.file(
                                                 File(_renderedPdfImagePath!),
-                                                width: 1000.0,
-                                                height: 1220.0,
-                                                fit: BoxFit.fill,
+                                                width: _cadCanvasWidth,
+                                                height: _cadCanvasHeight,
+                                                fit: BoxFit.contain,
+                                                alignment: Alignment.center,
                                                 errorBuilder: (ctx, err, stack) => _buildPdfUnderlayPlaceholder(),
                                               ),
                                             )
@@ -2806,17 +2818,18 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                                               : _buildPdfUnderlayPlaceholder()))
                                       : Image.file(
                                           File(_blueprintPath!),
-                                          width: 1000.0,
-                                          height: 1220.0,
-                                          fit: BoxFit.fill,
+                                          width: _cadCanvasWidth,
+                                          height: _cadCanvasHeight,
+                                          fit: BoxFit.contain,
+                                          alignment: Alignment.center,
                                           errorBuilder: (ctx, err, stack) => const SizedBox.shrink(),
                                         ),
                                 ),
                               ),
 
-                            // 2. Interactive Vector Layer locked to 1000 x 1220 (Stage 1 Step 0/1/2/3 vs Stage 3 Electrical Takeoff)
+                            // 2. Interactive Vector Layer locked to 1400 x 1600 (Stage 1 Step 0/1/2/3 vs Stage 3 Electrical Takeoff)
                             CustomPaint(
-                              size: const Size(1000.0, 1220.0),
+                              size: const Size(_cadCanvasWidth, _cadCanvasHeight),
                               painter: CanvasPainter(
                                 points: _points,
                                 routes: _routes,
@@ -2838,6 +2851,7 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                                 isCalibrating: (_canvasStage == 1 && _stage1SubStep == 0) || _selectedTool == 'CALIBRATE',
                                 pinA: _pinA,
                                 pinB: _pinB,
+                                activeDraggingPin: _activeDraggingPin,
                                 activeSnapPoint: _activeSnapPoint,
                                 pixelsPerMeter: _pixelsPerMeter,
                                 activePolygonPoints: _activePolygonPoints,
@@ -4200,6 +4214,8 @@ class CanvasPainter extends CustomPainter {
   final List<Offset> activePolygonPoints;
   final Map<String, List<Offset>> calibratedRoomPolygons;
 
+  final int? activeDraggingPin;
+
   CanvasPainter({
     required this.points,
     required this.routes,
@@ -4221,6 +4237,7 @@ class CanvasPainter extends CustomPainter {
     this.isCalibrating = false,
     this.pinA = const Offset(60, 200),
     this.pinB = const Offset(240, 200),
+    this.activeDraggingPin,
     this.activeSnapPoint,
     this.pixelsPerMeter = 30.0,
     this.activePolygonPoints = const [],
@@ -5043,11 +5060,11 @@ class CanvasPainter extends CustomPainter {
     canvas.drawRRect(badgeRect, Paint()..color = BanaagTheme.primaryAmber);
     tp.paint(canvas, Offset(center.dx - (tp.width / 2), center.dy - (tp.height / 2)));
 
-    // 3. Pin A (Cyan Crosshair & Target Ring)
-    _drawPinTarget(canvas, pinA, 'A', Colors.cyanAccent);
+    // 3. Pin A (Cyan Crosshair & Target Ring + Magnifier Loupe if dragged)
+    _drawPinTarget(canvas, pinA, 'A', Colors.cyanAccent, isDragging: activeDraggingPin == 1);
 
-    // 4. Pin B (Amber Crosshair & Target Ring)
-    _drawPinTarget(canvas, pinB, 'B', BanaagTheme.primaryAmber);
+    // 4. Pin B (Amber Crosshair & Target Ring + Magnifier Loupe if dragged)
+    _drawPinTarget(canvas, pinB, 'B', BanaagTheme.primaryAmber, isDragging: activeDraggingPin == 2);
 
     // 5. Magnetic Snap Indicator (Glowing Diamond)
     if (activeSnapPoint != null) {
@@ -5068,9 +5085,72 @@ class CanvasPainter extends CustomPainter {
     }
   }
 
-  void _drawPinTarget(Canvas canvas, Offset pos, String label, Color color) {
+  void _drawPinTarget(Canvas canvas, Offset pos, String label, Color color, {bool isDragging = false}) {
+    // 1. If actively being dragged, render an elevated Precision Loupe Magnifier above the finger!
+    if (isDragging) {
+      final loupeCenter = Offset(pos.dx, pos.dy - 65.0);
+      const double loupeRadius = 38.0;
+
+      // Stem connecting pin to loupe
+      final stemPaint = Paint()
+        ..color = color.withValues(alpha: 0.6)
+        ..strokeWidth = 1.8
+        ..style = PaintingStyle.stroke;
+      canvas.drawLine(pos, loupeCenter, stemPaint);
+
+      // Loupe Shadow / Glow
+      canvas.drawCircle(
+        loupeCenter,
+        loupeRadius + 4.0,
+        Paint()..color = Colors.black.withValues(alpha: 0.6),
+      );
+
+      // Loupe Background lens
+      canvas.drawCircle(
+        loupeCenter,
+        loupeRadius,
+        Paint()..color = const Color(0xFB141923),
+      );
+
+      // Loupe Outer Ring
+      canvas.drawCircle(
+        loupeCenter,
+        loupeRadius,
+        Paint()
+          ..color = color
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2.4,
+      );
+
+      // Loupe Crosshairs (Precision Reticle)
+      final reticlePaint = Paint()
+        ..color = color
+        ..strokeWidth = 1.2;
+      canvas.drawLine(
+        Offset(loupeCenter.dx - loupeRadius + 6, loupeCenter.dy),
+        Offset(loupeCenter.dx + loupeRadius - 6, loupeCenter.dy),
+        reticlePaint,
+      );
+      canvas.drawLine(
+        Offset(loupeCenter.dx, loupeCenter.dy - loupeRadius + 6),
+        Offset(loupeCenter.dx, loupeCenter.dy + loupeRadius - 6),
+        reticlePaint,
+      );
+      canvas.drawCircle(loupeCenter, 3.0, Paint()..color = color);
+
+      // Loupe Header Tag ("PIN A 🔍" or "PIN B 🔍")
+      final loupeTp = TextPainter(
+        text: TextSpan(
+          text: 'PIN $label (EXACT)',
+          style: TextStyle(color: color, fontSize: 8.5, fontWeight: FontWeight.w900),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      loupeTp.paint(canvas, Offset(loupeCenter.dx - loupeTp.width / 2, loupeCenter.dy - loupeRadius + 6));
+    }
+
     // Outer Target Glow
-    canvas.drawCircle(pos, 16.0, Paint()..color = color.withValues(alpha: 0.25));
+    canvas.drawCircle(pos, 16.0, Paint()..color = color.withValues(alpha: isDragging ? 0.45 : 0.25));
 
     // Crisp Target Ring
     canvas.drawCircle(pos, 11.0, Paint()..color = color..style = PaintingStyle.stroke..strokeWidth = 2.0);
