@@ -143,6 +143,9 @@ class RoomSpace {
   final double? canvasY;
   final double? canvasWidth;
   final double? canvasHeight;
+  final double? perimeterMeters;
+  final double? rcrValue;
+  final List<Map<String, double>>? polygonVertices;
 
   RoomSpace({
     required this.id,
@@ -156,6 +159,9 @@ class RoomSpace {
     this.canvasY,
     this.canvasWidth,
     this.canvasHeight,
+    this.perimeterMeters,
+    this.rcrValue,
+    this.polygonVertices,
   });
 
   Map<String, dynamic> toJson() => {
@@ -170,6 +176,9 @@ class RoomSpace {
     'canvasY': canvasY,
     'canvasWidth': canvasWidth,
     'canvasHeight': canvasHeight,
+    'perimeterMeters': perimeterMeters,
+    'rcrValue': rcrValue,
+    'polygonVertices': polygonVertices,
   };
 
   factory RoomSpace.fromJson(Map<String, dynamic> json) => RoomSpace(
@@ -184,6 +193,14 @@ class RoomSpace {
     canvasY: (json['canvasY'] as num?)?.toDouble(),
     canvasWidth: (json['canvasWidth'] as num?)?.toDouble(),
     canvasHeight: (json['canvasHeight'] as num?)?.toDouble(),
+    perimeterMeters: (json['perimeterMeters'] as num?)?.toDouble(),
+    rcrValue: (json['rcrValue'] as num?)?.toDouble(),
+    polygonVertices: (json['polygonVertices'] as List<dynamic>?)
+        ?.map((e) => {
+              'x': ((e as Map)['x'] as num).toDouble(),
+              'y': (e['y'] as num).toDouble(),
+            })
+        .toList(),
   );
 }
 

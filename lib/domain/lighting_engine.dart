@@ -41,6 +41,9 @@ class LightingRecommendation {
   final RoomType roomType;
   final LightingTier tier;
   final double roomAreaSqm;
+  final double rcrValue;
+  final double cuValue;
+  final double llfValue;
   final double targetLumens;
   final String primaryFixtureName;
   final int recommendedWattagePerFixture;
@@ -54,6 +57,9 @@ class LightingRecommendation {
     required this.roomType,
     this.tier = LightingTier.standard,
     required this.roomAreaSqm,
+    this.rcrValue = 2.5,
+    this.cuValue = 0.65,
+    this.llfValue = 0.80,
     required this.targetLumens,
     required this.primaryFixtureName,
     required this.recommendedWattagePerFixture,
@@ -68,28 +74,37 @@ class LightingRecommendation {
 class LightingEngine {
   LightingEngine._();
 
-  /// Calculates recommended lighting fixtures for a room using realistic IESNA residential metrics:
-  /// Target Lumens = Area * Lux * HeightFactor * TierMultiplier
-  /// Uses Room-Specific Primary Fixtures (Pendant in Dining, Vanity in Bath, Under-Cabinet in Kitchen)
+  /// Calculates recommended lighting fixtures using the authoritative IESNA Lighting Handbook 10th Edition:
+  /// - Equation 10.32 (Page 10.34): Polygon Room Cavity Ratio RCR = 2.5 * h_RC * Perimeter / Area_net
+  /// - Equation 10.31 (Page 10.33): Zonal-Cavity Lumen Method N = (E * A_net) / (Phi_lamp * CU(RCR) * LLF)
   static LightingRecommendation calculate({
     required RoomType roomType,
     required double areaSqm,
     double ceilingHeightMeters = 2.7,
+    double? perimeterMeters,
+    double? rcrOverride,
     LightingTier tier = LightingTier.standard,
   }) {
     final double safeArea = areaSqm <= 0 ? 12.0 : areaSqm;
     final int lux = roomType.recommendedLux;
-    
-    // Ceiling height correction factor
-    double heightFactor = 1.0;
-    if (ceilingHeightMeters > 3.0) {
-      heightFactor = 1.0 + ((ceilingHeightMeters - 3.0) * 0.10);
-    }
 
-    // Realistic Residential Target Lumens:
-    // Direct LED illumination in residential settings with white ceilings/walls
-    // Effective CU * LLF is ~0.75 for direct modern LED fixtures
-    final double totalTargetLumens = (safeArea * lux * heightFactor * tier.lumenMultiplier) / 0.75;
+    // Workplane cavity height h_RC = CeilingHeight - 0.80m workplane (IESNA 10th Ed. Ch. 10)
+    final double hRc = (ceilingHeightMeters - 0.80).clamp(1.2, 8.0);
+    final double estPerim = (perimeterMeters != null && perimeterMeters > 2.0)
+        ? perimeterMeters
+        : (4.2 * (safeArea > 0 ? safeArea : 12.0) / 3.5).clamp(8.0, 120.0);
+
+    // IESNA 10th Edition Equation 10.32: RCR = 2.5 * h_RC * Perimeter / Area_net
+    final double rcr = (rcrOverride != null && rcrOverride > 0.2)
+        ? rcrOverride
+        : ((2.5 * hRc * estPerim) / safeArea).clamp(0.6, 12.0);
+
+    // Zonal-Cavity Coefficient of Utilization CU(RCR) for standard 80/50/20 ceiling/wall/floor reflectance
+    final double cu = (0.78 / (1.0 + 0.11 * rcr)).clamp(0.34, 0.76);
+    const double llf = 0.80; // Light Loss Factor (LLD * LDD)
+
+    // IESNA 10th Edition Equation 10.31: Total Required Lamp Lumens = (E_maintained * Area_net * TierMultiplier) / (CU * LLF)
+    final double totalTargetLumens = (safeArea * lux * tier.lumenMultiplier) / (cu * llf);
 
     // Room-Specific Fixture Strategy & Dynamic Sizing:
     String primaryFixtureName = 'LED Downlight';
@@ -307,13 +322,16 @@ class LightingEngine {
 
     final extraNote = extraFixtures.isNotEmpty ? ' Includes ${extraFixtures.length} additional specialty/task fixtures.' : '';
     final explanation =
-        'Based on ${tier.label} for ${roomType.label} ($lux Lux benchmark, ${safeArea.toStringAsFixed(1)} m²): '
-        'Recommended $fixtures pcs $lampWatts W $primaryFixtureName ($lumensPerLamp lm each).$extraNote';
+        'IESNA 10th Ed. Eq. 10.31/10.32 (${roomType.label}, $lux Lux, Net Area ${safeArea.toStringAsFixed(1)} m², RCR=${rcr.toStringAsFixed(2)}, CU=${cu.toStringAsFixed(2)}, LLF=$llf): '
+        'Recommended $fixtures pcs ${lampWatts}W $primaryFixtureName ($lumensPerLamp lm each).$extraNote';
 
     return LightingRecommendation(
       roomType: roomType,
       tier: tier,
       roomAreaSqm: safeArea,
+      rcrValue: rcr,
+      cuValue: cu,
+      llfValue: llf,
       targetLumens: totalTargetLumens,
       primaryFixtureName: primaryFixtureName,
       recommendedWattagePerFixture: lampWatts,

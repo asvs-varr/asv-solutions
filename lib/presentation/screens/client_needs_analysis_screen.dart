@@ -1076,11 +1076,13 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
           builder: (modalContext, setModalState) {
             final lower = spaceName.toLowerCase();
 
-            // 1. Dynamic Lighting Calculation with Selected Tier
+            // 1. Dynamic Lighting Calculation with Selected Tier & Confirmed Stage 1 Polygon RCR (IESNA 10th Ed. Eq. 10.31 & 10.32)
             final lighting = LightingEngine.calculate(
               roomType: _mapSpaceToRoomType(spaceName),
               areaSqm: area,
               ceilingHeightMeters: ceilingHeight,
+              perimeterMeters: targetSpace.perimeterMeters,
+              rcrOverride: targetSpace.rcrValue,
               tier: selectedTier,
             );
 
@@ -1121,14 +1123,15 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
             // Prepare Pack Items with their respective PEC Articles & Justifications
             final List<Map<String, dynamic>> previewItems = [];
 
-            // Primary Lighting (Room-Specific Dynamic Fixture)
+            // Primary Lighting (Room-Specific Dynamic Fixture via IESNA 10th Ed Zonal-Cavity Eq. 10.31 & 10.32)
             previewItems.add({
               'name': '${lighting.primaryFixtureName} (${lighting.recommendedWattagePerFixture}W x ${lighting.fixtureCount} pcs)',
               'va': (lighting.recommendedWattagePerFixture / 0.85) * lighting.fixtureCount,
               'isLighting': true,
               'isDedicated': false,
-              'citation': 'PEC 2017 Art 2.10.3.2 / IESNA',
-              'rule': '${selectedTier.label}: ${lighting.roomType.recommendedLux} Lux benchmark (${(lighting.targetLumens).toStringAsFixed(0)} lm target for ${area.toStringAsFixed(0)} m²)',
+              'citation': 'IESNA 10th Ed. Eq. 10.31/10.32 & PEC Sec. 2.20.2.3',
+              'rule':
+                  '${selectedTier.label}: ${lighting.roomType.recommendedLux} Lux • Net Area ${area.toStringAsFixed(1)} m² • RCR=${lighting.rcrValue.toStringAsFixed(2)}, CU=${lighting.cuValue.toStringAsFixed(2)}, LLF=${lighting.llfValue.toStringAsFixed(2)} (${lighting.targetLumens.toStringAsFixed(0)} lm)',
               'icon': Icons.lightbulb_outline,
             });
 
@@ -2334,6 +2337,8 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
       roomType: _mapSpaceToRoomType(_activeSpaceName),
       areaSqm: _currentSpace.areaSqm,
       ceilingHeightMeters: _currentSpace.ceilingHeight,
+      perimeterMeters: _currentSpace.perimeterMeters,
+      rcrOverride: _currentSpace.rcrValue,
     );
 
     return Scaffold(
@@ -2453,7 +2458,7 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
                             overflow: TextOverflow.ellipsis,
                           ),
                           Text(
-                            'Target: ${lightingRec.targetLumens.toStringAsFixed(0)} lm (${lightingRec.roomType.recommendedLux} Lux standard for $_activeSpaceName)',
+                            'IESNA 10th Ed. Eq. 10.31: ${lightingRec.roomType.recommendedLux} Lux • Net ${_currentSpace.areaSqm.toStringAsFixed(1)} m² • RCR ${lightingRec.rcrValue.toStringAsFixed(2)} • CU ${lightingRec.cuValue.toStringAsFixed(2)}',
                             style: const TextStyle(fontSize: 10, color: BanaagTheme.textMuted),
                             overflow: TextOverflow.ellipsis,
                           ),

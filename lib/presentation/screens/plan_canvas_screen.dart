@@ -52,13 +52,27 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
   Offset _pinB = const Offset(892, 42);
 
   // 3-Stage Engineering Flow State:
-  // Stage 1 = Blank Floor Plan Scale & Draggable Room Outlines
-  // Stage 2 = Space-Driven PEC Load Schedule (ClientNeedsAnalysisScreen)
-  // Stage 3 = Room-Bounded Electrical Layout & 3D-Aware Orthogonal Wire Takeoff
+  // Stage 1 = Blank Floor Plan Scale (Step 0) & 1-by-1 Polygon Room Wizard (Step 1)
+  // Stage 2 = Space-Driven IESNA 10th Ed & PEC 2017 Load Schedule (ClientNeedsAnalysisScreen)
+  // Stage 3 = Point-in-Polygon Electrical Layout & 3D-Aware Orthogonal Wire Takeoff
   int _canvasStage = 1;
+  // Stage 1 Sub-Steps:
+  // 0 = Step 0: Solo Scale (Pin A–B) + Wall Thickness Verification (zero room boxes visible)
+  // 1 = Step 1: 1-by-1 Sequential Multi-Vertex Polygon Room Wizard (1 of N .. N of N)
+  // 2 = End of Step 1: All Rooms Confirmed & Floor Plan Completeness Gate ("Are all spaces accounted for?")
+  // 3 = Single-Room Re-Edit Mode (invoked from "📐 Edit Room Dimension" button, 1 room at a time)
+  int _stage1SubStep = 0;
+  double _wallThicknessMm = 150.0; // Default 150 mm CHB Wall Thickness
+  bool _highlightUnaccountedZones = false;
   final Map<String, Rect> _roomBoxes = {};
+  final Map<String, List<Offset>> _roomPolygons = {};
   int _selectedRoomIndex = 0;
   int? _activeDraggingRoomCorner; // 0=TL, 1=TR, 2=BR, 3=BL, 4=CenterMove
+  int? _activeDraggingVertexIndex; // Active polygon vertex index being dragged in Step 1
+
+  // Scanned CAD Structural Wall Grid Lines on 1000x1220 Sheet (for Magnetic Wall Snapping)
+  static const List<double> _cadSnapGridX = [198.0, 378.0, 510.0, 592.0, 744.0, 855.0, 892.0];
+  static const List<double> _cadSnapGridY = [42.0, 148.0, 278.0, 342.0, 528.0, 598.0, 668.0, 742.0];
 
   // Multi-Point Polygon Calibration Engine for Real Rooms
   final List<Offset> _activePolygonPoints = [];
@@ -269,7 +283,7 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
   Rect _defaultCadRectForRoom(String roomName, int index) {
     final lower = roomName.toLowerCase();
     if (lower.contains('hall') || lower.contains('event') || lower.contains('function')) {
-      return const Rect.fromLTWH(198.0, 42.0, 546.0, 236.0);
+      return const Rect.fromLTWH(198.0, 42.0, 546.0, 300.0);
     }
     if (lower.contains('staff')) {
       return const Rect.fromLTWH(744.0, 148.0, 148.0, 130.0);
@@ -286,6 +300,168 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
     final double col = (index % 2) * 320.0 + 200.0;
     final double row = (index ~/ 2) * 220.0 + 80.0;
     return Rect.fromLTWH(col, row, 280.0, 190.0);
+  }
+
+  /// Default Multi-Vertex Polygon on the 1000x1220 CAD Sheet (supports L-shapes & alcoves)
+  List<Offset> _defaultCadPolygonForRoom(String roomName, int index) {
+    final lower = roomName.toLowerCase();
+    if (lower.contains('hall') || lower.contains('event') || lower.contains('function')) {
+      // L-Shaped Function Hall / Event Place matching the scanned CAD floor plan walls!
+      return [
+        const Offset(198.0, 42.0),
+        const Offset(744.0, 42.0),
+        const Offset(744.0, 278.0),
+        const Offset(378.0, 278.0),
+        const Offset(378.0, 342.0),
+        const Offset(198.0, 342.0),
+      ];
+    }
+    if (lower.contains('staff')) {
+      return [
+        const Offset(744.0, 148.0),
+        const Offset(892.0, 148.0),
+        const Offset(892.0, 278.0),
+        const Offset(744.0, 278.0),
+      ];
+    }
+    if (lower.contains('office')) {
+      return [
+        const Offset(592.0, 278.0),
+        const Offset(892.0, 278.0),
+        const Offset(892.0, 528.0),
+        const Offset(592.0, 528.0),
+      ];
+    }
+    if (lower.contains('landing') || lower.contains('stair')) {
+      return [
+        const Offset(510.0, 528.0),
+        const Offset(855.0, 528.0),
+        const Offset(855.0, 668.0),
+        const Offset(510.0, 668.0),
+      ];
+    }
+    if (lower.contains('storage') || lower.contains('store')) {
+      return [
+        const Offset(744.0, 668.0),
+        const Offset(892.0, 668.0),
+        const Offset(892.0, 742.0),
+        const Offset(744.0, 742.0),
+      ];
+    }
+    final r = _defaultCadRectForRoom(roomName, index);
+    return [r.topLeft, r.topRight, r.bottomRight, r.bottomLeft];
+  }
+
+  Rect _boundingBoxOfPolygon(List<Offset> poly) {
+    if (poly.isEmpty) return const Rect.fromLTWH(200, 100, 200, 150);
+    double minX = poly.first.dx;
+    double maxX = poly.first.dx;
+    double minY = poly.first.dy;
+    double maxY = poly.first.dy;
+    for (final pt in poly) {
+      if (pt.dx < minX) minX = pt.dx;
+      if (pt.dx > maxX) maxX = pt.dx;
+      if (pt.dy < minY) minY = pt.dy;
+      if (pt.dy > maxY) maxY = pt.dy;
+    }
+    return Rect.fromLTRB(minX, minY, maxX, maxY);
+  }
+
+  /// Ray-casting Point-in-Polygon check (strictly keeps ceiling luminaires inside L-shapes/polygons)
+  bool _isPointInPolygon(Offset pt, List<Offset> poly) {
+    if (poly.length < 3) return true;
+    bool inside = false;
+    for (int i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+      final xi = poly[i].dx, yi = poly[i].dy;
+      final xj = poly[j].dx, yj = poly[j].dy;
+      final intersect = ((yi > pt.dy) != (yj > pt.dy)) &&
+          (pt.dx < (xj - xi) * (pt.dy - yi) / ((yj - yi) == 0 ? 0.00001 : (yj - yi)) + xi);
+      if (intersect) inside = !inside;
+    }
+    return inside;
+  }
+
+  /// Exact Shoelace Polygon Net Area (m²), Perimeter (m), and IESNA 10th Edition Eq. 10.32 RCR
+  ({double netAreaSqm, double perimeterMeters, double rcrValue}) _computePolygonEngineeringMetrics(
+    List<Offset> poly,
+    double ceilingHeightMeters,
+  ) {
+    final double ppm = _pixelsPerMeter > 5.0 ? _pixelsPerMeter : 44.77;
+    if (poly.length < 3) {
+      return (netAreaSqm: 12.0, perimeterMeters: 14.0, rcrValue: 5.8);
+    }
+    double signedArea2Px = 0.0;
+    double perimPx = 0.0;
+    for (int i = 0; i < poly.length; i++) {
+      final p1 = poly[i];
+      final p2 = poly[(i + 1) % poly.length];
+      signedArea2Px += (p1.dx * p2.dy - p2.dx * p1.dy);
+      perimPx += (p2 - p1).distance;
+    }
+    final double grossAreaSqm = (signedArea2Px.abs() * 0.5) / (ppm * ppm);
+    final double perimMeters = perimPx / ppm;
+    final double wallStripDeductionSqm = perimMeters * ((_wallThicknessMm / 1000.0) * 0.5);
+    final double netAreaSqm = math.max(1.5, grossAreaSqm - wallStripDeductionSqm);
+
+    // IESNA Lighting Handbook 10th Edition Equation 10.32 (Page 10.34):
+    // RCR = 2.5 * h_RC * Perimeter / Net_Area, where h_RC = CeilingHeight - 0.80m workplane
+    final double hRc = math.max(1.2, ceilingHeightMeters - 0.80);
+    final double rcr = (2.5 * hRc * perimMeters) / netAreaSqm;
+
+    return (
+      netAreaSqm: double.parse(netAreaSqm.toStringAsFixed(1)),
+      perimeterMeters: double.parse(perimMeters.toStringAsFixed(2)),
+      rcrValue: double.parse(rcr.clamp(0.5, 15.0).toStringAsFixed(2)),
+    );
+  }
+
+  /// Magnetic Wall & Corner Snapping for Step 1 Polygon Vertices
+  Offset _snapPolygonVertex(Offset rawPos, List<Offset> activePoly, int activeVertexIdx) {
+    double sx = rawPos.dx.clamp(20.0, 980.0);
+    double sy = rawPos.dy.clamp(20.0, 1200.0);
+    Offset? snapTarget;
+    const double snapTol = 14.0;
+
+    // 1. Snap to confirmed rooms' vertices so adjacent rooms share exact walls without gaps
+    final spaces = widget.project?.spaces ?? [];
+    for (int i = 0; i < spaces.length; i++) {
+      if (i == _selectedRoomIndex) continue;
+      final otherPoly = _roomPolygons[spaces[i].id];
+      if (otherPoly == null) continue;
+      for (final v in otherPoly) {
+        if ((v - rawPos).distance <= snapTol) {
+          return v;
+        }
+      }
+    }
+
+    // 2. Snap to 90° orthogonal alignment with adjacent vertices in the same polygon
+    if (activePoly.length >= 3) {
+      final prevV = activePoly[(activeVertexIdx - 1 + activePoly.length) % activePoly.length];
+      final nextV = activePoly[(activeVertexIdx + 1) % activePoly.length];
+      if ((sx - prevV.dx).abs() <= 10.0) sx = prevV.dx;
+      if ((sx - nextV.dx).abs() <= 10.0) sx = nextV.dx;
+      if ((sy - prevV.dy).abs() <= 10.0) sy = prevV.dy;
+      if ((sy - nextV.dy).abs() <= 10.0) sy = nextV.dy;
+    }
+
+    // 3. Snap to scanned CAD floor plan structural wall grid lines
+    for (final gx in _cadSnapGridX) {
+      if ((sx - gx).abs() <= snapTol) {
+        sx = gx;
+        snapTarget = Offset(sx, sy);
+        break;
+      }
+    }
+    for (final gy in _cadSnapGridY) {
+      if ((sy - gy).abs() <= snapTol) {
+        sy = gy;
+        snapTarget = Offset(sx, sy);
+        break;
+      }
+    }
+    _activeSnapPoint = snapTarget;
+    return Offset((sx / 2.0).round() * 2.0, (sy / 2.0).round() * 2.0);
   }
 
   void _initRoomBoxesAndScale() {
@@ -311,11 +487,16 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
 
     for (int i = 0; i < proj.spaces.length; i++) {
       final sp = proj.spaces[i];
-      if (sp.canvasX != null && sp.canvasY != null && sp.canvasWidth != null && sp.canvasHeight != null) {
-        _roomBoxes[sp.id] = Rect.fromLTWH(sp.canvasX!, sp.canvasY!, sp.canvasWidth!, sp.canvasHeight!);
+      List<Offset> poly;
+      if (sp.polygonVertices != null && sp.polygonVertices!.length >= 3) {
+        poly = sp.polygonVertices!
+            .map((m) => Offset(m['x'] ?? 200.0, m['y'] ?? 100.0))
+            .toList();
       } else {
-        _roomBoxes[sp.id] = _defaultCadRectForRoom(sp.name, i);
+        poly = _defaultCadPolygonForRoom(sp.name, i);
       }
+      _roomPolygons[sp.id] = poly;
+      _roomBoxes[sp.id] = _boundingBoxOfPolygon(poly);
     }
     _syncRoomSpacesFromBoxes(persist: false);
   }
@@ -327,22 +508,27 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
 
     for (int i = 0; i < proj.spaces.length; i++) {
       final sp = proj.spaces[i];
-      final rect = _roomBoxes[sp.id] ?? _defaultCadRectForRoom(sp.name, i);
-      final double wMeters = (rect.width / ppm).clamp(1.0, 60.0);
-      final double hMeters = (rect.height / ppm).clamp(1.0, 60.0);
-      final double area = double.parse((wMeters * hMeters).toStringAsFixed(1));
+      final poly = _roomPolygons[sp.id] ?? _defaultCadPolygonForRoom(sp.name, i);
+      _roomPolygons[sp.id] = poly;
+      final rect = _boundingBoxOfPolygon(poly);
+      _roomBoxes[sp.id] = rect;
+
+      final metrics = _computePolygonEngineeringMetrics(poly, sp.ceilingHeight);
       proj.spaces[i] = RoomSpace(
         id: sp.id,
         name: sp.name,
-        areaSqm: area,
+        areaSqm: metrics.netAreaSqm,
         ceilingHeight: sp.ceilingHeight,
-        shapeType: sp.shapeType,
+        shapeType: poly.length > 4 ? 'L_SHAPE' : sp.shapeType,
         cutoutDepth: sp.cutoutDepth,
         cutoutWidth: sp.cutoutWidth,
         canvasX: rect.left,
         canvasY: rect.top,
         canvasWidth: rect.width,
         canvasHeight: rect.height,
+        perimeterMeters: metrics.perimeterMeters,
+        rcrValue: metrics.rcrValue,
+        polygonVertices: poly.map((pt) => {'x': pt.dx, 'y': pt.dy}).toList(),
       );
     }
     proj.calibrationPixelsPerMeter = ppm;
@@ -628,7 +814,8 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
 
     for (int sIdx = 0; sIdx < spaces.length; sIdx++) {
       final sp = spaces[sIdx];
-      final Rect roomRect = _roomBoxes[sp.id] ?? _defaultCadRectForRoom(sp.name, sIdx);
+      final List<Offset> roomPoly = _roomPolygons[sp.id] ?? _defaultCadPolygonForRoom(sp.name, sIdx);
+      final Rect roomRect = _boundingBoxOfPolygon(roomPoly);
       final lowerRoom = sp.name.toLowerCase();
       final bool isStorageOrLanding = lowerRoom.contains('storage') ||
           lowerRoom.contains('store') ||
@@ -673,7 +860,7 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
           : (lowerRoom.contains('office') ? 4 : 2);
       final int numLights = rawLights > 0 ? math.min(rawLights, maxLightsForRoom) : 0;
 
-      // 1. Place Room Wall Switch + Symmetrical Ceiling Grid inside roomRect
+      // 1. Place Room Wall Switch + Point-in-Polygon Ceiling Grid inside roomPoly
       if (numLights > 0) {
         final int swCkt = (sIdx < 2) ? 1 : 2;
         final String swLabel = lowerRoom.contains('hall')
@@ -682,7 +869,7 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                 ? 'S2'
                 : (lowerRoom.contains('landing') ? 'S3w' : 'S1'));
 
-        // Position Door Switch on the room's doorway edge inside roomRect
+        // Position Door Switch on the room's doorway edge inside roomPoly
         Offset swPos;
         if (lowerRoom.contains('hall')) {
           swPos = Offset(roomRect.left + 55.0, roomRect.bottom - 14.0);
@@ -716,7 +903,7 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
           conductorCount: 2,
         ));
 
-        // Compute symmetrical ceiling grid strictly inside roomRect
+        // Compute symmetrical ceiling grid strictly inside the confirmed polygon (Point-in-Polygon check!)
         final int cols = numLights <= 2
             ? numLights
             : (numLights <= 4 ? 2 : 4);
@@ -729,8 +916,18 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
         for (int i = 0; i < numLights; i++) {
           final int c = i % cols;
           final int r = i ~/ cols;
-          final double lx = innerCeil.left + stepX * (c + 1);
-          final double ly = innerCeil.top + stepY * (r + 1);
+          double lx = innerCeil.left + stepX * (c + 1);
+          double ly = innerCeil.top + stepY * (r + 1);
+
+          // If candidate falls in L-shape cutout outside roomPoly, nudge up/left into polygon interior
+          if (!_isPointInPolygon(Offset(lx, ly), roomPoly)) {
+            for (double nudgeY = -20.0; nudgeY >= -innerCeil.height * 0.7; nudgeY -= 18.0) {
+              if (_isPointInPolygon(Offset(lx, ly + nudgeY), roomPoly)) {
+                ly += nudgeY;
+                break;
+              }
+            }
+          }
 
           final lPt = CanvasPoint(
             id: 'pt-l-$lightCounter',
@@ -753,22 +950,33 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
         }
       }
 
-      // 2. Place Room Convenience Outlets along the confirmed room's perimeter walls
+      // 2. Place Room Convenience Outlets along the confirmed polygon's actual wall segments (PEC 2017 Sec. 2.10.3.3)
       final int maxOutletsForRoom = lowerRoom.contains('hall')
           ? 6
           : (lowerRoom.contains('office') ? 4 : (isStorageOrLanding ? 1 : 2));
       final int numOutlets = rawOutlets > 0 ? math.min(rawOutlets, maxOutletsForRoom) : 0;
       final int powerCkt = 3 + (sIdx % 3);
 
-      final Rect wallRect = roomRect.deflate(12.0);
-      final List<Offset> perimeterWallAnchors = [
-        Offset(wallRect.left, wallRect.top + wallRect.height * 0.32),
-        Offset(wallRect.left, wallRect.top + wallRect.height * 0.72),
-        Offset(wallRect.left + wallRect.width * 0.35, wallRect.top),
-        Offset(wallRect.left + wallRect.width * 0.72, wallRect.top),
-        Offset(wallRect.right, wallRect.top + wallRect.height * 0.45),
-        Offset(wallRect.left + wallRect.width * 0.50, wallRect.bottom),
-      ];
+      final List<Offset> perimeterWallAnchors = [];
+      final Offset polyCenter = roomRect.center;
+      for (int v = 0; v < roomPoly.length; v++) {
+        final Offset p1 = roomPoly[v];
+        final Offset p2 = roomPoly[(v + 1) % roomPoly.length];
+        final double segLen = (p2 - p1).distance;
+        if (segLen < 45.0) continue;
+        final int ptsOnSeg = segLen > 240.0 ? 2 : 1;
+        for (int k = 1; k <= ptsOnSeg; k++) {
+          final double t = k / (ptsOnSeg + 1);
+          final Offset rawWallPt = Offset(p1.dx + (p2.dx - p1.dx) * t, p1.dy + (p2.dy - p1.dy) * t);
+          final Offset toCenter = polyCenter - rawWallPt;
+          final double dist = toCenter.distance > 1.0 ? toCenter.distance : 1.0;
+          perimeterWallAnchors.add(rawWallPt + Offset(toCenter.dx / dist * 11.0, toCenter.dy / dist * 11.0));
+        }
+      }
+      if (perimeterWallAnchors.isEmpty) {
+        final Rect wallRect = roomRect.deflate(12.0);
+        perimeterWallAnchors.add(Offset(wallRect.left, wallRect.center.dy));
+      }
 
       CanvasPoint prevOutletPt = panelPt;
       for (int i = 0; i < numOutlets; i++) {
@@ -949,58 +1157,71 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
     _dragStartOffset = tapPos;
     _hasMovedSignificantly = false;
 
-    // STAGE 1 (or CALIBRATE tool): Check Reference Scale Pins A & B first, then Room Box Corner Handles!
+    // STAGE 1: Step 0 (Scale Pin A/B) vs Step 1 / 3 (1-by-1 Polygon Vertex ● & Midpoint + Handles)
     if (_canvasStage == 1 || _selectedTool == 'CALIBRATE') {
-      if ((_pinA - tapPos).distance <= 30.0) {
-        setState(() => _activeDraggingPin = 1);
-        return;
-      } else if ((_pinB - tapPos).distance <= 30.0) {
-        setState(() => _activeDraggingPin = 2);
-        return;
-      } else {
-        final mid = Offset((_pinA.dx + _pinB.dx) / 2, (_pinA.dy + _pinB.dy) / 2);
-        if ((mid - tapPos).distance <= 34.0) {
-          _showCalibrationDialog();
+      if (_stage1SubStep == 0 || _selectedTool == 'CALIBRATE') {
+        if ((_pinA - tapPos).distance <= 32.0) {
+          setState(() => _activeDraggingPin = 1);
           return;
-        }
-      }
-
-      if (_canvasStage == 1 && widget.project != null) {
-        final spaces = widget.project!.spaces;
-        // 1. Check 4 Corner Handles (0=TL, 1=TR, 2=BR, 3=BL) and Center Move Handle (4) of all rooms
-        for (int i = spaces.length - 1; i >= 0; i--) {
-          final sp = spaces[i];
-          final rect = _roomBoxes[sp.id] ?? _defaultCadRectForRoom(sp.name, i);
-          final corners = [
-            rect.topLeft,
-            rect.topRight,
-            rect.bottomRight,
-            rect.bottomLeft,
-            rect.center,
-          ];
-          for (int c = 0; c < corners.length; c++) {
-            final double hitRadius = c == 4 ? 32.0 : 28.0;
-            if ((corners[c] - tapPos).distance <= hitRadius) {
-              setState(() {
-                _selectedRoomIndex = i;
-                _activeDraggingRoomCorner = c;
-              });
-              HapticFeedback.selectionClick();
-              return;
-            }
-          }
-        }
-        // 2. Or if tapping inside a room box, select it and allow moving
-        for (int i = spaces.length - 1; i >= 0; i--) {
-          final sp = spaces[i];
-          final rect = _roomBoxes[sp.id] ?? _defaultCadRectForRoom(sp.name, i);
-          if (rect.contains(tapPos)) {
-            setState(() {
-              _selectedRoomIndex = i;
-              _activeDraggingRoomCorner = 4;
-            });
+        } else if ((_pinB - tapPos).distance <= 32.0) {
+          setState(() => _activeDraggingPin = 2);
+          return;
+        } else {
+          final mid = Offset((_pinA.dx + _pinB.dx) / 2, (_pinA.dy + _pinB.dy) / 2);
+          if ((mid - tapPos).distance <= 36.0) {
+            _showCalibrationDialog();
             return;
           }
+        }
+        if (_stage1SubStep == 0) return;
+      }
+
+      // Step 1 (1-by-1 Room Polygon Wizard) or Step 3 (Single-Room Re-Edit Mode):
+      // Interact ONLY with the active room (_selectedRoomIndex)!
+      if (_canvasStage == 1 && (_stage1SubStep == 1 || _stage1SubStep == 3) && widget.project != null) {
+        final spaces = widget.project!.spaces;
+        if (spaces.isEmpty) return;
+        final idx = _selectedRoomIndex.clamp(0, spaces.length - 1);
+        final sp = spaces[idx];
+        final poly = List<Offset>.from(_roomPolygons[sp.id] ?? _defaultCadPolygonForRoom(sp.name, idx));
+
+        // 1. Check Corner Vertices (●) of the active room polygon
+        for (int v = 0; v < poly.length; v++) {
+          if ((poly[v] - tapPos).distance <= 28.0) {
+            setState(() {
+              _activeDraggingVertexIndex = v;
+              _activeDraggingRoomCorner = null;
+            });
+            HapticFeedback.selectionClick();
+            return;
+          }
+        }
+
+        // 2. Check Midpoint (+) Handles on each wall segment — dragging '+' splits the wall and adds a new corner point!
+        for (int v = 0; v < poly.length; v++) {
+          final p1 = poly[v];
+          final p2 = poly[(v + 1) % poly.length];
+          final midPt = Offset((p1.dx + p2.dx) / 2, (p1.dy + p2.dy) / 2);
+          if ((midPt - tapPos).distance <= 24.0) {
+            setState(() {
+              poly.insert(v + 1, midPt);
+              _roomPolygons[sp.id] = poly;
+              _activeDraggingVertexIndex = v + 1;
+              _activeDraggingRoomCorner = null;
+              _syncRoomSpacesFromBoxes(persist: false);
+            });
+            HapticFeedback.mediumImpact();
+            return;
+          }
+        }
+
+        // 3. Check if dragging inside the active room polygon (whole-polygon move)
+        if (_isPointInPolygon(tapPos, poly)) {
+          setState(() {
+            _activeDraggingVertexIndex = null;
+            _activeDraggingRoomCorner = 4;
+          });
+          return;
         }
       }
       return;
@@ -1030,7 +1251,7 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
       _hasMovedSignificantly = true;
     }
 
-    // 1. Dragging Reference Scale Pin A or Pin B
+    // 1. Dragging Reference Scale Pin A or Pin B (Step 0)
     if ((_canvasStage == 1 || _selectedTool == 'CALIBRATE') && _activeDraggingPin != null) {
       setState(() {
         final snapped = Offset(
@@ -1046,53 +1267,46 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
       return;
     }
 
-    // 2. Dragging Stage 1 Room Box Corner Handle (0..3) or Center Move (4)
-    if (_canvasStage == 1 && _activeDraggingRoomCorner != null && widget.project != null) {
+    // 2. Dragging Active Room Polygon Vertex (●) with Magnetic Wall Snapping (Step 1 / Step 3)
+    if (_canvasStage == 1 && _activeDraggingVertexIndex != null && widget.project != null) {
       final spaces = widget.project!.spaces;
       if (_selectedRoomIndex >= 0 && _selectedRoomIndex < spaces.length) {
         final sp = spaces[_selectedRoomIndex];
-        final rect = _roomBoxes[sp.id] ?? _defaultCadRectForRoom(sp.name, _selectedRoomIndex);
-        final double sx = (newPos.dx / 2.0).round() * 2.0;
-        final double sy = (newPos.dy / 2.0).round() * 2.0;
-
-        double left = rect.left;
-        double top = rect.top;
-        double right = rect.right;
-        double bottom = rect.bottom;
-
-        const double minRoomPx = 48.0;
-        if (_activeDraggingRoomCorner == 0) {
-          left = math.min(sx, right - minRoomPx).clamp(20.0, 960.0);
-          top = math.min(sy, bottom - minRoomPx).clamp(20.0, 1180.0);
-        } else if (_activeDraggingRoomCorner == 1) {
-          right = math.max(sx, left + minRoomPx).clamp(60.0, 980.0);
-          top = math.min(sy, bottom - minRoomPx).clamp(20.0, 1180.0);
-        } else if (_activeDraggingRoomCorner == 2) {
-          right = math.max(sx, left + minRoomPx).clamp(60.0, 980.0);
-          bottom = math.max(sy, top + minRoomPx).clamp(60.0, 1200.0);
-        } else if (_activeDraggingRoomCorner == 3) {
-          left = math.min(sx, right - minRoomPx).clamp(20.0, 960.0);
-          bottom = math.max(sy, top + minRoomPx).clamp(60.0, 1200.0);
-        } else if (_activeDraggingRoomCorner == 4) {
-          final double dx = details.delta.dx;
-          final double dy = details.delta.dy;
-          final double w = rect.width;
-          final double h = rect.height;
-          left = (left + dx).clamp(20.0, 980.0 - w);
-          top = (top + dy).clamp(20.0, 1200.0 - h);
-          right = left + w;
-          bottom = top + h;
+        final poly = List<Offset>.from(_roomPolygons[sp.id] ?? _defaultCadPolygonForRoom(sp.name, _selectedRoomIndex));
+        final int vIdx = _activeDraggingVertexIndex!;
+        if (vIdx >= 0 && vIdx < poly.length) {
+          final Offset snappedVertex = _snapPolygonVertex(newPos, poly, vIdx);
+          poly[vIdx] = snappedVertex;
+          setState(() {
+            _roomPolygons[sp.id] = poly;
+            _syncRoomSpacesFromBoxes(persist: false);
+          });
         }
+      }
+      return;
+    }
 
+    // 3. Translating Whole Active Room Polygon (Center Move)
+    if (_canvasStage == 1 && _activeDraggingRoomCorner == 4 && widget.project != null) {
+      final spaces = widget.project!.spaces;
+      if (_selectedRoomIndex >= 0 && _selectedRoomIndex < spaces.length) {
+        final sp = spaces[_selectedRoomIndex];
+        final poly = List<Offset>.from(_roomPolygons[sp.id] ?? _defaultCadPolygonForRoom(sp.name, _selectedRoomIndex));
+        final rect = _boundingBoxOfPolygon(poly);
+        final double dx = details.delta.dx.clamp(20.0 - rect.left, 980.0 - rect.right);
+        final double dy = details.delta.dy.clamp(20.0 - rect.top, 1200.0 - rect.bottom);
+        for (int i = 0; i < poly.length; i++) {
+          poly[i] = Offset(poly[i].dx + dx, poly[i].dy + dy);
+        }
         setState(() {
-          _roomBoxes[sp.id] = Rect.fromLTRB(left, top, right, bottom);
+          _roomPolygons[sp.id] = poly;
           _syncRoomSpacesFromBoxes(persist: false);
         });
       }
       return;
     }
 
-    // 3. Stage 3: Dragging an Electrical Fixture -> Live 3D Wire Length Recalculation!
+    // 4. Stage 3: Dragging an Electrical Fixture -> Live 3D Wire Length Recalculation!
     if (_draggedPoint != null) {
       setState(() {
         final snappedX = (newPos.dx / 4.0).round() * 4.0;
@@ -1109,6 +1323,7 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
       final hadPinDrag = _activeDraggingPin != null && _hasMovedSignificantly;
       setState(() {
         _activeDraggingPin = null;
+        _activeDraggingVertexIndex = null;
         _activeDraggingRoomCorner = null;
         _activeSnapPoint = null;
         _dragStartOffset = null;
@@ -1320,21 +1535,49 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
   void _handleCanvasTap(TapUpDetails details) {
     final tapPos = details.localPosition;
     if (_canvasStage == 1) {
-      final mid = Offset((_pinA.dx + _pinB.dx) / 2, (_pinA.dy + _pinB.dy) / 2);
-      if ((mid - tapPos).distance <= 36.0 || (_pinA - tapPos).distance <= 28.0 || (_pinB - tapPos).distance <= 28.0) {
-        _showCalibrationDialog();
+      // Step 0: Tapping Pin A, Pin B, or the midpoint length badge opens the Scale + Wall Thickness dialog
+      if (_stage1SubStep == 0) {
+        final mid = Offset((_pinA.dx + _pinB.dx) / 2, (_pinA.dy + _pinB.dy) / 2);
+        if ((mid - tapPos).distance <= 44.0 || (_pinA - tapPos).distance <= 32.0 || (_pinB - tapPos).distance <= 32.0) {
+          _showCalibrationDialog();
+        }
         return;
       }
-      if (widget.project != null) {
-        for (int i = widget.project!.spaces.length - 1; i >= 0; i--) {
-          final sp = widget.project!.spaces[i];
-          final rect = _roomBoxes[sp.id] ?? _defaultCadRectForRoom(sp.name, i);
-          if (rect.contains(tapPos)) {
-            setState(() => _selectedRoomIndex = i);
+
+      // Step 1 or Step 3: Active 1-by-1 Room Polygon Editing
+      if ((_stage1SubStep == 1 || _stage1SubStep == 3) && widget.project != null) {
+        final spaces = widget.project!.spaces;
+        if (spaces.isEmpty) return;
+        final idx = _selectedRoomIndex.clamp(0, spaces.length - 1);
+        final sp = spaces[idx];
+        final poly = List<Offset>.from(_roomPolygons[sp.id] ?? _defaultCadPolygonForRoom(sp.name, idx));
+
+        // 1. Check if user tapped a Midpoint (+) Handle or Wall Segment Dimension Badge to insert a point or edit length!
+        for (int v = 0; v < poly.length; v++) {
+          final p1 = poly[v];
+          final p2 = poly[(v + 1) % poly.length];
+          final midPt = Offset((p1.dx + p2.dx) / 2, (p1.dy + p2.dy) / 2);
+          if ((midPt - tapPos).distance <= 30.0) {
+            _showWallSegmentActionDialog(sp, v);
             HapticFeedback.selectionClick();
             return;
           }
         }
+
+        // 2. Check if user tapped the Center Room Name/Area Badge -> Open Room ID/Name & Ceiling Height dialog
+        final rect = _boundingBoxOfPolygon(poly);
+        if ((rect.center - tapPos).distance <= 55.0) {
+          _showRenameSelectedRoomDialog();
+          return;
+        }
+        return;
+      }
+
+      // Step 2: Completeness Gate ("Are all spaces accounted for?")
+      // If _highlightUnaccountedZones is active, tapping an unaccounted space auto-detects its walls & opens Step 3 for it!
+      if (_stage1SubStep == 2 && _highlightUnaccountedZones && widget.project != null) {
+        _autoDetectAndAddTappedZone(tapPos);
+        return;
       }
       return;
     }
@@ -1904,84 +2147,225 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
             ),
           ),
 
-          // STAGE 1 INFO & LIVE SCALE RIBBON (When in Blank Floor Plan Room & Scale Mode)
+          // STAGE 1 INFO & LIVE SCALE / 1-BY-1 ROOM WIZARD RIBBON
           if (_canvasStage == 1)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               color: const Color(0xFF1B2230),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
+              child: Builder(builder: (ctx) {
+                final spaces = widget.project?.spaces ?? [];
+                final int totalRooms = spaces.length;
+                final int activeIdx = totalRooms > 0 ? _selectedRoomIndex.clamp(0, totalRooms - 1) : 0;
+                final RoomSpace? activeSp = totalRooms > 0 ? spaces[activeIdx] : null;
+                final double refLengthMm = ((_pinA - _pinB).distance / _pixelsPerMeter * 1000.0);
+                final double refLengthM = refLengthMm / 1000.0;
+
+                // SUB-STEP 0: Solo Scale (Pin A–B) & Wall Thickness Verification Card
+                if (_stage1SubStep == 0) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Icon(Icons.straighten, color: Colors.cyanAccent, size: 16),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Text(
-                          '1. Calibrate Pin A–B (${((_pinA - _pinB).distance / _pixelsPerMeter * 1000).round()} mm) • 2. Drag room corners (●) to match walls',
-                          style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600),
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.cyanAccent.withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(color: Colors.cyanAccent),
+                            ),
+                            child: const Text(
+                              'STEP 0',
+                              style: TextStyle(color: Colors.cyanAccent, fontSize: 9.5, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          const Expanded(
+                            child: Text(
+                              'Tama ba ang na-detect na Reference Length at Wall Thickness?',
+                              style: TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.bold),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(width: 6),
-                      GestureDetector(
-                        onTap: _showCalibrationDialog,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: Colors.cyanAccent.withValues(alpha: 0.18),
-                            borderRadius: BorderRadius.circular(6),
-                            border: Border.all(color: Colors.cyanAccent),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              '📏 Pin A–B: ${refLengthMm.round()} mm (${refLengthM.toStringAsFixed(2)} m)  •  🧱 Wall: ${_wallThicknessMm.round()} mm CHB',
+                              style: const TextStyle(color: BanaagTheme.primaryAmber, fontSize: 11.5, fontWeight: FontWeight.w700),
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
-                          child: const Text(
-                            '📏 Set Scale',
-                            style: TextStyle(color: Colors.cyanAccent, fontSize: 10.5, fontWeight: FontWeight.bold),
+                          GestureDetector(
+                            onTap: _showCalibrationDialog,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(color: Colors.white38),
+                              ),
+                              child: const Text(
+                                '✏️ Specify Actual',
+                                style: TextStyle(color: Colors.white, fontSize: 10.5, fontWeight: FontWeight.bold),
+                              ),
+                            ),
                           ),
-                        ),
+                        ],
                       ),
                     ],
-                  ),
-                  const SizedBox(height: 6),
-                  Row(
+                  );
+                }
+
+                // SUB-STEP 1 (1-by-1 Sequential Room Wizard) or SUB-STEP 3 (Single-Room Re-Edit Mode)
+                if ((_stage1SubStep == 1 || _stage1SubStep == 3) && activeSp != null) {
+                  final poly = _roomPolygons[activeSp.id] ?? _defaultCadPolygonForRoom(activeSp.name, activeIdx);
+                  final metrics = _computePolygonEngineeringMetrics(poly, activeSp.ceilingHeight);
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(
-                        child: Builder(builder: (ctx) {
-                          final spaces = widget.project?.spaces ?? [];
-                          if (spaces.isEmpty) return const SizedBox.shrink();
-                          final idx = _selectedRoomIndex.clamp(0, spaces.length - 1);
-                          final sp = spaces[idx];
-                          final rect = _roomBoxes[sp.id] ?? _defaultCadRectForRoom(sp.name, idx);
-                          final wM = rect.width / _pixelsPerMeter;
-                          final hM = rect.height / _pixelsPerMeter;
-                          return Text(
-                            'Selected: ${sp.name} • ${wM.toStringAsFixed(1)}m × ${hM.toStringAsFixed(1)}m (${sp.areaSqm.toStringAsFixed(1)} m²)',
-                            style: const TextStyle(color: BanaagTheme.primaryAmber, fontSize: 11.5, fontWeight: FontWeight.bold),
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: BanaagTheme.primaryAmber.withValues(alpha: 0.22),
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(color: BanaagTheme.primaryAmber),
+                            ),
+                            child: Text(
+                              _stage1SubStep == 3
+                                  ? 'EDITING ROOM'
+                                  : 'ROOM ${activeIdx + 1} OF $totalRooms',
+                              style: const TextStyle(color: BanaagTheme.primaryAmber, fontSize: 9.5, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Tama ba ang room ID at hugis? (${activeSp.name})',
+                              style: const TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.bold),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          GestureDetector(
+                            onTap: _showRenameSelectedRoomDialog,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: Colors.white10,
+                                borderRadius: BorderRadius.circular(5),
+                                border: Border.all(color: Colors.white30),
+                              ),
+                              child: const Text(
+                                '✏️ Edit ID/Height',
+                                style: TextStyle(color: Colors.cyanAccent, fontSize: 10.0, fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 5),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              'Net Area: ${metrics.netAreaSqm} m² • Perim: ${metrics.perimeterMeters} m • IESNA RCR: ${metrics.rcrValue} (${poly.length} pts)',
+                              style: const TextStyle(color: Colors.cyanAccent, fontSize: 10.8, fontWeight: FontWeight.w600),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          if (poly.length > 3)
+                            GestureDetector(
+                              onTap: () {
+                                setState(() {
+                                  poly.removeLast();
+                                  _roomPolygons[activeSp.id] = List<Offset>.from(poly);
+                                  _syncRoomSpacesFromBoxes(persist: true);
+                                });
+                              },
+                              child: const Padding(
+                                padding: EdgeInsets.only(left: 6),
+                                child: Text(
+                                  '↩️ Undo Pt',
+                                  style: TextStyle(color: Colors.orangeAccent, fontSize: 10.5, fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ],
+                  );
+                }
+
+                // SUB-STEP 2: All Rooms Confirmed — Floor Plan Completeness Gate ("Are all spaces accounted for?")
+                final double totalNetArea = spaces.fold(0.0, (s, r) => s + r.areaSqm);
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.verified, color: BanaagTheme.successGreen, size: 16),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            'All $totalRooms Rooms Confirmed (${totalNetArea.toStringAsFixed(1)} m² Net) • Are all floor plan spaces accounted for?',
+                            style: const TextStyle(color: Colors.white, fontSize: 11.2, fontWeight: FontWeight.bold),
                             overflow: TextOverflow.ellipsis,
-                          );
-                        }),
-                      ),
-                      TextButton.icon(
-                        style: TextButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          minimumSize: const Size(0, 26),
+                          ),
                         ),
-                        icon: const Icon(Icons.edit, size: 13, color: Colors.white70),
-                        label: const Text('Rename', style: TextStyle(color: Colors.white70, fontSize: 10.5)),
-                        onPressed: _showRenameSelectedRoomDialog,
-                      ),
-                      TextButton.icon(
-                        style: TextButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          minimumSize: const Size(0, 26),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        GestureDetector(
+                          onTap: _showSingleRoomEditPickerDialog,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.cyanAccent.withValues(alpha: 0.16),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: Colors.cyanAccent),
+                            ),
+                            child: const Text(
+                              '📐 Edit Room Dimension (1-by-1)',
+                              style: TextStyle(color: Colors.cyanAccent, fontSize: 10.5, fontWeight: FontWeight.bold),
+                            ),
+                          ),
                         ),
-                        icon: const Icon(Icons.add_box_outlined, size: 13, color: BanaagTheme.primaryAmber),
-                        label: const Text('+ Room', style: TextStyle(color: BanaagTheme.primaryAmber, fontSize: 10.5, fontWeight: FontWeight.bold)),
-                        onPressed: _addNewRoomBoxOnStage1,
-                      ),
-                    ],
-                  ),
-                ],
-              ),
+                        const SizedBox(width: 8),
+                        GestureDetector(
+                          onTap: _showMissingSpaceCompletenessDialog,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.orangeAccent.withValues(alpha: 0.16),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: Colors.orangeAccent),
+                            ),
+                            child: Text(
+                              _highlightUnaccountedZones ? '🎯 Tap Unaccounted Zone on Plan' : '⚠️ May Kulang na Space?',
+                              style: const TextStyle(color: Colors.orangeAccent, fontSize: 10.5, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ),
+                        const Spacer(),
+                        GestureDetector(
+                          onTap: () => setState(() => _stage1SubStep = 0),
+                          child: const Text(
+                            '📏 Scale',
+                            style: TextStyle(color: Colors.white70, fontSize: 10.5, decoration: TextDecoration.underline),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                );
+              }),
             ),
 
           // Room Calibration Active Banner
@@ -2218,7 +2602,7 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                                 ),
                               ),
 
-                            // 2. Interactive Vector Layer locked to 1000 x 1220 (Stage 1 Room Boxes vs Stage 3 Electrical Takeoff)
+                            // 2. Interactive Vector Layer locked to 1000 x 1220 (Stage 1 Step 0/1/2/3 vs Stage 3 Electrical Takeoff)
                             CustomPaint(
                               size: const Size(1000.0, 1220.0),
                               painter: CanvasPainter(
@@ -2227,7 +2611,11 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                                 roomGeometry: _roomGeometry,
                                 spaces: widget.project?.spaces ?? [],
                                 canvasStage: _canvasStage,
+                                stage1SubStep: _stage1SubStep,
                                 roomBoxes: _roomBoxes,
+                                roomPolygons: _roomPolygons,
+                                wallThicknessMm: _wallThicknessMm,
+                                highlightUnaccountedZones: _highlightUnaccountedZones,
                                 selectedRoomIndex: _selectedRoomIndex,
                                 isHeatmap: _isHeatmapVisible,
                                 showLabels: _showLabels,
@@ -2235,7 +2623,7 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                                 activeLayerFilter: _activeLayerFilter,
                                 hasBlueprintUnderlay: _hasBlueprintFile && _isUnderlayVisible,
                                 selectedPoint: _selectedPoint,
-                                isCalibrating: _canvasStage == 1 || _selectedTool == 'CALIBRATE',
+                                isCalibrating: (_canvasStage == 1 && _stage1SubStep == 0) || _selectedTool == 'CALIBRATE',
                                 pinA: _pinA,
                                 pinB: _pinB,
                                 activeSnapPoint: _activeSnapPoint,
@@ -2472,37 +2860,83 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
             ),
           ),
 
-          // Bottom Action Bar: Stage 1 (Confirm Scale & Room Shapes) vs Stage 3 (Electrical Symbol Toolbar)
+          // Bottom Action Bar: Stage 1 (Step 0 -> Step 1 1-by-1 Wizard -> Step 2 Completeness Gate -> Step 3 Re-Edit) vs Stage 3
           if (_canvasStage == 1)
             Container(
               padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
               color: BanaagTheme.surfaceCard,
-              child: Row(
-                children: [
-                  _symbolButton('PAN', Icons.pan_tool, 'Pan / Zoom'),
-                  _symbolButton('SELECT', Icons.open_with, 'Drag Corners (●)'),
-                  const SizedBox(width: 4),
-                  Expanded(
-                    child: SizedBox(
-                      height: 38,
-                      child: ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: BanaagTheme.primaryAmber,
-                          foregroundColor: Colors.black,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              child: Builder(builder: (ctx) {
+                final spaces = widget.project?.spaces ?? [];
+                final int totalRooms = spaces.length;
+                final int activeIdx = totalRooms > 0 ? _selectedRoomIndex.clamp(0, totalRooms - 1) : 0;
+
+                return Row(
+                  children: [
+                    _symbolButton('PAN', Icons.pan_tool, 'Pan'),
+                    _symbolButton(
+                      'SELECT',
+                      Icons.open_with,
+                      _stage1SubStep == 0 ? 'Move Pins' : 'Edit Points (●/+)',
+                    ),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: SizedBox(
+                        height: 38,
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: _stage1SubStep == 2 ? BanaagTheme.successGreen : BanaagTheme.primaryAmber,
+                            foregroundColor: _stage1SubStep == 2 ? Colors.white : Colors.black,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                          icon: Icon(
+                            _stage1SubStep == 2 ? Icons.bolt : Icons.check_circle,
+                            size: 17,
+                          ),
+                          label: Text(
+                            _stage1SubStep == 0
+                                ? '✅ Tama, Confirm Scale → Room 1'
+                                : (_stage1SubStep == 1
+                                    ? (activeIdx + 1 < totalRooms
+                                        ? '✅ Confirm Room ${activeIdx + 1} → Next (${activeIdx + 2}/$totalRooms)'
+                                        : '✅ Confirm Room ${activeIdx + 1} → Finish')
+                                    : (_stage1SubStep == 3
+                                        ? '✅ Save Room Dimensions'
+                                        : '✅ All Accounted → Stage 2 Loads')),
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11.2),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          onPressed: () {
+                            if (_stage1SubStep == 0) {
+                              setState(() {
+                                _stage1SubStep = 1;
+                                _selectedRoomIndex = 0;
+                                _selectedTool = 'SELECT';
+                                _syncRoomSpacesFromBoxes(persist: true);
+                              });
+                            } else if (_stage1SubStep == 1) {
+                              setState(() {
+                                _syncRoomSpacesFromBoxes(persist: true);
+                                if (activeIdx + 1 < totalRooms) {
+                                  _selectedRoomIndex = activeIdx + 1;
+                                } else {
+                                  _stage1SubStep = 2;
+                                }
+                              });
+                            } else if (_stage1SubStep == 3) {
+                              setState(() {
+                                _syncRoomSpacesFromBoxes(persist: true);
+                                _stage1SubStep = 2;
+                              });
+                            } else {
+                              _confirmStage1AndOpenStage2Loads();
+                            }
+                          },
                         ),
-                        icon: const Icon(Icons.check_circle, size: 17),
-                        label: const Text(
-                          'Confirm Rooms → Set Loads (Stage 2)',
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11.5),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        onPressed: _confirmStage1AndOpenStage2Loads,
                       ),
                     ),
-                  ),
-                ],
-              ),
+                  ],
+                );
+              }),
             )
           else
             Container(
@@ -2539,6 +2973,9 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
     final distCtrl = TextEditingController(
       text: currentCalibratedMm.round().toString(),
     );
+    final wallCtrl = TextEditingController(
+      text: _wallThicknessMm.round().toString(),
+    );
 
     showDialog(
       context: context,
@@ -2549,115 +2986,128 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
             children: const [
               Icon(Icons.straighten, color: BanaagTheme.primaryAmber, size: 20),
               SizedBox(width: 8),
-              Text(
-                '2-Point Scale Calibration',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white),
+              Expanded(
+                child: Text(
+                  'Step 0: Scale & Wall Thickness',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15.5, color: Colors.white),
+                ),
               ),
             ],
           ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'CAD Pixel Distance: ${pixelDist.toStringAsFixed(1)} px',
-                style: const TextStyle(fontSize: 12, color: Colors.cyanAccent),
-              ),
-              const SizedBox(height: 10),
-              const Text(
-                'Enter the known physical length between Pin A and Pin B:',
-                style: TextStyle(fontSize: 11, color: BanaagTheme.textMuted),
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: distCtrl,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      decoration: InputDecoration(
-                        labelText: isMm ? 'Distance (mm)' : 'Distance (m)',
-                        isDense: true,
-                        suffixText: isMm ? 'mm' : 'm',
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'CAD Span (Pin A–B): ${pixelDist.toStringAsFixed(1)} px',
+                  style: const TextStyle(fontSize: 12, color: Colors.cyanAccent),
+                ),
+                const SizedBox(height: 10),
+                const Text(
+                  '1. Actual Reference Length (Pin A to Pin B):',
+                  style: TextStyle(fontSize: 11, color: BanaagTheme.textMuted),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: distCtrl,
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        decoration: InputDecoration(
+                          labelText: isMm ? 'Distance (mm)' : 'Distance (m)',
+                          isDense: true,
+                          suffixText: isMm ? 'mm' : 'm',
+                        ),
                       ),
                     ),
+                    const SizedBox(width: 8),
+                    ChoiceChip(
+                      label: Text(isMm ? 'mm' : 'meters', style: const TextStyle(fontSize: 11)),
+                      selected: true,
+                      selectedColor: BanaagTheme.primaryAmber,
+                      onSelected: (_) {
+                        setDlgState(() {
+                          final currentVal = double.tryParse(distCtrl.text.trim()) ?? 0.0;
+                          if (isMm) {
+                            distCtrl.text = (currentVal / 1000.0).toStringAsFixed(3);
+                          } else {
+                            distCtrl.text = (currentVal * 1000.0).round().toString();
+                          }
+                          isMm = !isMm;
+                        });
+                      },
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 6,
+                  children: [
+                    ActionChip(
+                      label: const Text('15500 mm (15.5m)', style: TextStyle(fontSize: 10, color: BanaagTheme.primaryAmber)),
+                      onPressed: () => setDlgState(() {
+                        distCtrl.text = isMm ? '15500' : '15.500';
+                      }),
+                    ),
+                    ActionChip(
+                      label: const Text('18480 mm (18.5m)', style: TextStyle(fontSize: 10, color: BanaagTheme.primaryAmber)),
+                      onPressed: () => setDlgState(() {
+                        distCtrl.text = isMm ? '18480' : '18.480';
+                      }),
+                    ),
+                    ActionChip(
+                      label: const Text('4800 mm (4.8m)', style: TextStyle(fontSize: 10)),
+                      onPressed: () => setDlgState(() {
+                        distCtrl.text = isMm ? '4800' : '4.800';
+                      }),
+                    ),
+                    ActionChip(
+                      label: const Text('6000 mm (6m)', style: TextStyle(fontSize: 10)),
+                      onPressed: () => setDlgState(() {
+                        distCtrl.text = isMm ? '6000' : '6.000';
+                      }),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                const Divider(color: Colors.white12),
+                const SizedBox(height: 8),
+                const Text(
+                  '2. Structural Wall Thickness (for Net Interior Area):',
+                  style: TextStyle(fontSize: 11, color: BanaagTheme.textMuted),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: wallCtrl,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(
+                    labelText: 'Wall Thickness (mm)',
+                    isDense: true,
+                    suffixText: 'mm',
                   ),
-                  const SizedBox(width: 8),
-                  ChoiceChip(
-                    label: Text(isMm ? 'mm' : 'meters', style: const TextStyle(fontSize: 11)),
-                    selected: true,
-                    selectedColor: BanaagTheme.primaryAmber,
-                    onSelected: (_) {
-                      setDlgState(() {
-                        final currentVal = double.tryParse(distCtrl.text.trim()) ?? 0.0;
-                        if (isMm) {
-                          distCtrl.text = (currentVal / 1000.0).toStringAsFixed(3);
-                        } else {
-                          distCtrl.text = (currentVal * 1000.0).round().toString();
-                        }
-                        isMm = !isMm;
-                      });
-                    },
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              const Text('Quick Presets:', style: TextStyle(fontSize: 10, color: Colors.white60)),
-              const SizedBox(height: 6),
-              Wrap(
-                spacing: 6,
-                children: [
-                  ActionChip(
-                    label: const Text('15500 mm (15.5m)', style: TextStyle(fontSize: 10, color: BanaagTheme.primaryAmber)),
-                    onPressed: () => setDlgState(() {
-                      distCtrl.text = isMm ? '15500' : '15.500';
-                    }),
-                  ),
-                  ActionChip(
-                    label: const Text('18480 mm (18.5m)', style: TextStyle(fontSize: 10, color: BanaagTheme.primaryAmber)),
-                    onPressed: () => setDlgState(() {
-                      distCtrl.text = isMm ? '18480' : '18.480';
-                    }),
-                  ),
-                  ActionChip(
-                    label: const Text('3400 mm (3.4m)', style: TextStyle(fontSize: 10)),
-                    onPressed: () => setDlgState(() {
-                      distCtrl.text = isMm ? '3400' : '3.400';
-                    }),
-                  ),
-                  ActionChip(
-                    label: const Text('4800 mm (4.8m)', style: TextStyle(fontSize: 10)),
-                    onPressed: () => setDlgState(() {
-                      distCtrl.text = isMm ? '4800' : '4.800';
-                    }),
-                  ),
-                  ActionChip(
-                    label: const Text('3000 mm (3m)', style: TextStyle(fontSize: 10)),
-                    onPressed: () => setDlgState(() {
-                      distCtrl.text = isMm ? '3000' : '3.000';
-                    }),
-                  ),
-                  ActionChip(
-                    label: const Text('4000 mm (4m)', style: TextStyle(fontSize: 10)),
-                    onPressed: () => setDlgState(() {
-                      distCtrl.text = isMm ? '4000' : '4.000';
-                    }),
-                  ),
-                  ActionChip(
-                    label: const Text('6000 mm (6m)', style: TextStyle(fontSize: 10)),
-                    onPressed: () => setDlgState(() {
-                      distCtrl.text = isMm ? '6000' : '6.000';
-                    }),
-                  ),
-                  ActionChip(
-                    label: const Text('8000 mm (8m)', style: TextStyle(fontSize: 10)),
-                    onPressed: () => setDlgState(() {
-                      distCtrl.text = isMm ? '8000' : '8.000';
-                    }),
-                  ),
-                ],
-              ),
-            ],
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 6,
+                  children: [
+                    ActionChip(
+                      label: const Text('100 mm (4" CHB)', style: TextStyle(fontSize: 10)),
+                      onPressed: () => setDlgState(() => wallCtrl.text = '100'),
+                    ),
+                    ActionChip(
+                      label: const Text('150 mm (6" CHB)', style: TextStyle(fontSize: 10, color: BanaagTheme.primaryAmber)),
+                      onPressed: () => setDlgState(() => wallCtrl.text = '150'),
+                    ),
+                    ActionChip(
+                      label: const Text('200 mm (8" CHB)', style: TextStyle(fontSize: 10)),
+                      onPressed: () => setDlgState(() => wallCtrl.text = '200'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
           actions: [
             TextButton(
@@ -2671,12 +3121,14 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
               ),
               onPressed: () {
                 final val = double.tryParse(distCtrl.text.trim()) ?? 0.0;
+                final wallVal = double.tryParse(wallCtrl.text.trim()) ?? 150.0;
                 if (val > 0) {
                   final double distMeters = isMm ? (val / 1000.0) : val;
                   final double newPixelsPerMeter = pixelDist / distMeters;
 
                   setState(() {
                     _pixelsPerMeter = newPixelsPerMeter;
+                    _wallThicknessMm = wallVal.clamp(50.0, 400.0);
                     _syncRoomSpacesFromBoxes(persist: false);
                     _recalculateAllRouteLengths();
 
@@ -2690,18 +3142,298 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                   Navigator.pop(ctx);
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: Text('✅ Scale Calibrated! (${(distMeters * 1000).round()} mm) - All conduit takeoffs updated.'),
+                      content: Text(
+                        '✅ Scale (${(distMeters * 1000).round()} mm) & Wall (${_wallThicknessMm.round()} mm) Calibrated!',
+                      ),
                       backgroundColor: BanaagTheme.successGreen,
                     ),
                   );
                 }
               },
-              child: const Text('Apply Calibration'),
+              child: const Text('Apply Scale & Wall'),
             ),
           ],
         ),
       ),
     );
+  }
+
+  /// Tap-on-Wall-Segment Dialog: Lets user either type exact Wall Segment Length (m/mm) OR Split Wall (+ Point)
+  void _showWallSegmentActionDialog(RoomSpace sp, int segIndex) {
+    final poly = List<Offset>.from(_roomPolygons[sp.id] ?? _defaultCadPolygonForRoom(sp.name, _selectedRoomIndex));
+    if (poly.length < 3) return;
+    final int nextIdx = (segIndex + 1) % poly.length;
+    final Offset p1 = poly[segIndex];
+    final Offset p2 = poly[nextIdx];
+    final double ppm = _pixelsPerMeter > 5.0 ? _pixelsPerMeter : 44.77;
+    final double curMeters = (p2 - p1).distance / ppm;
+    final lenCtrl = TextEditingController(text: curMeters.toStringAsFixed(2));
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: BanaagTheme.surfaceCard,
+        title: Text(
+          'Wall Segment #${segIndex + 1} (${sp.name})',
+          style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Specify exact wall segment length (in meters) or add a corner point (+) on this wall:',
+              style: TextStyle(color: Colors.white70, fontSize: 11.5),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: lenCtrl,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(
+                labelText: 'Wall Segment Length (m)',
+                suffixText: 'm',
+                isDense: true,
+              ),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.cyanAccent,
+                  side: const BorderSide(color: Colors.cyanAccent),
+                ),
+                icon: const Icon(Icons.add_circle_outline, size: 16),
+                label: const Text('➕ Add Corner Point on This Wall (L-Shape)'),
+                onPressed: () {
+                  final midPt = Offset((p1.dx + p2.dx) / 2, (p1.dy + p2.dy) / 2);
+                  setState(() {
+                    poly.insert(segIndex + 1, midPt);
+                    _roomPolygons[sp.id] = poly;
+                    _syncRoomSpacesFromBoxes(persist: true);
+                  });
+                  Navigator.pop(ctx);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('➕ Corner point added! Drag the new ● handle to shape the room.'),
+                      backgroundColor: Colors.cyan,
+                      duration: Duration(seconds: 2),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel', style: TextStyle(color: Colors.white60)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: BanaagTheme.primaryAmber, foregroundColor: Colors.black),
+            onPressed: () {
+              final newLenM = double.tryParse(lenCtrl.text.trim()) ?? curMeters;
+              if (newLenM > 0.4) {
+                final Offset vec = p2 - p1;
+                final double dist = vec.distance > 1.0 ? vec.distance : 1.0;
+                final Offset unit = Offset(vec.dx / dist, vec.dy / dist);
+                final double targetPx = newLenM * ppm;
+                poly[nextIdx] = Offset(
+                  (p1.dx + unit.dx * targetPx).clamp(20.0, 980.0),
+                  (p1.dy + unit.dy * targetPx).clamp(20.0, 1200.0),
+                );
+                setState(() {
+                  _roomPolygons[sp.id] = poly;
+                  _syncRoomSpacesFromBoxes(persist: true);
+                });
+              }
+              Navigator.pop(ctx);
+            },
+            child: const Text('Apply Length'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Single-Room Re-Edit Picker (invoked from "📐 Edit Room Dimension (1-by-1)" at the bottom of Step 2)
+  void _showSingleRoomEditPickerDialog() {
+    final spaces = widget.project?.spaces ?? [];
+    if (spaces.isEmpty) return;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: BanaagTheme.surfaceCard,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: const [
+                  Icon(Icons.aspect_ratio, color: Colors.cyanAccent, size: 20),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Select 1 Room to Edit Dimensions & Shape',
+                      style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'Only the selected room will show active corner points (●) and wall lengths; all other rooms stay faint.',
+                style: TextStyle(color: Colors.white60, fontSize: 11),
+              ),
+              const SizedBox(height: 10),
+              ...List.generate(spaces.length, (i) {
+                final r = spaces[i];
+                final poly = _roomPolygons[r.id] ?? _defaultCadPolygonForRoom(r.name, i);
+                return ListTile(
+                  dense: true,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 6),
+                  leading: CircleAvatar(
+                    radius: 14,
+                    backgroundColor: BanaagTheme.primaryAmber.withValues(alpha: 0.2),
+                    child: Text(
+                      '${i + 1}',
+                      style: const TextStyle(color: BanaagTheme.primaryAmber, fontSize: 11, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  title: Text(r.name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                  subtitle: Text(
+                    'Net Area: ${r.areaSqm.toStringAsFixed(1)} m² • Perim: ${(r.perimeterMeters ?? 0).toStringAsFixed(1)} m • RCR: ${(r.rcrValue ?? 0).toStringAsFixed(2)} (${poly.length} pts)',
+                    style: const TextStyle(color: Colors.cyanAccent, fontSize: 10.5),
+                  ),
+                  trailing: const Icon(Icons.edit_location_alt, color: BanaagTheme.primaryAmber, size: 18),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    setState(() {
+                      _selectedRoomIndex = i;
+                      _stage1SubStep = 3; // Single-Room Re-Edit Mode!
+                      _selectedTool = 'SELECT';
+                    });
+                  },
+                );
+              }),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Floor Plan Completeness Gate Dialog ("Does all of the floors/spaces from the floor plan are accounted?")
+  void _showMissingSpaceCompletenessDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: BanaagTheme.surfaceCard,
+        title: Row(
+          children: const [
+            Icon(Icons.fact_check_outlined, color: Colors.orangeAccent, size: 20),
+            SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Floor Plan Completeness Check',
+                style: TextStyle(color: Colors.white, fontSize: 15.5, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+        content: const Text(
+          'May kulang ba na kwarto o espasyo mula sa floor plan?\n\n'
+          '• Option 1: I-highlight ang unaccounted space sa floor plan at i-tap ito para awtomatikong ma-detect ang pader at maisama sa listahan.\n'
+          '• Option 2: Kung mali o kulang ang mismong floor plan sheet, palitan / i-reupload ang tamang Floor Plan.',
+          style: TextStyle(color: Colors.white70, fontSize: 12),
+        ),
+        actions: [
+          TextButton.icon(
+            icon: const Icon(Icons.upload_file, size: 16, color: Colors.cyanAccent),
+            label: const Text('Re-Upload Floor Plan', style: TextStyle(color: Colors.cyanAccent, fontSize: 11.5)),
+            onPressed: () {
+              Navigator.pop(ctx);
+              _pickNewUnderlay();
+            },
+          ),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(backgroundColor: BanaagTheme.primaryAmber, foregroundColor: Colors.black),
+            icon: const Icon(Icons.touch_app, size: 16),
+            label: const Text('Tap Unaccounted Space on Plan', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11.5)),
+            onPressed: () {
+              Navigator.pop(ctx);
+              setState(() {
+                _highlightUnaccountedZones = true;
+              });
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('🎯 Tap any unaccounted zone on the floor plan to auto-detect its walls & edit 1-by-1!'),
+                  backgroundColor: Colors.orange,
+                  duration: Duration(seconds: 3),
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Auto-detects the nearest structural CAD wall polygon around a tapped unaccounted point and opens Single-Room Edit Mode
+  void _autoDetectAndAddTappedZone(Offset tapPos) {
+    if (widget.project == null) return;
+    double leftWall = 198.0;
+    double rightWall = 892.0;
+    double topWall = 42.0;
+    double bottomWall = 742.0;
+
+    for (final gx in _cadSnapGridX) {
+      if (gx <= tapPos.dx && gx > leftWall) leftWall = gx;
+      if (gx > tapPos.dx && gx < rightWall) rightWall = gx;
+    }
+    for (final gy in _cadSnapGridY) {
+      if (gy <= tapPos.dy && gy > topWall) topWall = gy;
+      if (gy > tapPos.dy && gy < bottomWall) bottomWall = gy;
+    }
+    if ((rightWall - leftWall) < 60.0) rightWall = (leftWall + 148.0).clamp(100.0, 960.0);
+    if ((bottomWall - topWall) < 60.0) bottomWall = (topWall + 130.0).clamp(100.0, 1180.0);
+
+    final List<Offset> detectedPoly = [
+      Offset(leftWall, topWall),
+      Offset(rightWall, topWall),
+      Offset(rightWall, bottomWall),
+      Offset(leftWall, bottomWall),
+    ];
+    final String newId = 'sp-${DateTime.now().millisecondsSinceEpoch}';
+    final int newRoomNum = widget.project!.spaces.length + 1;
+    final metrics = _computePolygonEngineeringMetrics(detectedPoly, 2.8);
+
+    setState(() {
+      _highlightUnaccountedZones = false;
+      _roomPolygons[newId] = detectedPoly;
+      _roomBoxes[newId] = _boundingBoxOfPolygon(detectedPoly);
+      widget.project!.spaces.add(
+        RoomSpace(
+          id: newId,
+          name: 'Detected Space $newRoomNum',
+          areaSqm: metrics.netAreaSqm,
+          ceilingHeight: 2.8,
+          perimeterMeters: metrics.perimeterMeters,
+          rcrValue: metrics.rcrValue,
+          polygonVertices: detectedPoly.map((p) => {'x': p.dx, 'y': p.dy}).toList(),
+        ),
+      );
+      _selectedRoomIndex = widget.project!.spaces.length - 1;
+      _stage1SubStep = 3; // Open directly in 1-by-1 room verification mode!
+      _syncRoomSpacesFromBoxes(persist: true);
+    });
   }
 
   Widget _stageStepPill({
@@ -2832,40 +3564,16 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                   _syncRoomSpacesFromBoxes(persist: true);
                 });
               }
-              Navigator.pop(ctx);
-            },
-            child: const Text('Save'),
+                  Navigator.pop(ctx);
+                },
+                child: const Text('Save'),
+              ),
+            ],
           ),
-        ],
-      ),
-    );
-  }
+        );
+      }
 
-  void _addNewRoomBoxOnStage1() {
-    if (widget.project == null) return;
-    final newId = 'sp-${DateTime.now().millisecondsSinceEpoch}';
-    final newNum = widget.project!.spaces.length + 1;
-    final newRect = const Rect.fromLTWH(340.0, 320.0, 220.0, 160.0);
-    setState(() {
-      _roomBoxes[newId] = newRect;
-      widget.project!.spaces.add(
-        RoomSpace(
-          id: newId,
-          name: 'Room $newNum',
-          areaSqm: 18.0,
-          ceilingHeight: 2.8,
-          canvasX: newRect.left,
-          canvasY: newRect.top,
-          canvasWidth: newRect.width,
-          canvasHeight: newRect.height,
-        ),
-      );
-      _selectedRoomIndex = widget.project!.spaces.length - 1;
-      _syncRoomSpacesFromBoxes(persist: true);
-    });
-  }
-
-  Widget _layerFilterChip(String mode, String label) {
+      Widget _layerFilterChip(String mode, String label) {
     final bool isSel = _activeLayerFilter == mode;
     return GestureDetector(
       onTap: () => setState(() => _activeLayerFilter = mode),
@@ -2989,7 +3697,11 @@ class CanvasPainter extends CustomPainter {
   final RoomGeometry? roomGeometry;
   final List<RoomSpace> spaces;
   final int canvasStage;
+  final int stage1SubStep;
   final Map<String, Rect> roomBoxes;
+  final Map<String, List<Offset>> roomPolygons;
+  final double wallThicknessMm;
+  final bool highlightUnaccountedZones;
   final int selectedRoomIndex;
   final bool isHeatmap;
   final bool showLabels;
@@ -3011,7 +3723,11 @@ class CanvasPainter extends CustomPainter {
     this.roomGeometry,
     this.spaces = const [],
     this.canvasStage = 3,
+    this.stage1SubStep = 0,
     this.roomBoxes = const {},
+    this.roomPolygons = const {},
+    this.wallThicknessMm = 150.0,
+    this.highlightUnaccountedZones = false,
     this.selectedRoomIndex = 0,
     this.isHeatmap = false,
     this.showLabels = true,
@@ -3027,6 +3743,17 @@ class CanvasPainter extends CustomPainter {
     this.activePolygonPoints = const [],
     this.calibratedRoomPolygons = const {},
   });
+
+  void _drawDashedPath(Canvas canvas, Path path, Paint paint) {
+    for (final metric in path.computeMetrics()) {
+      double dist = 0.0;
+      while (dist < metric.length) {
+        final next = math.min(dist + 7.0, metric.length);
+        canvas.drawPath(metric.extractPath(dist, next), paint);
+        dist += 13.0;
+      }
+    }
+  }
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -3049,12 +3776,18 @@ class CanvasPainter extends CustomPainter {
       } else {
         _drawArchitecturalFloorPlan(canvas, size);
       }
-    } else if (isCalibrating) {
+    } else if (isCalibrating && canvasStage != 1) {
       _drawCalibrationOverlay(canvas, size);
     }
 
-    // STAGE 1: Draw Interactive Draggable Room Boxes with 4 Corner Handles (●) & Live Dimension Badges!
+    // STAGE 1: Step 0 (Solo Scale Pin A–B) -> Step 1/3 (1-by-1 Polygon Room Wizard) -> Step 2 (Completeness Gate)
     if (canvasStage == 1) {
+      // STEP 0: Draw ONLY Reference Scale Pin A — Pin B on the Blank Floor Plan (Zero room boxes!)
+      if (stage1SubStep == 0) {
+        _drawCalibrationOverlay(canvas, size);
+        return;
+      }
+
       final List<Color> roomColors = [
         Colors.amberAccent,
         Colors.cyanAccent,
@@ -3065,55 +3798,165 @@ class CanvasPainter extends CustomPainter {
       final double ppm = pixelsPerMeter > 5.0 ? pixelsPerMeter : 44.77;
 
       for (int i = 0; i < spaces.length; i++) {
+        // In Step 1 (1-by-1 Sequential Wizard):
+        // - Future rooms (i > selectedRoomIndex) are hidden!
+        // - Confirmed rooms (i < selectedRoomIndex) are drawn ONLY as a very faint dashed outline (no labels, no handles)!
+        // In Step 3 (Single-Room Re-Edit Mode):
+        // - Only selectedRoomIndex is active; all other rooms (i != selectedRoomIndex) are drawn as a very faint dashed outline!
+        if (stage1SubStep == 1 && i > selectedRoomIndex) continue;
+
         final sp = spaces[i];
-        final Rect? rect = roomBoxes[sp.id];
-        if (rect == null) continue;
-        final bool isSel = i == selectedRoomIndex;
+        final List<Offset>? poly = roomPolygons[sp.id];
+        if (poly == null || poly.length < 3) continue;
+
+        final Path polyPath = Path()..moveTo(poly.first.dx, poly.first.dy);
+        for (int v = 1; v < poly.length; v++) {
+          polyPath.lineTo(poly[v].dx, poly[v].dy);
+        }
+        polyPath.close();
+
+        final bool isActiveRoom = (stage1SubStep == 1 || stage1SubStep == 3) && (i == selectedRoomIndex);
+        final bool isAllConfirmedOverview = (stage1SubStep == 2);
         final Color baseColor = roomColors[i % roomColors.length];
 
-        // 1. Translucent Room Fill
-        final fillPaint = Paint()
-          ..color = baseColor.withValues(alpha: isSel ? 0.22 : 0.11)
-          ..style = PaintingStyle.fill;
-        canvas.drawRect(rect, fillPaint);
-
-        // 2. Crisp Room Boundary Outline
-        final borderPaint = Paint()
-          ..color = isSel ? BanaagTheme.primaryAmber : baseColor.withValues(alpha: 0.85)
-          ..strokeWidth = isSel ? 2.8 : 1.6
-          ..style = PaintingStyle.stroke;
-        canvas.drawRect(rect, borderPaint);
-
-        // 3. 4 Draggable Corner Handles (●)
-        final corners = [rect.topLeft, rect.topRight, rect.bottomRight, rect.bottomLeft];
-        for (final cPos in corners) {
-          canvas.drawCircle(
-            cPos,
-            isSel ? 9.5 : 7.0,
-            Paint()..color = const Color(0xFF11151E),
-          );
-          canvas.drawCircle(
-            cPos,
-            isSel ? 8.0 : 5.5,
-            Paint()..color = isSel ? BanaagTheme.primaryAmber : baseColor,
-          );
+        // Case A: Confirmed Non-Active Room in Step 1 or Step 3 -> Very Faint Dashed Outline ONLY (No Label, No Handles!)
+        if (!isActiveRoom && !isAllConfirmedOverview) {
+          final faintPaint = Paint()
+            ..color = Colors.white.withValues(alpha: 0.25)
+            ..strokeWidth = 1.4
+            ..style = PaintingStyle.stroke;
+          _drawDashedPath(canvas, polyPath, faintPaint);
+          continue;
         }
 
-        // 4. Center Move Handle & Live Dimension / Area Badge (m x m • m²)
-        final double wM = rect.width / ppm;
-        final double hM = rect.height / ppm;
-        final double areaSqm = wM * hM;
+        // Case B: Step 2 Completeness Gate Overview -> Clean Confirmed Polygons + Compact Room Summary Badge (No Handles)
+        if (isAllConfirmedOverview) {
+          canvas.drawPath(
+            polyPath,
+            Paint()
+              ..color = baseColor.withValues(alpha: 0.14)
+              ..style = PaintingStyle.fill,
+          );
+          canvas.drawPath(
+            polyPath,
+            Paint()
+              ..color = baseColor.withValues(alpha: 0.82)
+              ..strokeWidth = 1.8
+              ..style = PaintingStyle.stroke,
+          );
+          final Rect bounds = polyPath.getBounds();
+          final tp = TextPainter(
+            text: TextSpan(
+              text: '${sp.name}\n${sp.areaSqm.toStringAsFixed(1)} m² • RCR ${(sp.rcrValue ?? 0).toStringAsFixed(1)}',
+              style: const TextStyle(color: Colors.white, fontSize: 9.5, fontWeight: FontWeight.bold),
+            ),
+            textAlign: TextAlign.center,
+            textDirection: TextDirection.ltr,
+          )..layout();
+          final badgeRRect = RRect.fromRectAndRadius(
+            Rect.fromCenter(center: bounds.center, width: tp.width + 12, height: tp.height + 8),
+            const Radius.circular(5),
+          );
+          canvas.drawRRect(badgeRRect, Paint()..color = const Color(0xD811151E));
+          tp.paint(canvas, Offset(bounds.center.dx - tp.width / 2, bounds.center.dy - tp.height / 2));
+          continue;
+        }
 
+        // Case C: Active Room in Step 1 or Step 3 -> Full Interactive Multi-Vertex Polygon!
+        // 1. Translucent Room Fill + Crisp Active Border
+        canvas.drawPath(
+          polyPath,
+          Paint()
+            ..color = BanaagTheme.primaryAmber.withValues(alpha: 0.20)
+            ..style = PaintingStyle.fill,
+        );
+        canvas.drawPath(
+          polyPath,
+          Paint()
+            ..color = BanaagTheme.primaryAmber
+            ..strokeWidth = 2.8
+            ..style = PaintingStyle.stroke,
+        );
+
+        // 2. Wall Segment Length Labels (e.g. "5.25m") + Midpoint (+) Split Handles on Every Wall Segment
+        for (int v = 0; v < poly.length; v++) {
+          final Offset p1 = poly[v];
+          final Offset p2 = poly[(v + 1) % poly.length];
+          final Offset midPt = Offset((p1.dx + p2.dx) / 2, (p1.dy + p2.dy) / 2);
+          final double segMeters = (p2 - p1).distance / ppm;
+
+          // Draw Midpoint '+' Circle Handle
+          canvas.drawCircle(midPt, 8.5, Paint()..color = const Color(0xFF11151E));
+          canvas.drawCircle(
+            midPt,
+            7.0,
+            Paint()
+              ..color = Colors.cyanAccent
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = 1.6,
+          );
+          // Draw '+' cross inside midpoint handle
+          final plusPaint = Paint()
+            ..color = Colors.cyanAccent
+            ..strokeWidth = 1.5;
+          canvas.drawLine(Offset(midPt.dx - 3.5, midPt.dy), Offset(midPt.dx + 3.5, midPt.dy), plusPaint);
+          canvas.drawLine(Offset(midPt.dx, midPt.dy - 3.5), Offset(midPt.dx, midPt.dy + 3.5), plusPaint);
+
+          // Draw Clickable Segment Dimension Pill next to the midpoint handle
+          final segTp = TextPainter(
+            text: TextSpan(
+              text: '${segMeters.toStringAsFixed(2)}m',
+              style: const TextStyle(color: Colors.cyanAccent, fontSize: 9.2, fontWeight: FontWeight.bold),
+            ),
+            textDirection: TextDirection.ltr,
+          )..layout();
+
+          final bool isHoriz = (p2.dx - p1.dx).abs() >= (p2.dy - p1.dy).abs();
+          final Offset pillCenter = isHoriz ? Offset(midPt.dx, midPt.dy - 16.0) : Offset(midPt.dx + 24.0, midPt.dy);
+          final segRect = RRect.fromRectAndRadius(
+            Rect.fromCenter(center: pillCenter, width: segTp.width + 8.0, height: segTp.height + 4.0),
+            const Radius.circular(4),
+          );
+          canvas.drawRRect(segRect, Paint()..color = const Color(0xE611151E));
+          canvas.drawRRect(
+            segRect,
+            Paint()
+              ..color = Colors.cyanAccent.withValues(alpha: 0.65)
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = 0.9,
+          );
+          segTp.paint(canvas, Offset(pillCenter.dx - segTp.width / 2, pillCenter.dy - segTp.height / 2));
+        }
+
+        // 3. Draggable Corner Vertices (●)
+        for (final cPos in poly) {
+          canvas.drawCircle(cPos, 10.0, Paint()..color = const Color(0xFF11151E));
+          canvas.drawCircle(cPos, 8.2, Paint()..color = BanaagTheme.primaryAmber);
+          canvas.drawCircle(cPos, 3.0, Paint()..color = Colors.black);
+        }
+
+        // 4. Active Magnetic Wall Snap Crosshair Indicator
+        if (activeSnapPoint != null) {
+          final snapPaint = Paint()
+            ..color = Colors.greenAccent
+            ..strokeWidth = 1.5
+            ..style = PaintingStyle.stroke;
+          canvas.drawCircle(activeSnapPoint!, 14.0, snapPaint);
+        }
+
+        // 5. Center Room Info Badge (Name + Net Area + Perimeter + IESNA RCR)
+        final Rect bounds = polyPath.getBounds();
         final String titleLine = sp.name.toUpperCase();
-        final String dimLine = '${wM.toStringAsFixed(1)}m × ${hM.toStringAsFixed(1)}m (${areaSqm.toStringAsFixed(1)} m²)';
+        final String dimLine =
+            'Net ${sp.areaSqm.toStringAsFixed(1)} m² • Perim ${(sp.perimeterMeters ?? 0).toStringAsFixed(1)}m\nIESNA RCR: ${(sp.rcrValue ?? 0).toStringAsFixed(2)}';
 
         final tp = TextPainter(
           text: TextSpan(
             children: [
               TextSpan(
                 text: '$titleLine\n',
-                style: TextStyle(
-                  color: isSel ? BanaagTheme.primaryAmber : Colors.white,
+                style: const TextStyle(
+                  color: BanaagTheme.primaryAmber,
                   fontSize: 10.5,
                   fontWeight: FontWeight.bold,
                 ),
@@ -3122,7 +3965,7 @@ class CanvasPainter extends CustomPainter {
                 text: dimLine,
                 style: const TextStyle(
                   color: Colors.cyanAccent,
-                  fontSize: 9.5,
+                  fontSize: 9.2,
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -3134,40 +3977,77 @@ class CanvasPainter extends CustomPainter {
 
         final badgeRect = RRect.fromRectAndRadius(
           Rect.fromCenter(
-            center: rect.center,
+            center: bounds.center,
             width: tp.width + 16.0,
             height: tp.height + 10.0,
           ),
           const Radius.circular(6),
         );
-        canvas.drawRRect(badgeRect, Paint()..color = const Color(0xDF11151E));
+        canvas.drawRRect(badgeRect, Paint()..color = const Color(0xE811151E));
         canvas.drawRRect(
           badgeRect,
           Paint()
-            ..color = isSel ? BanaagTheme.primaryAmber : baseColor.withValues(alpha: 0.7)
+            ..color = BanaagTheme.primaryAmber
             ..style = PaintingStyle.stroke
-            ..strokeWidth = isSel ? 1.5 : 0.9,
+            ..strokeWidth = 1.5,
         );
-        tp.paint(canvas, Offset(rect.center.dx - tp.width / 2, rect.center.dy - tp.height / 2));
+        tp.paint(canvas, Offset(bounds.center.dx - tp.width / 2, bounds.center.dy - tp.height / 2));
       }
 
-      // Draw Reference Scale Pin A - Pin B on top of Blank Floor Plan in Stage 1
-      _drawCalibrationOverlay(canvas, size);
+      // Highlight Unaccounted Floor Plan Zones if user tapped "⚠️ May Kulang na Space?" in Step 2
+      if (stage1SubStep == 2 && highlightUnaccountedZones) {
+        const List<Rect> candidateZones = [
+          Rect.fromLTWH(198.0, 342.0, 180.0, 186.0), // Left Mid Zone / Restrooms
+          Rect.fromLTWH(378.0, 278.0, 214.0, 250.0), // Central Lobby / Hallway
+          Rect.fromLTWH(198.0, 528.0, 312.0, 214.0), // Lower Left Wing
+        ];
+        for (final z in candidateZones) {
+          canvas.drawRect(
+            z,
+            Paint()
+              ..color = Colors.orangeAccent.withValues(alpha: 0.18)
+              ..style = PaintingStyle.fill,
+          );
+          final Path zPath = Path()..addRect(z);
+          _drawDashedPath(
+            canvas,
+            zPath,
+            Paint()
+              ..color = Colors.orangeAccent
+              ..strokeWidth = 2.0
+              ..style = PaintingStyle.stroke,
+          );
+          final zTp = TextPainter(
+            text: const TextSpan(
+              text: '➕ TAP TO ADD SPACE',
+              style: TextStyle(color: Colors.orangeAccent, fontSize: 9.5, fontWeight: FontWeight.bold),
+            ),
+            textDirection: TextDirection.ltr,
+          )..layout();
+          zTp.paint(canvas, Offset(z.center.dx - zTp.width / 2, z.center.dy - zTp.height / 2));
+        }
+      }
       return;
     }
 
-    // STAGE 3: Draw Subtle Confirmed Room Outlines Behind Electrical Layout
+    // STAGE 3: Draw Subtle Confirmed Room Polygons Behind Electrical Layout
     for (int i = 0; i < spaces.length; i++) {
       final sp = spaces[i];
-      final Rect? rect = roomBoxes[sp.id];
-      if (rect == null) continue;
-      canvas.drawRect(
-        rect,
-        Paint()
-          ..color = Colors.cyanAccent.withValues(alpha: 0.22)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.0,
-      );
+      final List<Offset>? poly = roomPolygons[sp.id];
+      if (poly != null && poly.length >= 3) {
+        final path = Path()..moveTo(poly.first.dx, poly.first.dy);
+        for (int v = 1; v < poly.length; v++) {
+          path.lineTo(poly[v].dx, poly[v].dy);
+        }
+        path.close();
+        canvas.drawPath(
+          path,
+          Paint()
+            ..color = Colors.cyanAccent.withValues(alpha: 0.22)
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 1.1,
+        );
+      }
     }
 
     // Paint Locked Room Polygons with Soft Translucent Fill & Clean Border
