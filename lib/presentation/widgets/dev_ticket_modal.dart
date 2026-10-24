@@ -1,7 +1,9 @@
 // BANAAG Dev Ticket Modal BottomSheet
 // Clean, developer-friendly ticket submission and queue management
 
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../domain/dev_ticket.dart';
 import '../../data/dev_ticket_repository.dart';
 import '../theme/banaag_theme.dart';
@@ -35,6 +37,7 @@ class _DevTicketModalContentState extends State<DevTicketModalContent> {
   bool _showListView = false;
   List<DevTicket> _tickets = [];
   bool _isLoading = true;
+  final List<String> _attachedImagePaths = [];
 
   final Map<String, Map<String, dynamic>> _typeMeta = {
     'fix': {
@@ -100,6 +103,7 @@ class _DevTicketModalContentState extends State<DevTicketModalContent> {
       createdAt: DateTime.now(),
       status: 'open',
       projectContext: widget.projectContext,
+      imageUris: List<String>.from(_attachedImagePaths),
     );
 
     await DevTicketRepository.instance.saveTicket(newTicket);
@@ -107,6 +111,7 @@ class _DevTicketModalContentState extends State<DevTicketModalContent> {
 
     _titleController.clear();
     _descController.clear();
+    _attachedImagePaths.clear();
 
     if (mounted) {
       setState(() {
@@ -114,7 +119,7 @@ class _DevTicketModalContentState extends State<DevTicketModalContent> {
       });
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('✅ Dev Ticket recorded in local engineering queue!'),
+          content: Text('âœ… Dev Ticket recorded in local engineering queue!'),
           backgroundColor: BanaagTheme.successGreen,
         ),
       );
@@ -292,6 +297,122 @@ class _DevTicketModalContentState extends State<DevTicketModalContent> {
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
           ),
         ),
+        const SizedBox(height: 12),
+
+        // Multiple Image Attachments Header & Pickers
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.attach_file, size: 16, color: BanaagTheme.primaryAmber),
+                const SizedBox(width: 6),
+                Text(
+                  'Screenshots & Photos (${_attachedImagePaths.length})',
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.white70),
+                ),
+              ],
+            ),
+            Row(
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.camera_alt_outlined, size: 20, color: BanaagTheme.primaryAmber),
+                  tooltip: 'Take Photo with Camera',
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  onPressed: () async {
+                    final picker = ImagePicker();
+                    final photo = await picker.pickImage(source: ImageSource.camera);
+                    if (photo != null) {
+                      setState(() {
+                        _attachedImagePaths.add(photo.path);
+                      });
+                    }
+                  },
+                ),
+                const SizedBox(width: 12),
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: BanaagTheme.primaryAmber,
+                    side: const BorderSide(color: BanaagTheme.primaryAmber),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    minimumSize: const Size(0, 30),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                  ),
+                  icon: const Icon(Icons.add_photo_alternate_outlined, size: 15),
+                  label: const Text('Add Images', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                  onPressed: () async {
+                    final picker = ImagePicker();
+                    final List<XFile> images = await picker.pickMultiImage();
+                    if (images.isNotEmpty) {
+                      setState(() {
+                        _attachedImagePaths.addAll(images.map((img) => img.path));
+                      });
+                    }
+                  },
+                ),
+              ],
+            ),
+          ],
+        ),
+
+        // Image Thumbnails Carousel Preview with Remove (X) Button
+        if (_attachedImagePaths.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          SizedBox(
+            height: 74,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              itemCount: _attachedImagePaths.length,
+              itemBuilder: (ctx, i) {
+                final path = _attachedImagePaths[i];
+                return Stack(
+                  children: [
+                    Container(
+                      margin: const EdgeInsets.only(right: 8, top: 4),
+                      width: 70,
+                      height: 70,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: BanaagTheme.primaryAmber.withValues(alpha: 0.6)),
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: GestureDetector(
+                        onTap: () => _showFullscreenImage(context, path),
+                        child: Image.file(
+                          File(path),
+                          fit: BoxFit.cover,
+                          errorBuilder: (c, e, s) => const Center(
+                            child: Icon(Icons.broken_image, size: 24, color: Colors.grey),
+                          ),
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      top: 0,
+                      right: 4,
+                      child: GestureDetector(
+                        onTap: () {
+                          setState(() {
+                            _attachedImagePaths.removeAt(i);
+                          });
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.all(2),
+                          decoration: const BoxDecoration(
+                            color: Colors.redAccent,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(Icons.close, size: 12, color: Colors.white),
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+        ],
         const SizedBox(height: 16),
 
         // Submit Button
@@ -393,6 +514,37 @@ class _DevTicketModalContentState extends State<DevTicketModalContent> {
                           style: const TextStyle(fontSize: 11, color: BanaagTheme.textMuted),
                         ),
                       ],
+                      if (t.imageUris.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        SizedBox(
+                          height: 44,
+                          child: ListView.builder(
+                            scrollDirection: Axis.horizontal,
+                            itemCount: t.imageUris.length,
+                            itemBuilder: (ctx, imgIdx) {
+                              final imgPath = t.imageUris[imgIdx];
+                              return GestureDetector(
+                                onTap: () => _showFullscreenImage(context, imgPath),
+                                child: Container(
+                                  margin: const EdgeInsets.only(right: 6),
+                                  width: 44,
+                                  height: 44,
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(color: Colors.white24),
+                                  ),
+                                  clipBehavior: Clip.antiAlias,
+                                  child: Image.file(
+                                    File(imgPath),
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (c, e, s) => const Icon(Icons.broken_image, size: 16, color: Colors.grey),
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -411,6 +563,52 @@ class _DevTicketModalContentState extends State<DevTicketModalContent> {
             ),
           );
         },
+      ),
+    );
+  }
+
+  void _showFullscreenImage(BuildContext context, String imagePath) {
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(12),
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            InteractiveViewer(
+              minScale: 0.5,
+              maxScale: 6.0,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Image.file(
+                  File(imagePath),
+                  fit: BoxFit.contain,
+                  errorBuilder: (c, e, s) => Container(
+                    padding: const EdgeInsets.all(24),
+                    color: Colors.black87,
+                    child: const Text('Unable to load full image file.', style: TextStyle(color: Colors.white70)),
+                  ),
+                ),
+              ),
+            ),
+            Positioned(
+              top: 10,
+              right: 10,
+              child: GestureDetector(
+                onTap: () => Navigator.pop(ctx),
+                child: Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: const BoxDecoration(
+                    color: Colors.black54,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.close, color: Colors.white, size: 22),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

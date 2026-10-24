@@ -10,6 +10,7 @@ class DevTicket {
   final String status; // 'open' | 'in_progress' | 'resolved'
   final String? projectContext; // Associated project title or screen
   final String? resolutionSummary;
+  final List<String> imageUris; // Attached local screenshot & photo paths
 
   DevTicket({
     required this.id,
@@ -21,6 +22,7 @@ class DevTicket {
     this.status = 'open',
     this.projectContext,
     this.resolutionSummary,
+    this.imageUris = const [],
   });
 
   Map<String, dynamic> toJson() => {
@@ -33,6 +35,7 @@ class DevTicket {
         'status': status,
         if (projectContext != null) 'projectContext': projectContext,
         if (resolutionSummary != null) 'resolutionSummary': resolutionSummary,
+        'imageUris': imageUris,
       };
 
   factory DevTicket.fromJson(Map<String, dynamic> json) {
@@ -46,6 +49,7 @@ class DevTicket {
       status: json['status'] as String? ?? 'open',
       projectContext: json['projectContext'] as String?,
       resolutionSummary: json['resolutionSummary'] as String?,
+      imageUris: (json['imageUris'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? const [],
     );
   }
 
@@ -57,6 +61,7 @@ class DevTicket {
     String? status,
     String? projectContext,
     String? resolutionSummary,
+    List<String>? imageUris,
   }) {
     return DevTicket(
       id: id,
@@ -68,6 +73,7 @@ class DevTicket {
       status: status ?? this.status,
       projectContext: projectContext ?? this.projectContext,
       resolutionSummary: resolutionSummary ?? this.resolutionSummary,
+      imageUris: imageUris ?? this.imageUris,
     );
   }
 }
