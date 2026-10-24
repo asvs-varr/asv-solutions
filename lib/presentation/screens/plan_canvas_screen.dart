@@ -30,7 +30,7 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
   late List<ConduitRoute> _routes;
   RoomGeometry? _roomGeometry;
   bool _isHeatmapVisible = false;
-  String _selectedTool = 'SELECT';
+  String _selectedTool = 'PAN';
   bool _isUnderlayVisible = true;
   final double _underlayOpacity = 0.78;
   String? _blueprintPath;
@@ -605,6 +605,8 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
     }
   }
   void _handlePanStart(DragStartDetails details) {
+    if (_selectedTool == 'PAN') return;
+
     final tapX = details.localPosition.dx;
     final tapY = details.localPosition.dy;
     _dragStartOffset = details.localPosition;
@@ -1568,11 +1570,12 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                   // Zoomable Interactive Canvas (Floor Plan + Electrical Vector Layer move/scale together)
                   InteractiveViewer(
                     transformationController: _zoomController,
-                    minScale: 0.8,
-                    maxScale: 4.5,
-                    panEnabled: true,
+                    minScale: 0.5,
+                    maxScale: 5.0,
+                    panEnabled: _selectedTool == 'PAN' || _draggedPoint == null,
                     scaleEnabled: true,
-                    boundaryMargin: const EdgeInsets.all(320.0),
+                    panAxis: PanAxis.free,
+                    boundaryMargin: const EdgeInsets.all(800.0),
                     onInteractionEnd: (_) {
                       setState(() {
                         _currentZoom = _zoomController.value.getMaxScaleOnAxis();
@@ -1583,11 +1586,11 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                         width: 1000.0,
                         height: 1220.0,
                         child: GestureDetector(
-                          behavior: HitTestBehavior.opaque,
+                          behavior: HitTestBehavior.translucent,
                           onTapUp: _handleCanvasTap,
-                          onPanStart: _handlePanStart,
-                          onPanUpdate: _handlePanUpdate,
-                          onPanEnd: _handlePanEnd,
+                          onPanStart: _selectedTool == 'PAN' ? null : _handlePanStart,
+                          onPanUpdate: _selectedTool == 'PAN' ? null : _handlePanUpdate,
+                          onPanEnd: _selectedTool == 'PAN' ? null : _handlePanEnd,
                           child: Stack(
                             fit: StackFit.expand,
                             children: [
@@ -1894,6 +1897,7 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
               scrollDirection: Axis.horizontal,
               child: Row(
                 children: [
+                  _symbolButton('PAN', Icons.pan_tool, 'Pan / Zoom'),
                   _symbolButton('SELECT', Icons.near_me, 'Select / Move'),
                   _symbolButton('CALIBRATE_ROOM', Icons.polyline, 'Calibrate Room'),
                   _symbolButton('CALIBRATE', Icons.straighten, 'Scale (mm)'),
