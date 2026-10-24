@@ -11,7 +11,6 @@ import '../widgets/project_management_dialogs.dart';
 import '../widgets/dxf_export_guide_dialog.dart';
 import '../widgets/site_inspection_dialog.dart';
 import '../widgets/utility_service_drop_dialog.dart';
-import '../widgets/floor_plan_room_intake_modal.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
 import 'plan_canvas_screen.dart';
@@ -482,13 +481,16 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
                     child: const Text('OPEN CANVAS ➔', style: TextStyle(color: Colors.cyanAccent, fontSize: 10, fontWeight: FontWeight.bold)),
                   ),
                   if (_project.blueprintImagePath != null && _project.blueprintImagePath!.isNotEmpty)
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: BanaagTheme.primaryAmber.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(4),
+                    GestureDetector(
+                      onTap: _openFloorPlanScanner,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: BanaagTheme.primaryAmber.withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: const Text('RE-SCAN PLAN 🔍', style: TextStyle(color: BanaagTheme.primaryAmber, fontSize: 10, fontWeight: FontWeight.bold)),
                       ),
-                      child: const Text('RE-SCAN PLAN 🔍', style: TextStyle(color: BanaagTheme.primaryAmber, fontSize: 10, fontWeight: FontWeight.bold)),
                     ),
                 ],
               ),
@@ -954,38 +956,30 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
     }
   }
 
-  void _launchFloorPlanModal(String path) {
-    _project.blueprintImagePath = path;
-    ProjectRepository.instance.updateProject(_project);
+  Future<void> _launchFloorPlanModal(String path) async {
+    setState(() {
+      _project.blueprintImagePath = path;
+      ProjectRepository.instance.updateProject(_project);
+    });
 
-    FloorPlanRoomIntakeModal.show(
+    if (!mounted) return;
+    await Navigator.push(
       context,
-      blueprintPath: path,
-      projectTitle: _project.title,
-      onConfirmed: (scannedSpaces, lengthM, widthM) {
-        setState(() {
-          _project.spaces = scannedSpaces;
-          final validSpaceNames = scannedSpaces.map((s) => s.name.trim().toLowerCase()).toSet();
-          _project.applianceLoads.removeWhere((a) => !validSpaceNames.contains(a.roomCategory.trim().toLowerCase()));
-          _project.canvasPoints.clear();
-          _project.conduitRoutes.clear();
-          _project.blueprintImagePath = path;
-          _project.roomGeometry = RoomGeometry(
-            roomType: 'RECTANGULAR',
-            leftWallMeters: lengthM,
-            totalWidthMeters: widthM,
-          );
-          ProjectRepository.instance.updateProject(_project);
-        });
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('✅ Identified ${scannedSpaces.length} spaces! Load tally & branch circuit takeoff updated.'),
-            backgroundColor: BanaagTheme.successGreen,
-          ),
-        );
-      },
+      MaterialPageRoute(
+        builder: (_) => PlanCanvasScreen(
+          project: _project,
+          initialStage: 1,
+        ),
+      ),
     );
+    if (mounted) {
+      setState(() {
+        _project = ProjectRepository.instance.allProjects.firstWhere(
+          (p) => p.id == _project.id,
+          orElse: () => _project,
+        );
+      });
+    }
   }
 }
 

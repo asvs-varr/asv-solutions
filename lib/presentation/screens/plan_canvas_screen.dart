@@ -19,7 +19,6 @@ import '../theme/banaag_theme.dart';
 import '../widgets/dxf_export_guide_dialog.dart';
 import '../widgets/room_dimension_input_dialog.dart';
 import '../widgets/lighting_visualizer_modal.dart';
-import '../widgets/raw_plan_calibration_modal.dart';
 import 'client_needs_analysis_screen.dart';
 
 class PlanCanvasScreen extends StatefulWidget {
@@ -510,14 +509,14 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
 
   /// Silently scans the uploaded blueprint using ML Kit / CAD text stream in the background
   /// to refine room names and bounding dimensions without any modal interruption!
-  Future<void> _triggerSilentBlueprintOcrScanIfNeeded() async {
+  Future<void> _triggerSilentBlueprintOcrScanIfNeeded({bool forceRescan = false}) async {
     final proj = widget.project;
     final path = _blueprintPath;
     if (proj == null || path == null || !File(path).existsSync()) return;
 
-    // Only run if spaces still have default IDs
+    // Only run if spaces still have default IDs or if forceRescan is requested
     final bool isDefaultSpaces = proj.spaces.isNotEmpty && proj.spaces.first.id == 'sp-func';
-    if (!isDefaultSpaces) return;
+    if (!isDefaultSpaces && !forceRescan) return;
 
     try {
       final scanResult = await FloorPlanScannerEngine.scanFloorPlanWithMetadata(path, pdfPageIndex: _pdfSheetIndex);
@@ -737,6 +736,8 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
       _canvasStage = 3;
     }
     if (_canvasStage == 1) {
+      _stage1SubStep = 0;
+      _selectedRoomIndex = 0;
       _selectedTool = 'SELECT';
     }
 
@@ -1890,50 +1891,11 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
             },
           ),
 
-          // 2. Import Floor Plan / DXF Intake
+          // 2. Import Floor Plan / DXF Intake -> Directly initiates Step 0 (Scale Pin A–B & Wall Thickness)
           IconButton(
             icon: const Icon(Icons.file_upload_outlined, color: Colors.cyanAccent),
-            tooltip: 'Import Architectural Floor Plan / DXF',
-            onPressed: () {
-              RawPlanCalibrationModal.show(
-                context,
-                project: widget.project,
-                onApplied: (pts, rts, geom) {
-                  setState(() {
-                    _points = pts;
-                    _routes = rts;
-                    _roomGeometry = geom;
-
-                    if (widget.project != null) {
-                      widget.project!.canvasPoints = pts;
-                      widget.project!.conduitRoutes = rts;
-                      widget.project!.roomGeometry = geom;
-
-                      // Mark Takeoff & Intake checklist item complete if applicable
-                      for (final phase in widget.project!.phases) {
-                        for (final item in phase.checklist) {
-                          if (item.id == 'c_dxf' || item.id == 'c_takeoff' || item.id == 'p_takeoff') {
-                            item.isCompleted = true;
-                            item.notes = 'Completed via Takeoff Plan Engine (${pts.length} devices auto-placed)';
-                          }
-                        }
-                        if (phase.checklist.every((c) => c.isCompleted)) {
-                          phase.isCompleted = true;
-                        }
-                      }
-                      ProjectRepository.instance.updateProject(widget.project!);
-                    }
-                  });
-
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('⚡ PEC Smart Placement Applied: ${pts.length} devices in ${geom.totalWidthMeters.toStringAsFixed(1)}m × ${geom.leftWallMeters.toStringAsFixed(1)}m area!'),
-                      backgroundColor: BanaagTheme.successGreen,
-                    ),
-                  );
-                },
-              );
-            },
+            tooltip: 'Import Architectural Floor Plan (PDF / Image) & Start Step 0',
+            onPressed: _pickNewUnderlay,
           ),
 
           // 3. Overflow Menu for Lighting Calculator, Heatmap, and DXF Export
@@ -4154,6 +4116,12 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
           _isUnderlayVisible = true;
           _pdfSheetIndex = 0;
           _renderedPdfImagePath = null;
+          // Immediately initiate Stage 1 -> Step 0 (Scale Pin A–B & Wall Thickness) upon floor plan import!
+          _canvasStage = 1;
+          _stage1SubStep = 0;
+          _selectedRoomIndex = 0;
+          _selectedTool = 'SELECT';
+          _fitSheetToViewport();
           if (widget.project != null) {
             widget.project!.blueprintImagePath = path;
             ProjectRepository.instance.updateProject(widget.project!);
@@ -4162,10 +4130,11 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
         if (PdfBlueprintEngine.isPdf(path)) {
           _loadPdfBlueprint();
         }
+        _triggerSilentBlueprintOcrScanIfNeeded(forceRescan: true);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('📐 Floor plan attached: ${path.split(Platform.pathSeparator).last}!'),
+              content: Text('📐 Step 0 Initiated: Verify Reference Scale (Pin A–B) & Wall Thickness on ${path.split(Platform.pathSeparator).last}!'),
               backgroundColor: BanaagTheme.successGreen,
             ),
           );
