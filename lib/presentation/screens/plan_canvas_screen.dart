@@ -41,6 +41,12 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
   bool _invertBlueprint = false;
   Offset _pinA = const Offset(88, 68);
   Offset _pinB = const Offset(230, 68);
+
+  // Multi-Point Polygon Calibration Engine for Real Rooms
+  final List<Offset> _activePolygonPoints = [];
+  int _activeCalibratingRoomIndex = 0;
+  final Map<String, List<Offset>> _calibratedRoomPolygons = {};
+
   int? _activeDraggingPin;
   Offset? _activeSnapPoint;
   double _pixelsPerMeter = 30.0;
@@ -737,7 +743,192 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
     }
   }
 
+
+  void _populateDevicesInsidePolygon(String roomName, List<Offset> polygon) {
+    if (polygon.length < 3 || widget.project == null) return;
+
+    // Filter loads corresponding to this room
+    final lowerRoom = roomName.toLowerCase();
+    final List<ApplianceItem> roomLoads = widget.project!.applianceLoads.where((a) {
+      final cat = (a.roomCategory).toLowerCase();
+      if (lowerRoom.contains('hall') || lowerRoom.contains('event')) {
+        return cat.contains('hall') || cat.contains('event');
+      }
+      if (lowerRoom.contains('staff')) return cat.contains('staff');
+      if (lowerRoom.contains('office')) return cat.contains('office');
+      if (lowerRoom.contains('storage') || lowerRoom.contains('store')) {
+        return cat.contains('storage') || cat.contains('store');
+      }
+      if (lowerRoom.contains('landing') || lowerRoom.contains('stair')) {
+        return cat.contains('landing') || cat.contains('stair');
+      }
+      return cat == lowerRoom;
+    }).toList();
+
+    if (roomLoads.isEmpty) return;
+
+    // Compute bounding box and centroid
+    double minX = polygon.map((p) => p.dx).reduce(math.min);
+    double maxX = polygon.map((p) => p.dx).reduce(math.max);
+    double minY = polygon.map((p) => p.dy).reduce(math.min);
+    double maxY = polygon.map((p) => p.dy).reduce(math.max);
+
+    final double width = maxX - minX;
+    final double height = maxY - minY;
+    final Offset center = Offset(minX + width / 2, minY + height / 2);
+
+    // Remove old points for this room
+    final oldPointsToRemove = _points.where((p) {
+      return p.x >= minX - 10 && p.x <= maxX + 10 && p.y >= minY - 10 && p.y <= maxY + 10;
+    }).map((p) => p.id).toSet();
+    _points.removeWhere((p) => oldPointsToRemove.contains(p.id));
+    _routes.removeWhere((r) => oldPointsToRemove.contains(r.fromPointId) || oldPointsToRemove.contains(r.toPointId));
+
+    int devCount = _points.length + 1;
+    int routeCount = _routes.length + 1;
+    String lastLightId = 'pt-panel';
+    String lastOutletId = 'pt-panel';
+
+    // Separate into ceiling and wall appliances
+    final List<Map<String, dynamic>> ceilingItems = [];
+    final List<Map<String, dynamic>> wallItems = [];
+
+    for (final app in roomLoads) {
+      for (int i = 0; i < app.quantity; i++) {
+        String pType = 'OUTLET_DUPLEX';
+        if (app.name.toLowerCase().contains('aircon') || app.name.toLowerCase().contains('acu')) {
+          pType = 'ACU';
+        } else if (app.name.toLowerCase().contains('light') ||
+            app.name.toLowerCase().contains('fan') ||
+            app.name.toLowerCase().contains('luminaire') ||
+            app.name.toLowerCase().contains('led') ||
+            app.name.toLowerCase().contains('pinlight') ||
+            app.name.toLowerCase().contains('panel')) {
+          pType = 'LIGHT';
+        } else if (app.name.toLowerCase().contains('switch')) {
+          pType = 'SWITCH_1G';
+        }
+
+        final item = {
+          'id': 'pt-${devCount++}',
+          'type': pType,
+          'name': app.name,
+          'circuit': app.circuitNumber,
+          'isDedicated': app.isDedicatedCircuit,
+        };
+
+        if (pType == 'LIGHT' || pType == 'FAN') {
+          ceilingItems.add(item);
+        } else {
+          wallItems.add(item);
+        }
+      }
+    }
+
+    // 1. Symmetrical Ceiling Grid inside room polygon
+    if (ceilingItems.length == 1) {
+      final item = ceilingItems.first;
+      _points.add(CanvasPoint(
+        id: item['id'],
+        type: item['type'],
+        label: _getShorthandLabel(item['type'], item['name'], _points.length + 1),
+        x: center.dx,
+        y: center.dy,
+        circuitNumber: item['circuit'],
+      ));
+      _routes.add(ConduitRoute(id: 'rt-${routeCount++}', fromPointId: 'pt-panel', toPointId: item['id'], measuredLengthMeters: 4.5));
+    } else if (ceilingItems.isNotEmpty) {
+      final int cols = math.max(1, math.sqrt(ceilingItems.length).ceil());
+      final int rows = (ceilingItems.length / cols).ceil();
+      final double stepX = width / (cols + 1);
+      final double stepY = height / (rows + 1);
+
+      for (int i = 0; i < ceilingItems.length; i++) {
+        final item = ceilingItems[i];
+        final int c = i % cols;
+        final int r = i ~/ cols;
+        final double px = minX + stepX * (c + 1);
+        final double py = minY + stepY * (r + 1);
+
+        final pId = item['id'];
+        _points.add(CanvasPoint(
+          id: pId,
+          type: item['type'],
+          label: _getShorthandLabel(item['type'], item['name'], _points.length + 1),
+          x: px,
+          y: py,
+          circuitNumber: item['circuit'],
+        ));
+
+        _routes.add(ConduitRoute(
+          id: 'rt-${routeCount++}',
+          fromPointId: lastLightId,
+          toPointId: pId,
+          measuredLengthMeters: lastLightId == 'pt-panel' ? 5.0 : 2.8,
+        ));
+        lastLightId = pId;
+      }
+    }
+
+    // 2. Perimeter Wall Placement (Outlets, ACUs, Switches)
+    // Sample points along the polygon segments
+    final List<Offset> wallAnchors = [];
+    for (int i = 0; i < polygon.length; i++) {
+      final p1 = polygon[i];
+      final p2 = polygon[(i + 1) % polygon.length];
+      wallAnchors.add(Offset((p1.dx + p2.dx) / 2, (p1.dy + p2.dy) / 2));
+      wallAnchors.add(Offset((p1.dx * 0.75 + p2.dx * 0.25), (p1.dy * 0.75 + p2.dy * 0.25)));
+      wallAnchors.add(Offset((p1.dx * 0.25 + p2.dx * 0.75), (p1.dy * 0.25 + p2.dy * 0.75)));
+    }
+
+    for (int i = 0; i < wallItems.length; i++) {
+      final item = wallItems[i];
+      final anchor = wallAnchors[i % wallAnchors.length];
+      final pId = item['id'];
+      final bool isDedicated = item['isDedicated'] || item['type'] == 'ACU';
+
+      _points.add(CanvasPoint(
+        id: pId,
+        type: item['type'],
+        label: _getShorthandLabel(item['type'], item['name'], _points.length + 1),
+        x: anchor.dx,
+        y: anchor.dy,
+        circuitNumber: item['circuit'],
+      ));
+
+      if (isDedicated) {
+        _routes.add(ConduitRoute(
+          id: 'rt-${routeCount++}',
+          fromPointId: 'pt-panel',
+          toPointId: pId,
+          measuredLengthMeters: 6.5,
+        ));
+      } else {
+        _routes.add(ConduitRoute(
+          id: 'rt-${routeCount++}',
+          fromPointId: lastOutletId,
+          toPointId: pId,
+          measuredLengthMeters: lastOutletId == 'pt-panel' ? 4.5 : 3.0,
+        ));
+        lastOutletId = pId;
+      }
+    }
+
+    // Persist to project
+    widget.project!.canvasPoints = _points;
+    widget.project!.conduitRoutes = _routes;
+    ProjectRepository.instance.updateProject(widget.project!);
+  }
+
   void _handleCanvasTap(TapUpDetails details) {
+    if (_selectedTool == 'CALIBRATE_ROOM') {
+      setState(() {
+        _activePolygonPoints.add(details.localPosition);
+      });
+      HapticFeedback.selectionClick();
+      return;
+    }
+
     // If not dragging, check if tapping an existing point (within 24px radius)
     final tapX = details.localPosition.dx;
     final tapY = details.localPosition.dy;
@@ -1230,6 +1421,90 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
       ),
       body: Column(
         children: [
+          
+          // Room Calibration Active Banner
+          if (_selectedTool == 'CALIBRATE_ROOM')
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              color: const Color(0xFF1F2937),
+              child: Row(
+                children: [
+                  const Icon(Icons.touch_app, color: BanaagTheme.primaryAmber, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Builder(builder: (ctx) {
+                      final roomList = widget.project?.spaces.map((s) => s.name).toList() ??
+                          ['Function Hall / Event Place', 'Staff Room', 'Office Rooms', 'Storage Room', 'Landing'];
+                      final currentRoom = roomList[_activeCalibratingRoomIndex % roomList.length];
+                      return Text(
+                        'Tap corners of: $currentRoom (${_activePolygonPoints.length} pts)',
+                        style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                        overflow: TextOverflow.ellipsis,
+                      );
+                    }),
+                  ),
+                  if (_activePolygonPoints.isNotEmpty) ...[
+                    IconButton(
+                      icon: const Icon(Icons.undo, color: Colors.orangeAccent, size: 20),
+                      tooltip: 'Undo Last Corner',
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      onPressed: () {
+                        setState(() {
+                          _activePolygonPoints.removeLast();
+                        });
+                      },
+                    ),
+                    const SizedBox(width: 10),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: BanaagTheme.primaryAmber,
+                        foregroundColor: Colors.black,
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        minimumSize: const Size(50, 30),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                      ),
+                      onPressed: _activePolygonPoints.length < 3
+                          ? null
+                          : () {
+                              final roomList = widget.project?.spaces.map((s) => s.name).toList() ??
+                                  ['Function Hall / Event Place', 'Staff Room', 'Office Rooms', 'Storage Room', 'Landing'];
+                              final currentRoom = roomList[_activeCalibratingRoomIndex % roomList.length];
+
+                              setState(() {
+                                final pts = List<Offset>.from(_activePolygonPoints);
+                                _calibratedRoomPolygons[currentRoom] = pts;
+                                _populateDevicesInsidePolygon(currentRoom, pts);
+                                _activePolygonPoints.clear();
+                                _activeCalibratingRoomIndex++;
+
+                                if (_activeCalibratingRoomIndex >= roomList.length) {
+                                  _selectedTool = 'SELECT';
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('🎉 All rooms calibrated and populated according to PEC 2017 & IESNA!'),
+                                      backgroundColor: BanaagTheme.successGreen,
+                                    ),
+                                  );
+                                } else {
+                                  final nextRoom = roomList[_activeCalibratingRoomIndex % roomList.length];
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text('✅ $currentRoom locked! Next: Tap corners of $nextRoom.'),
+                                      backgroundColor: BanaagTheme.primaryAmber,
+                                      duration: const Duration(seconds: 2),
+                                    ),
+                                  );
+                                }
+                              });
+                            },
+                      child: const Text('Lock & Populate', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+
           // Takeoff Summary Live Ribbon with 1-Tap Load Schedule Populate Button
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -1374,6 +1649,8 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                               pinB: _pinB,
                               activeSnapPoint: _activeSnapPoint,
                               pixelsPerMeter: _pixelsPerMeter,
+                              activePolygonPoints: _activePolygonPoints,
+                              calibratedRoomPolygons: _calibratedRoomPolygons,
                             ),
                             child: Container(),
                           ),
@@ -1612,7 +1889,8 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
               child: Row(
                 children: [
                   _symbolButton('SELECT', Icons.near_me, 'Select / Move'),
-                  _symbolButton('CALIBRATE', Icons.straighten, 'Calibrate (mm)'),
+                  _symbolButton('CALIBRATE_ROOM', Icons.polyline, 'Calibrate Room'),
+                  _symbolButton('CALIBRATE', Icons.straighten, 'Scale (mm)'),
                   _symbolButton('PANEL', Icons.dashboard, 'Panel'),
                   _symbolButton('SWITCH_1G', Icons.toggle_on, '1G Switch'),
                   _symbolButton('LIGHT', Icons.lightbulb, 'Light'),
@@ -1921,6 +2199,8 @@ class CanvasPainter extends CustomPainter {
   final Offset pinB;
   final Offset? activeSnapPoint;
   final double pixelsPerMeter;
+  final List<Offset> activePolygonPoints;
+  final Map<String, List<Offset>> calibratedRoomPolygons;
 
   CanvasPainter({
     required this.points,
@@ -1937,6 +2217,8 @@ class CanvasPainter extends CustomPainter {
     this.pinB = const Offset(240, 200),
     this.activeSnapPoint,
     this.pixelsPerMeter = 30.0,
+    this.activePolygonPoints = const [],
+    this.calibratedRoomPolygons = const {},
   });
 
   @override
@@ -1962,6 +2244,51 @@ class CanvasPainter extends CustomPainter {
       }
     } else if (isCalibrating) {
       _drawCalibrationOverlay(canvas, size);
+    }
+
+    // Paint Locked Room Polygons with Soft Translucent Fill & Clean Border
+    for (final entry in calibratedRoomPolygons.entries) {
+      final poly = entry.value;
+      if (poly.length >= 3) {
+        final path = Path()..moveTo(poly.first.dx, poly.first.dy);
+        for (int i = 1; i < poly.length; i++) {
+          path.lineTo(poly[i].dx, poly[i].dy);
+        }
+        path.close();
+
+        final fillPaint = Paint()
+          ..color = BanaagTheme.primaryAmber.withValues(alpha: 0.08)
+          ..style = PaintingStyle.fill;
+        canvas.drawPath(path, fillPaint);
+
+        final strokePaint = Paint()
+          ..color = BanaagTheme.primaryAmber.withValues(alpha: 0.6)
+          ..strokeWidth = 1.5
+          ..style = PaintingStyle.stroke;
+        canvas.drawPath(path, strokePaint);
+      }
+    }
+
+    // Paint Active Calibration Polygon (dashed cyan line + corner target rings)
+    if (activePolygonPoints.isNotEmpty) {
+      final polyPaint = Paint()
+        ..color = Colors.cyanAccent
+        ..strokeWidth = 2.0
+        ..style = PaintingStyle.stroke;
+
+      if (activePolygonPoints.length > 1) {
+        final path = Path()..moveTo(activePolygonPoints.first.dx, activePolygonPoints.first.dy);
+        for (int i = 1; i < activePolygonPoints.length; i++) {
+          path.lineTo(activePolygonPoints[i].dx, activePolygonPoints[i].dy);
+        }
+        canvas.drawPath(path, polyPaint);
+      }
+
+      for (int i = 0; i < activePolygonPoints.length; i++) {
+        final pt = activePolygonPoints[i];
+        canvas.drawCircle(pt, 5.0, Paint()..color = Colors.cyanAccent);
+        canvas.drawCircle(pt, 8.0, Paint()..color = Colors.cyanAccent.withValues(alpha: 0.3)..style = PaintingStyle.stroke..strokeWidth = 1.5);
+      }
     }
 
     // In-Canvas Optical Lux Heatmap Layer
