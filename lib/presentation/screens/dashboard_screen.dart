@@ -13,7 +13,6 @@ import 'future_proofing_screen.dart';
 import 'banaag_pro_screen.dart';
 import '../widgets/project_management_dialogs.dart';
 import '../widgets/dev_ticket_modal.dart';
-import '../widgets/floor_plan_room_intake_modal.dart';
 import '../widgets/project_quota_voucher_modal.dart';
 import '../../domain/banaag_auth_service.dart';
 
@@ -655,62 +654,42 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
                 Navigator.pop(ctx);
 
-                if (intakeMode == 'BLUEPRINT_PHOTO' && selectedBlueprintPath != null) {
-                  // Step 2: Open Floor Plan Calibration & Room Intake Modal
-                  FloorPlanRoomIntakeModal.show(
-                    context,
-                    blueprintPath: selectedBlueprintPath!,
-                    projectTitle: newProject.title,
-                    onConfirmed: (scannedSpaces, lengthM, widthM) {
-                      newProject.spaces = scannedSpaces;
-                      newProject.roomGeometry = RoomGeometry(
-                        roomType: 'RECTANGULAR',
-                        leftWallMeters: widthM,
-                        totalWidthMeters: lengthM,
-                        cutoutWidthMeters: 0,
-                        cutoutDepthMeters: 0,
-                        rightWallMeters: widthM,
-                      );
-                      repo.addProject(newProject);
-                      setState(() {});
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          backgroundColor: BanaagTheme.surfaceCard,
-                          content: Row(
-                            children: [
-                              const Icon(Icons.check_circle, color: BanaagTheme.primaryAmber, size: 20),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text('✅ Project "${newProject.title}" created with ${scannedSpaces.length} spaces!'),
-                              ),
-                            ],
+                // Add project to repository immediately
+                repo.addProject(newProject);
+                setState(() {});
+
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    backgroundColor: BanaagTheme.surfaceCard,
+                    content: Row(
+                      children: [
+                        const Icon(Icons.check_circle, color: BanaagTheme.primaryAmber, size: 20),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            (intakeMode == 'BLUEPRINT_PHOTO' && selectedBlueprintPath != null)
+                                ? '📐 Blueprint attached! Starting Step 0 Scale Calibration on Plan Canvas...'
+                                : '✅ Project "${newProject.title}" successfully created!',
                           ),
                         ),
-                      );
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (_) => WorkflowScreen(project: newProject)),
-                      );
-                    },
-                  );
-                } else {
-                  // Fast creation: Save and go directly into project workflow
-                  repo.addProject(newProject);
-                  setState(() {});
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      backgroundColor: BanaagTheme.surfaceCard,
-                      content: Row(
-                        children: [
-                          const Icon(Icons.check_circle, color: BanaagTheme.primaryAmber, size: 20),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text('✅ Project "${newProject.title}" successfully created!'),
-                          ),
-                        ],
+                      ],
+                    ),
+                  ),
+                );
+
+                if (intakeMode == 'BLUEPRINT_PHOTO' && selectedBlueprintPath != null) {
+                  // Direct bypass of redundant popup: Launch PlanCanvasScreen directly at Stage 1 Step 0
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => PlanCanvasScreen(
+                        project: newProject,
+                        initialStage: 1,
                       ),
                     ),
                   );
+                } else {
+                  // Standard direct workflow navigation
                   Navigator.push(
                     context,
                     MaterialPageRoute(builder: (_) => WorkflowScreen(project: newProject)),
@@ -725,7 +704,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     )
                   : Text(
                       (intakeMode == 'BLUEPRINT_PHOTO' && selectedBlueprintPath != null)
-                          ? 'Next: Calibrate & Tag Rooms →'
+                          ? 'Next: Open Plan Canvas (Step 0) →'
                           : 'Create Project',
                       style: const TextStyle(fontWeight: FontWeight.bold),
                     ),

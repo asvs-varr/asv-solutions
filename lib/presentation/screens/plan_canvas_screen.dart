@@ -11,6 +11,7 @@ import '../../domain/lighting_engine.dart';
 import '../../domain/pec_safety_auditor.dart';
 import '../../domain/sld_engine.dart';
 import '../../domain/dxf_cad_engine.dart';
+import '../../domain/floor_plan_scanner_engine.dart';
 import '../../domain/institutional_building_presets.dart';
 import '../../domain/pdf_blueprint_engine.dart';
 import '../../data/project_repository.dart';
@@ -502,6 +503,53 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
       _roomBoxes[sp.id] = _boundingBoxOfPolygon(poly);
     }
     _syncRoomSpacesFromBoxes(persist: false);
+
+    // Silent background OCR scan if blueprint is attached and spaces were never customized
+    _triggerSilentBlueprintOcrScanIfNeeded();
+  }
+
+  /// Silently scans the uploaded blueprint using ML Kit / CAD text stream in the background
+  /// to refine room names and bounding dimensions without any modal interruption!
+  Future<void> _triggerSilentBlueprintOcrScanIfNeeded() async {
+    final proj = widget.project;
+    final path = _blueprintPath;
+    if (proj == null || path == null || !File(path).existsSync()) return;
+
+    // Only run if spaces still have default IDs
+    final bool isDefaultSpaces = proj.spaces.isNotEmpty && proj.spaces.first.id == 'sp-func';
+    if (!isDefaultSpaces) return;
+
+    try {
+      final scanResult = await FloorPlanScannerEngine.scanFloorPlanWithMetadata(path, pdfPageIndex: _pdfSheetIndex);
+      if (scanResult.rooms.isNotEmpty && mounted) {
+        setState(() {
+          // Keep existing polygon geometries but update room names & default heights if matches found
+          for (int i = 0; i < proj.spaces.length && i < scanResult.rooms.length; i++) {
+            final scanned = scanResult.rooms[i];
+            final existing = proj.spaces[i];
+            if (scanned.name.isNotEmpty && !scanned.name.startsWith('Space')) {
+              proj.spaces[i] = RoomSpace(
+                id: existing.id,
+                name: scanned.name,
+                areaSqm: existing.areaSqm,
+                ceilingHeight: LightingEngine.suggestDefaultCeilingHeight(scanned.name),
+                shapeType: existing.shapeType,
+                cutoutDepth: existing.cutoutDepth,
+                cutoutWidth: existing.cutoutWidth,
+                canvasX: existing.canvasX,
+                canvasY: existing.canvasY,
+                canvasWidth: existing.canvasWidth,
+                canvasHeight: existing.canvasHeight,
+                perimeterMeters: existing.perimeterMeters,
+                rcrValue: existing.rcrValue,
+                polygonVertices: existing.polygonVertices,
+              );
+            }
+          }
+          _syncRoomSpacesFromBoxes(persist: true);
+        });
+      }
+    } catch (_) {}
   }
 
   void _syncRoomSpacesFromBoxes({bool persist = true}) {
