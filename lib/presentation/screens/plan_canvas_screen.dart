@@ -39,8 +39,8 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
   String? _renderedPdfImagePath;
   bool _isRenderingPdf = false;
   bool _invertBlueprint = false;
-  Offset _pinA = const Offset(60, 200);
-  Offset _pinB = const Offset(240, 200);
+  Offset _pinA = const Offset(88, 68);
+  Offset _pinB = const Offset(230, 68);
   int? _activeDraggingPin;
   Offset? _activeSnapPoint;
   double _pixelsPerMeter = 30.0;
@@ -296,79 +296,85 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
 
   /// High-Precision PEC 2017 & IESNA Placement for CAD Institutional / Commercial Blueprints
   void _autoGenerateForCadBuildingBlueprint(List<ApplianceItem> appliances) {
-    // 1. Service Entrance / Landing / Electrical Closet MDP position
-    final panelPt = CanvasPoint(id: 'pt-panel', type: 'PANEL', label: 'MDP', x: 155.0, y: 285.0);
+    // Service Entrance / Landing MDP position (near stairs landing at x: 235, y: 375)
+    final panelPt = CanvasPoint(id: 'pt-panel', type: 'PANEL', label: 'MDP', x: 235.0, y: 375.0);
     _points = [panelPt];
     _routes = [];
 
-    // Distinct room zone anchors on cropped canvas coordinates (~393 x 480 px):
+    // Exact architectural room anchors matching the cropped CAD building footprint (approx 393w x 480h px)
     final Map<String, List<Offset>> roomCeilingMap = {
       'function': [
-        const Offset(115.0, 75.0),
-        const Offset(155.0, 75.0),
-        const Offset(195.0, 75.0),
-        const Offset(115.0, 115.0),
-        const Offset(155.0, 115.0),
-        const Offset(195.0, 115.0),
-        const Offset(135.0, 95.0),
-        const Offset(175.0, 95.0),
+        // Symmetrical luminaire grid across the spacious Function Hall (Grids 1-5, Bays A-D)
+        const Offset(115.0, 110.0),
+        const Offset(155.0, 110.0),
+        const Offset(195.0, 110.0),
+        const Offset(115.0, 160.0),
+        const Offset(155.0, 160.0),
+        const Offset(195.0, 160.0),
+        const Offset(135.0, 135.0),
+        const Offset(175.0, 135.0),
       ],
       'staff': [
-        const Offset(290.0, 105.0),
-        const Offset(325.0, 105.0),
-        const Offset(308.0, 125.0),
+        // Staff Room (Grids 7-10 upper right)
+        const Offset(315.0, 140.0),
+        const Offset(345.0, 140.0),
+        const Offset(330.0, 165.0),
       ],
       'office': [
-        const Offset(260.0, 195.0),
-        const Offset(298.0, 195.0),
-        const Offset(260.0, 225.0),
-        const Offset(298.0, 225.0),
-        const Offset(278.0, 210.0),
+        // Office Rooms (Grids 7-10 mid right)
+        const Offset(290.0, 260.0),
+        const Offset(330.0, 260.0),
+        const Offset(290.0, 300.0),
+        const Offset(330.0, 300.0),
       ],
       'storage': [
-        const Offset(295.0, 355.0),
-        const Offset(320.0, 355.0),
+        // Storage Room (Grids 8-10 bottom right, beside stairs)
+        const Offset(325.0, 445.0),
+        const Offset(350.0, 445.0),
       ],
       'landing': [
-        const Offset(198.0, 275.0),
-        const Offset(198.0, 305.0),
+        // Stairs & Landing (Grids 6-8 mid-lower)
+        const Offset(245.0, 365.0),
+        const Offset(245.0, 395.0),
+        const Offset(325.0, 385.0),
       ],
     };
 
     final Map<String, List<Offset>> roomWallMap = {
       'function': [
-        const Offset(82.0, 75.0),   // West perimeter wall
-        const Offset(82.0, 115.0),  // West perimeter wall lower
-        const Offset(120.0, 38.0),  // North exterior wall
-        const Offset(170.0, 38.0),  // North exterior wall
-        const Offset(215.0, 38.0),  // North exterior wall
-        const Offset(225.0, 75.0),  // East partition wall
-        const Offset(225.0, 115.0), // East partition wall
-        const Offset(82.0, 138.0),  // Entry switch area near D2
+        // Wall convenience outlets (<= 3.6m spacing) & ACU on exterior walls
+        const Offset(88.0, 110.0),   // West exterior wall
+        const Offset(88.0, 160.0),   // West exterior wall
+        const Offset(135.0, 68.0),   // North exterior wall
+        const Offset(175.0, 68.0),   // North exterior wall
+        const Offset(230.0, 68.0),   // North exterior wall
+        const Offset(230.0, 120.0),  // East partition wall
+        const Offset(230.0, 165.0),  // East partition wall
+        const Offset(88.0, 185.0),   // Entrance D2 switch
       ],
       'staff': [
-        const Offset(270.0, 105.0), // Interior partition wall
-        const Offset(308.0, 68.0),  // North exterior wall
-        const Offset(348.0, 105.0), // East exterior wall (ACU)
-        const Offset(308.0, 138.0), // South corridor partition
+        const Offset(275.0, 140.0), // West partition wall
+        const Offset(330.0, 85.0),  // North exterior wall
+        const Offset(365.0, 140.0), // East exterior wall (ACU)
+        const Offset(330.0, 180.0), // South corridor partition
       ],
       'office': [
-        const Offset(240.0, 205.0), // West corridor wall
-        const Offset(278.0, 168.0), // North partition wall
-        const Offset(335.0, 205.0), // East window wall (W5 ACU)
-        const Offset(278.0, 248.0), // South partition wall
+        const Offset(255.0, 275.0), // West corridor partition
+        const Offset(310.0, 220.0), // North partition wall
+        const Offset(365.0, 275.0), // East exterior wall (W5 ACU)
+        const Offset(310.0, 325.0), // South partition wall
       ],
       'storage': [
-        const Offset(270.0, 355.0), // West partition wall
-        const Offset(308.0, 325.0), // North partition wall
-        const Offset(345.0, 355.0), // East exterior wall
-        const Offset(308.0, 382.0), // South exterior wall
+        const Offset(285.0, 445.0), // West partition wall
+        const Offset(330.0, 420.0), // North partition wall
+        const Offset(365.0, 445.0), // East exterior wall
+        const Offset(330.0, 465.0), // South exterior wall
       ],
       'landing': [
-        const Offset(175.0, 285.0), // Landing west wall beside stairs
-        const Offset(220.0, 285.0), // Landing east wall
-        const Offset(198.0, 255.0), // Stair landing head
-        const Offset(198.0, 325.0), // Stair landing foot
+        const Offset(225.0, 375.0), // West landing wall (beside MDP)
+        const Offset(265.0, 375.0), // East stair wall
+        const Offset(245.0, 345.0), // Top stair landing
+        const Offset(245.0, 415.0), // Bottom stair landing
       ],
     };
 
@@ -411,24 +417,24 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
         final compactLabel = _getShorthandLabel(pointType, app.name, devCounter);
         final bool isCeiling = pointType == 'LIGHT' || pointType == 'FAN';
 
-        double px = 155.0;
-        double py = 285.0;
+        double px = 235.0;
+        double py = 375.0;
 
         if (isCeiling) {
           final anchors = roomCeilingMap[rKey] ?? roomCeilingMap['function']!;
           final idx = roomCeilIdx[rKey] ?? 0;
           final base = anchors[idx % anchors.length];
           final cycle = idx ~/ anchors.length;
-          px = (base.dx + (cycle * 8.0)).clamp(40.0, 360.0);
-          py = (base.dy + (cycle * 8.0)).clamp(40.0, 460.0);
+          px = (base.dx + (cycle * 8.0)).clamp(60.0, 375.0);
+          py = (base.dy + (cycle * 8.0)).clamp(50.0, 470.0);
           roomCeilIdx[rKey] = idx + 1;
         } else {
           final anchors = roomWallMap[rKey] ?? roomWallMap['function']!;
           final idx = roomWallIdx[rKey] ?? 0;
           final base = anchors[idx % anchors.length];
           final cycle = idx ~/ anchors.length;
-          px = (base.dx - (cycle * 6.0)).clamp(40.0, 360.0);
-          py = (base.dy + (cycle * 6.0)).clamp(40.0, 460.0);
+          px = (base.dx - (cycle * 6.0)).clamp(60.0, 375.0);
+          py = (base.dy + (cycle * 6.0)).clamp(50.0, 470.0);
           roomWallIdx[rKey] = idx + 1;
         }
 
@@ -473,7 +479,6 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
       }
     }
   }
-
   /// Standard Residential 4-Room Fallback Auto-Placement
   void _autoGenerateForStandardDwelling(List<ApplianceItem> appliances) {
     final panelPt = CanvasPoint(id: 'pt-panel', type: 'PANEL', label: 'MDP', x: 42.0, y: 280.0);
@@ -1225,17 +1230,56 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
       ),
       body: Column(
         children: [
-          // Takeoff Summary Live Ribbon
+          // Takeoff Summary Live Ribbon with 1-Tap Load Schedule Populate Button
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             color: const Color(0xFF1B2028),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            child: Column(
               children: [
-                _metricMini('Total Wire', '${takeoff.totalThhnWireMeters.toStringAsFixed(0)} m', '(${takeoff.wireRollsCount.toStringAsFixed(1)} rolls)'),
-                _metricMini('Conduit', '${takeoff.totalConduitMeters.toStringAsFixed(0)} m', '(${takeoff.totalPvcPipesPcs} pipes)'),
-                _metricMini('Boxes', '${takeoff.utilityBoxesCount + takeoff.octagonalBoxesCount} pcs', '(${takeoff.conduitClampsCount} clamps)'),
-                _metricMini('Estimated', '₱${takeoff.grandTotalEstimatedCost.toStringAsFixed(0)}', 'Mat+Labor', color: BanaagTheme.primaryAmber),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    _metricMini('Total Wire', '${takeoff.totalThhnWireMeters.toStringAsFixed(0)} m', '(${takeoff.wireRollsCount.toStringAsFixed(1)} rolls)'),
+                    _metricMini('Conduit', '${takeoff.totalConduitMeters.toStringAsFixed(0)} m', '(${takeoff.totalPvcPipesPcs} pipes)'),
+                    _metricMini('Boxes', '${takeoff.utilityBoxesCount + takeoff.octagonalBoxesCount} pcs', '(${takeoff.conduitClampsCount} clamps)'),
+                    _metricMini('Estimated', '₱${takeoff.grandTotalEstimatedCost.toStringAsFixed(0)}', 'Mat+Labor', color: BanaagTheme.primaryAmber),
+                  ],
+                ),
+                if (widget.project != null && widget.project!.applianceLoads.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 32,
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: BanaagTheme.primaryAmber,
+                        foregroundColor: Colors.black,
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                      ),
+                      icon: const Icon(Icons.flash_on, size: 16),
+                      label: Text(
+                        '⚡ Populate from Load Schedule (${widget.project!.applianceLoads.fold(0, (sum, a) => sum + a.quantity)} Devices)',
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11.5),
+                      ),
+                      onPressed: () {
+                        setState(() {
+                          _autoGenerateFromAppliances(widget.project!.applianceLoads);
+                          widget.project!.canvasPoints = _points;
+                          widget.project!.conduitRoutes = _routes;
+                          ProjectRepository.instance.updateProject(widget.project!);
+                          _selectedPoint = null;
+                        });
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('⚡ ${_points.length} devices auto-populated across rooms according to PEC 2017 & IESNA!'),
+                            backgroundColor: BanaagTheme.successGreen,
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
