@@ -16,10 +16,18 @@ import '../widgets/dxf_export_guide_dialog.dart';
 import '../widgets/room_dimension_input_dialog.dart';
 import '../widgets/lighting_visualizer_modal.dart';
 import '../widgets/raw_plan_calibration_modal.dart';
+import 'client_needs_analysis_screen.dart';
 
 class PlanCanvasScreen extends StatefulWidget {
   final Project? project;
-  const PlanCanvasScreen({super.key, this.project});
+  final int? initialStage; // 1 = Blank Plan Scale & Rooms, 3 = Electrical Layout & Wire Takeoff
+  final bool forceRegenerateFromLoads;
+  const PlanCanvasScreen({
+    super.key,
+    this.project,
+    this.initialStage,
+    this.forceRegenerateFromLoads = false,
+  });
 
   @override
   State<PlanCanvasScreen> createState() => _PlanCanvasScreenState();
@@ -39,8 +47,18 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
   String? _renderedPdfImagePath;
   bool _isRenderingPdf = false;
   bool _invertBlueprint = false;
-  Offset _pinA = const Offset(145, 95);
-  Offset _pinB = const Offset(500, 95);
+  // Default Reference Scale Pins along the 15,500 mm top exterior wall (x: 198..892, y: 42)
+  Offset _pinA = const Offset(198, 42);
+  Offset _pinB = const Offset(892, 42);
+
+  // 3-Stage Engineering Flow State:
+  // Stage 1 = Blank Floor Plan Scale & Draggable Room Outlines
+  // Stage 2 = Space-Driven PEC Load Schedule (ClientNeedsAnalysisScreen)
+  // Stage 3 = Room-Bounded Electrical Layout & 3D-Aware Orthogonal Wire Takeoff
+  int _canvasStage = 1;
+  final Map<String, Rect> _roomBoxes = {};
+  int _selectedRoomIndex = 0;
+  int? _activeDraggingRoomCorner; // 0=TL, 1=TR, 2=BR, 3=BL, 4=CenterMove
 
   // Multi-Point Polygon Calibration Engine for Real Rooms
   final List<Offset> _activePolygonPoints = [];
@@ -49,7 +67,7 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
 
   int? _activeDraggingPin;
   Offset? _activeSnapPoint;
-  double _pixelsPerMeter = 30.0;
+  double _pixelsPerMeter = 44.77;
   bool _showLabels = true;
   bool _showConduits = true;
   String _activeLayerFilter = 'ALL'; // 'ALL', 'LIGHTING', 'POWER'
@@ -248,26 +266,219 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
     return modified;
   }
 
+  Rect _defaultCadRectForRoom(String roomName, int index) {
+    final lower = roomName.toLowerCase();
+    if (lower.contains('hall') || lower.contains('event') || lower.contains('function')) {
+      return const Rect.fromLTWH(198.0, 42.0, 546.0, 236.0);
+    }
+    if (lower.contains('staff')) {
+      return const Rect.fromLTWH(744.0, 148.0, 148.0, 130.0);
+    }
+    if (lower.contains('office')) {
+      return const Rect.fromLTWH(592.0, 278.0, 300.0, 250.0);
+    }
+    if (lower.contains('landing') || lower.contains('stair')) {
+      return const Rect.fromLTWH(510.0, 528.0, 345.0, 140.0);
+    }
+    if (lower.contains('storage') || lower.contains('store')) {
+      return const Rect.fromLTWH(744.0, 668.0, 148.0, 74.0);
+    }
+    final double col = (index % 2) * 320.0 + 200.0;
+    final double row = (index ~/ 2) * 220.0 + 80.0;
+    return Rect.fromLTWH(col, row, 280.0, 190.0);
+  }
+
+  void _initRoomBoxesAndScale() {
+    final proj = widget.project;
+    if (proj == null) return;
+
+    if (proj.calibrationPixelsPerMeter == null || proj.calibrationPixelsPerMeter! < 15.0 || (proj.calibrationPixelsPerMeter! - 30.0).abs() < 0.1) {
+      _pixelsPerMeter = 44.77; // 694 px / 15.50 m = 44.77 px/m on 1000x1220 CAD sheet
+      proj.calibrationPixelsPerMeter = _pixelsPerMeter;
+    } else {
+      _pixelsPerMeter = proj.calibrationPixelsPerMeter!;
+    }
+
+    if (proj.spaces.isEmpty) {
+      proj.spaces.addAll([
+        RoomSpace(id: 'sp-func', name: 'Function Hall / Event Place', areaSqm: 64.5, ceilingHeight: 3.0),
+        RoomSpace(id: 'sp-staff', name: 'Staff Room', areaSqm: 9.6, ceilingHeight: 2.8),
+        RoomSpace(id: 'sp-off', name: 'Office Rooms', areaSqm: 37.4, ceilingHeight: 2.8),
+        RoomSpace(id: 'sp-land', name: 'Landing', areaSqm: 24.1, ceilingHeight: 2.8),
+        RoomSpace(id: 'sp-stor', name: 'Storage Room', areaSqm: 5.5, ceilingHeight: 2.8),
+      ]);
+    }
+
+    for (int i = 0; i < proj.spaces.length; i++) {
+      final sp = proj.spaces[i];
+      if (sp.canvasX != null && sp.canvasY != null && sp.canvasWidth != null && sp.canvasHeight != null) {
+        _roomBoxes[sp.id] = Rect.fromLTWH(sp.canvasX!, sp.canvasY!, sp.canvasWidth!, sp.canvasHeight!);
+      } else {
+        _roomBoxes[sp.id] = _defaultCadRectForRoom(sp.name, i);
+      }
+    }
+    _syncRoomSpacesFromBoxes(persist: false);
+  }
+
+  void _syncRoomSpacesFromBoxes({bool persist = true}) {
+    final proj = widget.project;
+    if (proj == null) return;
+    final double ppm = _pixelsPerMeter > 5.0 ? _pixelsPerMeter : 44.77;
+
+    for (int i = 0; i < proj.spaces.length; i++) {
+      final sp = proj.spaces[i];
+      final rect = _roomBoxes[sp.id] ?? _defaultCadRectForRoom(sp.name, i);
+      final double wMeters = (rect.width / ppm).clamp(1.0, 60.0);
+      final double hMeters = (rect.height / ppm).clamp(1.0, 60.0);
+      final double area = double.parse((wMeters * hMeters).toStringAsFixed(1));
+      proj.spaces[i] = RoomSpace(
+        id: sp.id,
+        name: sp.name,
+        areaSqm: area,
+        ceilingHeight: sp.ceilingHeight,
+        shapeType: sp.shapeType,
+        cutoutDepth: sp.cutoutDepth,
+        cutoutWidth: sp.cutoutWidth,
+        canvasX: rect.left,
+        canvasY: rect.top,
+        canvasWidth: rect.width,
+        canvasHeight: rect.height,
+      );
+    }
+    proj.calibrationPixelsPerMeter = ppm;
+    if (persist) {
+      ProjectRepository.instance.updateProject(proj);
+    }
+  }
+
+  /// 3D-Aware Orthogonal Manhattan Distance (|ΔX| + |ΔY| in calibrated meters + PEC 3D Vertical Wall Drops)
+  double _computeRouteLengthMeters(CanvasPoint p1, CanvasPoint p2) {
+    final double ppm = _pixelsPerMeter > 5.0 ? _pixelsPerMeter : 44.77;
+    final double horizMeters = ((p1.x - p2.x).abs() + (p1.y - p2.y).abs()) / ppm;
+
+    double vertMeters = 0.0;
+    if (p1.type == 'PANEL' || p2.type == 'PANEL') {
+      // MDP vertical rise to ceiling slab (1.5m) + panelboard termination slack (1.0m)
+      vertMeters += 2.5;
+    }
+    if (p1.type == 'SWITCH_1G' || p2.type == 'SWITCH_1G') {
+      // Ceiling slab down to wall switch at 1.4m mounting height
+      vertMeters += 1.5;
+    }
+    if (p1.type == 'OUTLET_DUPLEX' || p2.type == 'OUTLET_DUPLEX') {
+      // Drop to convenience receptacle (0.3m above floor)
+      vertMeters += 2.4;
+    }
+    if (p1.type == 'ACU' || p2.type == 'ACU') {
+      // High-wall ACU disconnect drop
+      vertMeters += 0.8;
+    }
+    if (p1.type == 'LIGHT' && p2.type == 'LIGHT') {
+      // Ceiling octagonal junction box loop slack
+      vertMeters += 0.4;
+    }
+
+    return double.parse((horizMeters + vertMeters).clamp(1.2, 180.0).toStringAsFixed(2));
+  }
+
+  void _recalculateAllRouteLengths() {
+    if (_points.isEmpty) return;
+    for (int i = 0; i < _routes.length; i++) {
+      final r = _routes[i];
+      final p1 = _points.firstWhere((p) => p.id == r.fromPointId, orElse: () => _points.first);
+      final p2 = _points.firstWhere((p) => p.id == r.toPointId, orElse: () => _points.first);
+      _routes[i] = ConduitRoute(
+        id: r.id,
+        fromPointId: r.fromPointId,
+        toPointId: r.toPointId,
+        measuredLengthMeters: _computeRouteLengthMeters(p1, p2),
+        conductorCount: r.conductorCount,
+      );
+    }
+  }
+
+  Future<void> _confirmStage1AndOpenStage2Loads() async {
+    _syncRoomSpacesFromBoxes(persist: true);
+    if (widget.project == null) return;
+
+    final result = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ClientNeedsAnalysisScreen(
+          project: widget.project!,
+          fromStageFlow: true,
+        ),
+      ),
+    );
+
+    if (mounted) {
+      setState(() {
+        _canvasStage = 3;
+        _selectedTool = 'SELECT';
+        if (widget.project!.applianceLoads.isNotEmpty) {
+          _autoGenerateFromAppliances(widget.project!.applianceLoads);
+        }
+        _recalculateAllRouteLengths();
+        widget.project!.canvasPoints = _points;
+        widget.project!.conduitRoutes = _routes;
+        ProjectRepository.instance.updateProject(widget.project!);
+        _fitSheetToViewport();
+      });
+      if (result == true) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '⚡ Stage 3 Active: ${_points.length} fixtures placed inside confirmed rooms & 3D wire lengths calculated!',
+            ),
+            backgroundColor: BanaagTheme.successGreen,
+          ),
+        );
+      }
+    }
+  }
+
   @override
   void initState() {
     super.initState();
     _roomGeometry = widget.project?.roomGeometry;
     _blueprintPath = widget.project?.blueprintImagePath;
     _invertBlueprint = widget.project?.invertBlueprint ?? false;
-    _pixelsPerMeter = widget.project?.calibrationPixelsPerMeter ?? 30.0;
+    final bool hadConfirmedRooms = widget.project != null &&
+        widget.project!.spaces.isNotEmpty &&
+        widget.project!.spaces.every((s) => s.canvasX != null && s.canvasWidth != null);
+
+    _initRoomBoxesAndScale();
     _fitSheetToViewport();
+
+    // Determine starting stage:
+    // If initialStage is explicitly passed, use it; otherwise if rooms haven't been confirmed on the blank plan yet, start at Stage 1!
+    if (widget.initialStage != null) {
+      _canvasStage = widget.initialStage!;
+    } else if (!hadConfirmedRooms && _hasBlueprintFile) {
+      _canvasStage = 1;
+    } else {
+      _canvasStage = 3;
+    }
+    if (_canvasStage == 1) {
+      _selectedTool = 'SELECT';
+    }
 
     bool loadsCleaned = false;
     if (widget.project != null) {
       loadsCleaned = _sanitizeProjectApplianceLoads(widget.project!);
     }
 
-    if (widget.project != null && widget.project!.canvasPoints.isNotEmpty && !loadsCleaned) {
+    if (widget.project != null &&
+        widget.project!.canvasPoints.isNotEmpty &&
+        !loadsCleaned &&
+        !widget.forceRegenerateFromLoads) {
       _points = List<CanvasPoint>.from(widget.project!.canvasPoints);
       _routes = List<ConduitRoute>.from(widget.project!.conduitRoutes);
       _sanitizeAndFitExistingPointsIfNeeded();
+      _recalculateAllRouteLengths();
     } else if (widget.project != null && widget.project!.applianceLoads.isNotEmpty) {
       _autoGenerateFromAppliances(widget.project!.applianceLoads);
+      _recalculateAllRouteLengths();
       widget.project!.canvasPoints = _points;
       widget.project!.conduitRoutes = _routes;
       ProjectRepository.instance.updateProject(widget.project!);
@@ -400,254 +611,211 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
     _autoGenerateForStandardDwelling(appliances);
   }
 
-  /// High-Precision PEC 2017 & IESNA Placement for 1000 x 1220 Cropped CAD Building Blueprint
+  /// High-Precision PEC 2017 & IESNA Placement Bounded Strictly Inside Confirmed Stage 1 Room Boxes
   void _autoGenerateForCadBuildingBlueprint(List<ApplianceItem> appliances) {
     // Main Distribution Panel (MDP) at Landing / Central Corridor structural wall (x: 585, y: 535)
     final panelPt = CanvasPoint(id: 'pt-panel', type: 'PANEL', label: 'MDP', x: 585.0, y: 535.0, circuitNumber: 0);
     _points = [panelPt];
     _routes = [];
 
-    // Visually Verified Room Ceiling Luminaire Grids on 1000 x 1220 Cropped CAD Sheet
-    final Map<String, List<Offset>> roomCeilingMap = {
-      'function': [
-        // 2x4 Symmetrical Ceiling Grid inside Function Hall (Grids 1-7, Bays A-C: x=210..730, y=55..265)
-        const Offset(270.0, 105.0),
-        const Offset(400.0, 105.0),
-        const Offset(530.0, 105.0),
-        const Offset(660.0, 105.0),
-        const Offset(270.0, 210.0),
-        const Offset(400.0, 210.0),
-        const Offset(530.0, 210.0),
-        const Offset(660.0, 210.0),
-      ],
-      'staff': [
-        // Staff Room Ceiling (Grids 7-10, Bays B-C: x=755..880, y=160..265)
-        const Offset(790.0, 210.0),
-        const Offset(850.0, 210.0),
-      ],
-      'office': [
-        // 2x2 Symmetrical Ceiling Grid inside Office Rooms (Grids 5-10, Bays C-E: x=600..880, y=290..515)
-        const Offset(675.0, 345.0),
-        const Offset(810.0, 345.0),
-        const Offset(675.0, 455.0),
-        const Offset(810.0, 455.0),
-      ],
-      'landing': [
-        // Stairs & Landing Ceiling (Grids 5-9, Bays E-G: x=515..850, y=535..655)
-        const Offset(555.0, 585.0),
-        const Offset(795.0, 595.0),
-      ],
-      'storage': [
-        // Storage Room Ceiling (Grids 7-10, Bays G-H: x=755..880, y=675..735)
-        const Offset(790.0, 706.0),
-        const Offset(850.0, 706.0),
-      ],
-    };
-
-    // Visually Verified Door Switch Positions per Room
-    final Map<String, Map<String, dynamic>> roomSwitchMap = {
-      'function': {'pos': const Offset(255.0, 262.0), 'label': 'S3', 'ckt': 1},
-      'staff':    {'pos': const Offset(755.0, 255.0), 'label': 'S1', 'ckt': 1},
-      'office':   {'pos': const Offset(645.0, 290.0), 'label': 'S2', 'ckt': 2},
-      'landing':  {'pos': const Offset(530.0, 545.0), 'label': 'S3w', 'ckt': 2},
-      'storage':  {'pos': const Offset(795.0, 676.0), 'label': 'S1', 'ckt': 2},
-    };
-
-    // Visually Verified Wall Convenience Outlet Anchors per Room
-    final Map<String, List<Offset>> roomOutletMap = {
-      'function': [
-        const Offset(208.0, 105.0), // West exterior wall upper
-        const Offset(208.0, 210.0), // West exterior wall lower
-        const Offset(335.0, 52.0),  // North exterior wall left
-        const Offset(595.0, 52.0),  // North exterior wall right
-        const Offset(732.0, 155.0), // East partition wall
-        const Offset(465.0, 268.0), // South partition wall
-      ],
-      'staff': [
-        const Offset(755.0, 180.0), // West partition wall
-        const Offset(820.0, 158.0), // North wall
-      ],
-      'office': [
-        const Offset(604.0, 355.0), // West corridor partition upper
-        const Offset(604.0, 455.0), // West corridor partition lower
-        const Offset(740.0, 515.0), // South partition wall
-        const Offset(880.0, 345.0), // East exterior wall upper
-      ],
-      'landing': [
-        const Offset(650.0, 536.0), // Landing corridor wall
-      ],
-      'storage': [
-        const Offset(755.0, 706.0), // Storage west wall
-      ],
-    };
-
-    // Visually Verified Exterior Window/Wall ACU Anchors per Room
-    final Map<String, List<Offset>> roomAcuMap = {
-      'function': [
-        const Offset(270.0, 52.0),  // North exterior wall Bay 1-3
-        const Offset(475.0, 52.0),  // North exterior wall Bay 3-5
-      ],
-      'staff': [
-        const Offset(882.0, 210.0), // East exterior wall
-      ],
-      'office': [
-        const Offset(882.0, 435.0), // East exterior wall W5
-      ],
-    };
-
-    String getRoomKey(String roomCategory) {
-      final lower = roomCategory.toLowerCase();
-      if (lower.contains('hall') || lower.contains('event') || lower.contains('function')) return 'function';
-      if (lower.contains('staff')) return 'staff';
-      if (lower.contains('office')) return 'office';
-      if (lower.contains('storage') || lower.contains('store')) return 'storage';
-      if (lower.contains('landing') || lower.contains('stair')) return 'landing';
-      return 'function';
-    }
-
-    // Group expanded fixture counts per room
-    final Map<String, int> roomLightCounts = {};
-    final Map<String, int> roomOutletCounts = {};
-    final Map<String, int> roomAcuCounts = {};
-
-    for (final app in appliances) {
-      final rKey = getRoomKey(app.roomCategory);
-      final lowerName = app.name.toLowerCase();
-      final pcsMatch = RegExp(r'(?:x|\()\s*(\d+)\s*pcs', caseSensitive: false).firstMatch(app.name);
-      final int packMult = pcsMatch != null ? (int.tryParse(pcsMatch.group(1)!) ?? 1) : 1;
-
-      if (lowerName.contains('aircon') || lowerName.contains('acu')) {
-        // Storage and Landing never get ACUs
-        if (rKey != 'storage' && rKey != 'landing') {
-          roomAcuCounts[rKey] = (roomAcuCounts[rKey] ?? 0) + app.quantity;
-        }
-      } else if (lowerName.contains('light') ||
-          lowerName.contains('luminaire') ||
-          lowerName.contains('led') ||
-          lowerName.contains('pinlight') ||
-          lowerName.contains('panel') ||
-          lowerName.contains('chandelier') ||
-          lowerName.contains('tube')) {
-        roomLightCounts[rKey] = (roomLightCounts[rKey] ?? 0) + (app.quantity * packMult);
-      } else if (!lowerName.contains('fan')) {
-        roomOutletCounts[rKey] = (roomOutletCounts[rKey] ?? 0) + app.quantity;
-      }
-    }
+    final spaces = widget.project?.spaces ?? [];
+    if (spaces.isEmpty) return;
 
     int lightCounter = 1;
     int outletCounter = 1;
     int acuCounter = 1;
     int routeCounter = 1;
 
-    final orderedRooms = ['function', 'staff', 'office', 'landing', 'storage'];
+    for (int sIdx = 0; sIdx < spaces.length; sIdx++) {
+      final sp = spaces[sIdx];
+      final Rect roomRect = _roomBoxes[sp.id] ?? _defaultCadRectForRoom(sp.name, sIdx);
+      final lowerRoom = sp.name.toLowerCase();
+      final bool isStorageOrLanding = lowerRoom.contains('storage') ||
+          lowerRoom.contains('store') ||
+          lowerRoom.contains('landing') ||
+          lowerRoom.contains('stair');
 
-    for (final rKey in orderedRooms) {
-      final ceilAnchors = roomCeilingMap[rKey]!;
-      final rawLights = roomLightCounts[rKey] ?? 0;
-      // Cap ceiling lights to room's architectural grid capacity so icons never overlap
-      final int numLights = rawLights > 0 ? math.min(rawLights, ceilAnchors.length) : 0;
+      // Filter loads belonging to this room
+      final roomApps = appliances.where(
+        (a) => a.roomCategory.trim().toLowerCase() == lowerRoom,
+      ).toList();
 
-      // 1. Place Room Wall Switch + Symmetrical Ceiling Lights (Lighting Layer E-1)
-      if (numLights > 0) {
-        final swInfo = roomSwitchMap[rKey]!;
-        final Offset swPos = swInfo['pos'] as Offset;
-        final String swLabel = swInfo['label'] as String;
-        final int swCkt = swInfo['ckt'] as int;
-        final String swId = 'pt-sw-$rKey';
+      int rawLights = 0;
+      int rawOutlets = 0;
+      int rawAcus = 0;
 
-        _points.add(CanvasPoint(
-          id: swId,
-          type: 'SWITCH_1G',
-          label: swLabel,
-          x: swPos.dx,
-          y: swPos.dy,
-          circuitNumber: swCkt,
-        ));
+      for (final app in roomApps) {
+        final nm = app.name.toLowerCase();
+        final pcsMatch = RegExp(r'(?:x|\()\s*(\d+)\s*pcs', caseSensitive: false).firstMatch(app.name);
+        final int packMult = pcsMatch != null ? (int.tryParse(pcsMatch.group(1)!) ?? 1) : 1;
 
-        // Home-run from MDP to Room Switch (renders as crisp CAD Home-Run Arrowhead)
-        _routes.add(ConduitRoute(
-          id: 'rt-${routeCounter++}',
-          fromPointId: 'pt-panel',
-          toPointId: swId,
-          measuredLengthMeters: 5.5,
-        ));
-
-        String prevLightId = swId;
-        for (int i = 0; i < numLights; i++) {
-          final pos = ceilAnchors[i];
-          final String lId = 'pt-l-$lightCounter';
-          _points.add(CanvasPoint(
-            id: lId,
-            type: 'LIGHT',
-            label: 'L-${lightCounter++}',
-            x: pos.dx,
-            y: pos.dy,
-            circuitNumber: swCkt,
-          ));
-
-          // Intra-room conduit from Switch -> Light 1 -> Light 2...
-          _routes.add(ConduitRoute(
-            id: 'rt-${routeCounter++}',
-            fromPointId: prevLightId,
-            toPointId: lId,
-            measuredLengthMeters: 2.6,
-          ));
-          prevLightId = lId;
+        if (nm.contains('aircon') || nm.contains('acu')) {
+          if (!isStorageOrLanding) {
+            rawAcus += app.quantity;
+          }
+        } else if (app.isLighting ||
+            nm.contains('light') ||
+            nm.contains('luminaire') ||
+            nm.contains('led') ||
+            nm.contains('pinlight') ||
+            nm.contains('panel') ||
+            nm.contains('chandelier') ||
+            nm.contains('tube')) {
+          rawLights += app.quantity * packMult;
+        } else if (!nm.contains('fan')) {
+          rawOutlets += app.quantity;
         }
       }
 
-      // 2. Place Room Convenience Outlets (Power Layer E-2)
-      final outAnchors = roomOutletMap[rKey]!;
-      final rawOutlets = roomOutletCounts[rKey] ?? 0;
-      final int numOutlets = rawOutlets > 0 ? math.min(rawOutlets, outAnchors.length) : 0;
-      final int powerCkt = rKey == 'function' ? 3 : (rKey == 'office' ? 4 : 5);
+      // Max lights capacity based on room area so symbols never overlap
+      final int maxLightsForRoom = lowerRoom.contains('hall') || lowerRoom.contains('event')
+          ? 8
+          : (lowerRoom.contains('office') ? 4 : 2);
+      final int numLights = rawLights > 0 ? math.min(rawLights, maxLightsForRoom) : 0;
 
-      String prevOutletId = 'pt-panel';
+      // 1. Place Room Wall Switch + Symmetrical Ceiling Grid inside roomRect
+      if (numLights > 0) {
+        final int swCkt = (sIdx < 2) ? 1 : 2;
+        final String swLabel = lowerRoom.contains('hall')
+            ? 'S3'
+            : (lowerRoom.contains('office')
+                ? 'S2'
+                : (lowerRoom.contains('landing') ? 'S3w' : 'S1'));
+
+        // Position Door Switch on the room's doorway edge inside roomRect
+        Offset swPos;
+        if (lowerRoom.contains('hall')) {
+          swPos = Offset(roomRect.left + 55.0, roomRect.bottom - 14.0);
+        } else if (lowerRoom.contains('staff')) {
+          swPos = Offset(roomRect.left + 14.0, roomRect.bottom - 20.0);
+        } else if (lowerRoom.contains('office')) {
+          swPos = Offset(roomRect.left + 52.0, roomRect.top + 14.0);
+        } else if (lowerRoom.contains('landing')) {
+          swPos = Offset(roomRect.left + 22.0, roomRect.top + 18.0);
+        } else {
+          swPos = Offset(roomRect.left + 48.0, roomRect.top + 12.0);
+        }
+
+        final String swId = 'pt-sw-${sp.id}';
+        final swPt = CanvasPoint(
+          id: swId,
+          type: 'SWITCH_1G',
+          label: swLabel,
+          x: swPos.dx.clamp(roomRect.left + 10.0, roomRect.right - 10.0),
+          y: swPos.dy.clamp(roomRect.top + 10.0, roomRect.bottom - 10.0),
+          circuitNumber: swCkt,
+        );
+        _points.add(swPt);
+
+        // Home-run from MDP to Room Switch (3D-aware Manhattan distance)
+        _routes.add(ConduitRoute(
+          id: 'rt-${routeCounter++}',
+          fromPointId: panelPt.id,
+          toPointId: swPt.id,
+          measuredLengthMeters: _computeRouteLengthMeters(panelPt, swPt),
+          conductorCount: 2,
+        ));
+
+        // Compute symmetrical ceiling grid strictly inside roomRect
+        final int cols = numLights <= 2
+            ? numLights
+            : (numLights <= 4 ? 2 : 4);
+        final int rows = (numLights / cols).ceil();
+        final Rect innerCeil = roomRect.deflate(22.0);
+        final double stepX = innerCeil.width / (cols + 1);
+        final double stepY = innerCeil.height / (rows + 1);
+
+        CanvasPoint prevLightPt = swPt;
+        for (int i = 0; i < numLights; i++) {
+          final int c = i % cols;
+          final int r = i ~/ cols;
+          final double lx = innerCeil.left + stepX * (c + 1);
+          final double ly = innerCeil.top + stepY * (r + 1);
+
+          final lPt = CanvasPoint(
+            id: 'pt-l-$lightCounter',
+            type: 'LIGHT',
+            label: 'L-${lightCounter++}',
+            x: lx,
+            y: ly,
+            circuitNumber: swCkt,
+          );
+          _points.add(lPt);
+
+          _routes.add(ConduitRoute(
+            id: 'rt-${routeCounter++}',
+            fromPointId: prevLightPt.id,
+            toPointId: lPt.id,
+            measuredLengthMeters: _computeRouteLengthMeters(prevLightPt, lPt),
+            conductorCount: 2,
+          ));
+          prevLightPt = lPt;
+        }
+      }
+
+      // 2. Place Room Convenience Outlets along the confirmed room's perimeter walls
+      final int maxOutletsForRoom = lowerRoom.contains('hall')
+          ? 6
+          : (lowerRoom.contains('office') ? 4 : (isStorageOrLanding ? 1 : 2));
+      final int numOutlets = rawOutlets > 0 ? math.min(rawOutlets, maxOutletsForRoom) : 0;
+      final int powerCkt = 3 + (sIdx % 3);
+
+      final Rect wallRect = roomRect.deflate(12.0);
+      final List<Offset> perimeterWallAnchors = [
+        Offset(wallRect.left, wallRect.top + wallRect.height * 0.32),
+        Offset(wallRect.left, wallRect.top + wallRect.height * 0.72),
+        Offset(wallRect.left + wallRect.width * 0.35, wallRect.top),
+        Offset(wallRect.left + wallRect.width * 0.72, wallRect.top),
+        Offset(wallRect.right, wallRect.top + wallRect.height * 0.45),
+        Offset(wallRect.left + wallRect.width * 0.50, wallRect.bottom),
+      ];
+
+      CanvasPoint prevOutletPt = panelPt;
       for (int i = 0; i < numOutlets; i++) {
-        final pos = outAnchors[i];
-        final String cId = 'pt-co-$outletCounter';
-        _points.add(CanvasPoint(
-          id: cId,
+        final pos = perimeterWallAnchors[i % perimeterWallAnchors.length];
+        final cPt = CanvasPoint(
+          id: 'pt-co-$outletCounter',
           type: 'OUTLET_DUPLEX',
           label: 'CO-${outletCounter++}',
           x: pos.dx,
           y: pos.dy,
           circuitNumber: powerCkt,
-        ));
+        );
+        _points.add(cPt);
 
         _routes.add(ConduitRoute(
           id: 'rt-${routeCounter++}',
-          fromPointId: prevOutletId,
-          toPointId: cId,
-          measuredLengthMeters: prevOutletId == 'pt-panel' ? 6.0 : 3.2,
+          fromPointId: prevOutletPt.id,
+          toPointId: cPt.id,
+          measuredLengthMeters: _computeRouteLengthMeters(prevOutletPt, cPt),
+          conductorCount: 3,
         ));
-        prevOutletId = cId;
+        prevOutletPt = cPt;
       }
 
-      // 3. Place Dedicated Air Conditioning Units (Power Layer E-2)
-      final acuAnchors = roomAcuMap[rKey] ?? const [];
-      final rawAcus = roomAcuCounts[rKey] ?? 0;
-      final int numAcus = rawAcus > 0 ? math.min(rawAcus, acuAnchors.length) : 0;
-
+      // 3. Place Dedicated Air Conditioning Units along the room's exterior wall
+      final int numAcus = (!isStorageOrLanding && rawAcus > 0) ? math.min(rawAcus, 2) : 0;
       for (int i = 0; i < numAcus; i++) {
-        final pos = acuAnchors[i];
-        final String aId = 'pt-acu-$acuCounter';
-        final int acuCkt = 5 + acuCounter;
-        _points.add(CanvasPoint(
-          id: aId,
+        final Offset acuPos = lowerRoom.contains('hall')
+            ? Offset(roomRect.left + roomRect.width * (0.28 + i * 0.36), roomRect.top + 10.0)
+            : Offset(roomRect.right - 10.0, roomRect.top + roomRect.height * (0.50 + i * 0.25));
+
+        final aPt = CanvasPoint(
+          id: 'pt-acu-$acuCounter',
           type: 'ACU',
           label: 'ACU-${acuCounter++}',
-          x: pos.dx,
-          y: pos.dy,
-          circuitNumber: acuCkt,
-        ));
+          x: acuPos.dx,
+          y: acuPos.dy,
+          circuitNumber: 5 + acuCounter,
+        );
+        _points.add(aPt);
 
-        // Dedicated Home-run from MDP (renders as crisp CAD Home-Run Arrowhead)
         _routes.add(ConduitRoute(
           id: 'rt-${routeCounter++}',
-          fromPointId: 'pt-panel',
-          toPointId: aId,
-          measuredLengthMeters: 7.5,
+          fromPointId: panelPt.id,
+          toPointId: aPt.id,
+          measuredLengthMeters: _computeRouteLengthMeters(panelPt, aPt),
+          conductorCount: 3,
         ));
       }
     }
@@ -775,29 +943,70 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
   void _handlePanStart(DragStartDetails details) {
     if (_selectedTool == 'PAN') return;
 
-    final tapX = details.localPosition.dx;
-    final tapY = details.localPosition.dy;
-    _dragStartOffset = details.localPosition;
+    final tapPos = details.localPosition;
+    final tapX = tapPos.dx;
+    final tapY = tapPos.dy;
+    _dragStartOffset = tapPos;
     _hasMovedSignificantly = false;
 
-    if (_selectedTool == 'CALIBRATE') {
-      final tapPos = details.localPosition;
-      if ((_pinA - tapPos).distance <= 28.0) {
+    // STAGE 1 (or CALIBRATE tool): Check Reference Scale Pins A & B first, then Room Box Corner Handles!
+    if (_canvasStage == 1 || _selectedTool == 'CALIBRATE') {
+      if ((_pinA - tapPos).distance <= 30.0) {
         setState(() => _activeDraggingPin = 1);
         return;
-      } else if ((_pinB - tapPos).distance <= 28.0) {
+      } else if ((_pinB - tapPos).distance <= 30.0) {
         setState(() => _activeDraggingPin = 2);
         return;
       } else {
         final mid = Offset((_pinA.dx + _pinB.dx) / 2, (_pinA.dy + _pinB.dy) / 2);
-        if ((mid - tapPos).distance <= 32.0) {
+        if ((mid - tapPos).distance <= 34.0) {
           _showCalibrationDialog();
           return;
         }
       }
+
+      if (_canvasStage == 1 && widget.project != null) {
+        final spaces = widget.project!.spaces;
+        // 1. Check 4 Corner Handles (0=TL, 1=TR, 2=BR, 3=BL) and Center Move Handle (4) of all rooms
+        for (int i = spaces.length - 1; i >= 0; i--) {
+          final sp = spaces[i];
+          final rect = _roomBoxes[sp.id] ?? _defaultCadRectForRoom(sp.name, i);
+          final corners = [
+            rect.topLeft,
+            rect.topRight,
+            rect.bottomRight,
+            rect.bottomLeft,
+            rect.center,
+          ];
+          for (int c = 0; c < corners.length; c++) {
+            final double hitRadius = c == 4 ? 32.0 : 28.0;
+            if ((corners[c] - tapPos).distance <= hitRadius) {
+              setState(() {
+                _selectedRoomIndex = i;
+                _activeDraggingRoomCorner = c;
+              });
+              HapticFeedback.selectionClick();
+              return;
+            }
+          }
+        }
+        // 2. Or if tapping inside a room box, select it and allow moving
+        for (int i = spaces.length - 1; i >= 0; i--) {
+          final sp = spaces[i];
+          final rect = _roomBoxes[sp.id] ?? _defaultCadRectForRoom(sp.name, i);
+          if (rect.contains(tapPos)) {
+            setState(() {
+              _selectedRoomIndex = i;
+              _activeDraggingRoomCorner = 4;
+            });
+            return;
+          }
+        }
+      }
+      return;
     }
 
-    // Detect if user grabbed a device point
+    // STAGE 3: Detect if user grabbed an electrical device point
     CanvasPoint? hitPt;
     for (final pt in _points.reversed) {
       final dist = (Offset(pt.x, pt.y) - Offset(tapX, tapY)).distance;
@@ -816,77 +1025,97 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
   }
 
   void _handlePanUpdate(DragUpdateDetails details) {
-    if (_selectedTool == 'CALIBRATE' && _activeDraggingPin != null) {
-      final newPos = details.localPosition;
-      if (_dragStartOffset != null && (newPos - _dragStartOffset!).distance > 6.0) {
-        _hasMovedSignificantly = true;
-      }
+    final newPos = details.localPosition;
+    if (_dragStartOffset != null && (newPos - _dragStartOffset!).distance > 5.0) {
+      _hasMovedSignificantly = true;
+    }
 
-      // Magnetic snapping candidate anchors (all points, corners, and grid lines)
-      final List<Offset> snapAnchors = [];
-      for (final p in _points) {
-        snapAnchors.add(Offset(p.x, p.y));
-      }
-      snapAnchors.addAll([
-        const Offset(45, 145),
-        const Offset(275, 145),
-        const Offset(275, 395),
-        const Offset(45, 395),
-        const Offset(132, 145),
-        const Offset(132, 395),
-      ]);
-
-      Offset targetPos = newPos;
-      Offset? foundSnap;
-      for (final a in snapAnchors) {
-        if ((a - newPos).distance <= 16.0) {
-          targetPos = a;
-          foundSnap = a;
-          break;
-        }
-      }
-
-      if (foundSnap != null && foundSnap != _activeSnapPoint) {
-        HapticFeedback.selectionClick();
-      }
-
+    // 1. Dragging Reference Scale Pin A or Pin B
+    if ((_canvasStage == 1 || _selectedTool == 'CALIBRATE') && _activeDraggingPin != null) {
       setState(() {
-        _activeSnapPoint = foundSnap;
+        final snapped = Offset(
+          (newPos.dx / 2.0).round() * 2.0,
+          (newPos.dy / 2.0).round() * 2.0,
+        );
         if (_activeDraggingPin == 1) {
-          _pinA = targetPos;
+          _pinA = snapped;
         } else if (_activeDraggingPin == 2) {
-          _pinB = targetPos;
+          _pinB = snapped;
         }
       });
       return;
     }
 
-    if (_draggedPoint != null) {
-      final newPos = details.localPosition;
-      if (_dragStartOffset != null && (newPos - _dragStartOffset!).distance > 6.0) {
-        _hasMovedSignificantly = true;
-      }
+    // 2. Dragging Stage 1 Room Box Corner Handle (0..3) or Center Move (4)
+    if (_canvasStage == 1 && _activeDraggingRoomCorner != null && widget.project != null) {
+      final spaces = widget.project!.spaces;
+      if (_selectedRoomIndex >= 0 && _selectedRoomIndex < spaces.length) {
+        final sp = spaces[_selectedRoomIndex];
+        final rect = _roomBoxes[sp.id] ?? _defaultCadRectForRoom(sp.name, _selectedRoomIndex);
+        final double sx = (newPos.dx / 2.0).round() * 2.0;
+        final double sy = (newPos.dy / 2.0).round() * 2.0;
 
+        double left = rect.left;
+        double top = rect.top;
+        double right = rect.right;
+        double bottom = rect.bottom;
+
+        const double minRoomPx = 48.0;
+        if (_activeDraggingRoomCorner == 0) {
+          left = math.min(sx, right - minRoomPx).clamp(20.0, 960.0);
+          top = math.min(sy, bottom - minRoomPx).clamp(20.0, 1180.0);
+        } else if (_activeDraggingRoomCorner == 1) {
+          right = math.max(sx, left + minRoomPx).clamp(60.0, 980.0);
+          top = math.min(sy, bottom - minRoomPx).clamp(20.0, 1180.0);
+        } else if (_activeDraggingRoomCorner == 2) {
+          right = math.max(sx, left + minRoomPx).clamp(60.0, 980.0);
+          bottom = math.max(sy, top + minRoomPx).clamp(60.0, 1200.0);
+        } else if (_activeDraggingRoomCorner == 3) {
+          left = math.min(sx, right - minRoomPx).clamp(20.0, 960.0);
+          bottom = math.max(sy, top + minRoomPx).clamp(60.0, 1200.0);
+        } else if (_activeDraggingRoomCorner == 4) {
+          final double dx = details.delta.dx;
+          final double dy = details.delta.dy;
+          final double w = rect.width;
+          final double h = rect.height;
+          left = (left + dx).clamp(20.0, 980.0 - w);
+          top = (top + dy).clamp(20.0, 1200.0 - h);
+          right = left + w;
+          bottom = top + h;
+        }
+
+        setState(() {
+          _roomBoxes[sp.id] = Rect.fromLTRB(left, top, right, bottom);
+          _syncRoomSpacesFromBoxes(persist: false);
+        });
+      }
+      return;
+    }
+
+    // 3. Stage 3: Dragging an Electrical Fixture -> Live 3D Wire Length Recalculation!
+    if (_draggedPoint != null) {
       setState(() {
-        // Snap gently to 5px CAD grid for precision
-        final snappedX = (newPos.dx / 5.0).round() * 5.0;
-        final snappedY = (newPos.dy / 5.0).round() * 5.0;
-        _draggedPoint!.x = snappedX.clamp(20.0, 1200.0);
+        final snappedX = (newPos.dx / 4.0).round() * 4.0;
+        final snappedY = (newPos.dy / 4.0).round() * 4.0;
+        _draggedPoint!.x = snappedX.clamp(20.0, 980.0);
         _draggedPoint!.y = snappedY.clamp(20.0, 1200.0);
+        _recalculateAllRouteLengths();
       });
     }
   }
 
   void _handlePanEnd(DragEndDetails details) {
-    if (_selectedTool == 'CALIBRATE') {
-      final hadDrag = _hasMovedSignificantly;
+    if (_canvasStage == 1 || _selectedTool == 'CALIBRATE') {
+      final hadPinDrag = _activeDraggingPin != null && _hasMovedSignificantly;
       setState(() {
         _activeDraggingPin = null;
+        _activeDraggingRoomCorner = null;
         _activeSnapPoint = null;
         _dragStartOffset = null;
         _hasMovedSignificantly = false;
       });
-      if (!hadDrag) {
+      _syncRoomSpacesFromBoxes(persist: true);
+      if (hadPinDrag) {
         _showCalibrationDialog();
       }
       return;
@@ -894,13 +1123,13 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
 
     if (_draggedPoint != null) {
       if (_hasMovedSignificantly) {
-        // Persist updated point coordinates
+        _recalculateAllRouteLengths();
         if (widget.project != null) {
           widget.project!.canvasPoints = _points;
+          widget.project!.conduitRoutes = _routes;
           ProjectRepository.instance.updateProject(widget.project!);
         }
       } else {
-        // Short tap without drag: open inspection sheet
         _showPointInspectionSheet(_draggedPoint!);
       }
 
@@ -911,7 +1140,6 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
       });
     }
   }
-
 
   void _populateDevicesInsidePolygon(String roomName, List<Offset> polygon) {
     if (polygon.length < 3 || widget.project == null) return;
@@ -1090,6 +1318,27 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
   }
 
   void _handleCanvasTap(TapUpDetails details) {
+    final tapPos = details.localPosition;
+    if (_canvasStage == 1) {
+      final mid = Offset((_pinA.dx + _pinB.dx) / 2, (_pinA.dy + _pinB.dy) / 2);
+      if ((mid - tapPos).distance <= 36.0 || (_pinA - tapPos).distance <= 28.0 || (_pinB - tapPos).distance <= 28.0) {
+        _showCalibrationDialog();
+        return;
+      }
+      if (widget.project != null) {
+        for (int i = widget.project!.spaces.length - 1; i >= 0; i--) {
+          final sp = widget.project!.spaces[i];
+          final rect = _roomBoxes[sp.id] ?? _defaultCadRectForRoom(sp.name, i);
+          if (rect.contains(tapPos)) {
+            setState(() => _selectedRoomIndex = i);
+            HapticFeedback.selectionClick();
+            return;
+          }
+        }
+      }
+      return;
+    }
+
     if (_selectedTool == 'CALIBRATE_ROOM') {
       setState(() {
         _activePolygonPoints.add(details.localPosition);
@@ -1590,7 +1839,151 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
       ),
       body: Column(
         children: [
-          
+          // 3-Stage Engineering Flow Stepper Bar
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+            decoration: const BoxDecoration(
+              color: Color(0xFF141821),
+              border: Border(bottom: BorderSide(color: Colors.white12)),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: _stageStepPill(
+                    stageNum: 1,
+                    title: '① Scale & Rooms',
+                    subtitle: 'Blank Plan',
+                    isActive: _canvasStage == 1,
+                    isDone: _canvasStage > 1,
+                    onTap: () {
+                      setState(() {
+                        _canvasStage = 1;
+                        _selectedTool = 'SELECT';
+                      });
+                    },
+                  ),
+                ),
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 4),
+                  child: Icon(Icons.chevron_right, size: 15, color: Colors.white38),
+                ),
+                Expanded(
+                  child: _stageStepPill(
+                    stageNum: 2,
+                    title: '② Space Loads',
+                    subtitle: 'PEC Suggest',
+                    isActive: false,
+                    isDone: (widget.project?.applianceLoads.isNotEmpty ?? false),
+                    onTap: _confirmStage1AndOpenStage2Loads,
+                  ),
+                ),
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 4),
+                  child: Icon(Icons.chevron_right, size: 15, color: Colors.white38),
+                ),
+                Expanded(
+                  child: _stageStepPill(
+                    stageNum: 3,
+                    title: '③ Wire Takeoff',
+                    subtitle: 'Layout & BOM',
+                    isActive: _canvasStage == 3,
+                    isDone: false,
+                    onTap: () {
+                      setState(() {
+                        _syncRoomSpacesFromBoxes(persist: true);
+                        _canvasStage = 3;
+                        if (widget.project != null && widget.project!.applianceLoads.isNotEmpty) {
+                          _autoGenerateFromAppliances(widget.project!.applianceLoads);
+                        }
+                        _recalculateAllRouteLengths();
+                      });
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // STAGE 1 INFO & LIVE SCALE RIBBON (When in Blank Floor Plan Room & Scale Mode)
+          if (_canvasStage == 1)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              color: const Color(0xFF1B2230),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.straighten, color: Colors.cyanAccent, size: 16),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          '1. Calibrate Pin A–B (${((_pinA - _pinB).distance / _pixelsPerMeter * 1000).round()} mm) • 2. Drag room corners (●) to match walls',
+                          style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      GestureDetector(
+                        onTap: _showCalibrationDialog,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.cyanAccent.withValues(alpha: 0.18),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: Colors.cyanAccent),
+                          ),
+                          child: const Text(
+                            '📏 Set Scale',
+                            style: TextStyle(color: Colors.cyanAccent, fontSize: 10.5, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Builder(builder: (ctx) {
+                          final spaces = widget.project?.spaces ?? [];
+                          if (spaces.isEmpty) return const SizedBox.shrink();
+                          final idx = _selectedRoomIndex.clamp(0, spaces.length - 1);
+                          final sp = spaces[idx];
+                          final rect = _roomBoxes[sp.id] ?? _defaultCadRectForRoom(sp.name, idx);
+                          final wM = rect.width / _pixelsPerMeter;
+                          final hM = rect.height / _pixelsPerMeter;
+                          return Text(
+                            'Selected: ${sp.name} • ${wM.toStringAsFixed(1)}m × ${hM.toStringAsFixed(1)}m (${sp.areaSqm.toStringAsFixed(1)} m²)',
+                            style: const TextStyle(color: BanaagTheme.primaryAmber, fontSize: 11.5, fontWeight: FontWeight.bold),
+                            overflow: TextOverflow.ellipsis,
+                          );
+                        }),
+                      ),
+                      TextButton.icon(
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          minimumSize: const Size(0, 26),
+                        ),
+                        icon: const Icon(Icons.edit, size: 13, color: Colors.white70),
+                        label: const Text('Rename', style: TextStyle(color: Colors.white70, fontSize: 10.5)),
+                        onPressed: _showRenameSelectedRoomDialog,
+                      ),
+                      TextButton.icon(
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          minimumSize: const Size(0, 26),
+                        ),
+                        icon: const Icon(Icons.add_box_outlined, size: 13, color: BanaagTheme.primaryAmber),
+                        label: const Text('+ Room', style: TextStyle(color: BanaagTheme.primaryAmber, fontSize: 10.5, fontWeight: FontWeight.bold)),
+                        onPressed: _addNewRoomBoxOnStage1,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+
           // Room Calibration Active Banner
           if (_selectedTool == 'CALIBRATE_ROOM')
             Container(
@@ -1674,10 +2067,11 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
               ),
             ),
 
-          // Takeoff Summary Live Ribbon with 1-Tap Load Schedule Populate Button
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            color: const Color(0xFF1B2028),
+          // Takeoff Summary Live Ribbon (Visible in Stage 3: Electrical Layout & Wire Takeoff)
+          if (_canvasStage == 3)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              color: const Color(0xFF1B2028),
             child: Column(
               children: [
                 Row(
@@ -1824,7 +2218,7 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                                 ),
                               ),
 
-                            // 2. Interactive Vector Electrical Layer locked to 1000 x 1220
+                            // 2. Interactive Vector Layer locked to 1000 x 1220 (Stage 1 Room Boxes vs Stage 3 Electrical Takeoff)
                             CustomPaint(
                               size: const Size(1000.0, 1220.0),
                               painter: CanvasPainter(
@@ -1832,13 +2226,16 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                                 routes: _routes,
                                 roomGeometry: _roomGeometry,
                                 spaces: widget.project?.spaces ?? [],
+                                canvasStage: _canvasStage,
+                                roomBoxes: _roomBoxes,
+                                selectedRoomIndex: _selectedRoomIndex,
                                 isHeatmap: _isHeatmapVisible,
                                 showLabels: _showLabels,
                                 showConduits: _showConduits,
                                 activeLayerFilter: _activeLayerFilter,
                                 hasBlueprintUnderlay: _hasBlueprintFile && _isUnderlayVisible,
                                 selectedPoint: _selectedPoint,
-                                isCalibrating: _selectedTool == 'CALIBRATE',
+                                isCalibrating: _canvasStage == 1 || _selectedTool == 'CALIBRATE',
                                 pinA: _pinA,
                                 pinB: _pinB,
                                 activeSnapPoint: _activeSnapPoint,
@@ -2075,28 +2472,59 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
             ),
           ),
 
-          // Symbol Toolbar
-          Container(
-            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
-            color: BanaagTheme.surfaceCard,
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
+          // Bottom Action Bar: Stage 1 (Confirm Scale & Room Shapes) vs Stage 3 (Electrical Symbol Toolbar)
+          if (_canvasStage == 1)
+            Container(
+              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+              color: BanaagTheme.surfaceCard,
               child: Row(
                 children: [
                   _symbolButton('PAN', Icons.pan_tool, 'Pan / Zoom'),
-                  _symbolButton('SELECT', Icons.near_me, 'Select / Move'),
-                  _symbolButton('CALIBRATE_ROOM', Icons.polyline, 'Calibrate Room'),
-                  _symbolButton('CALIBRATE', Icons.straighten, 'Scale (mm)'),
-                  _symbolButton('PANEL', Icons.dashboard, 'Panel'),
-                  _symbolButton('SWITCH_1G', Icons.toggle_on, '1G Switch'),
-                  _symbolButton('LIGHT', Icons.lightbulb, 'Light'),
-                  _symbolButton('OUTLET_DUPLEX', Icons.power, 'Duplex CO'),
-                  _symbolButton('ACU', Icons.ac_unit, 'Aircon'),
-                  _symbolButton('FAN', Icons.toys_outlined, 'Electric Fan'),
+                  _symbolButton('SELECT', Icons.open_with, 'Drag Corners (●)'),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: SizedBox(
+                      height: 38,
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: BanaagTheme.primaryAmber,
+                          foregroundColor: Colors.black,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                        icon: const Icon(Icons.check_circle, size: 17),
+                        label: const Text(
+                          'Confirm Rooms → Set Loads (Stage 2)',
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11.5),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        onPressed: _confirmStage1AndOpenStage2Loads,
+                      ),
+                    ),
+                  ),
                 ],
               ),
+            )
+          else
+            Container(
+              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+              color: BanaagTheme.surfaceCard,
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    _symbolButton('PAN', Icons.pan_tool, 'Pan / Zoom'),
+                    _symbolButton('SELECT', Icons.near_me, 'Select / Move'),
+                    _symbolButton('CALIBRATE', Icons.straighten, 'Scale (mm)'),
+                    _symbolButton('PANEL', Icons.dashboard, 'Panel'),
+                    _symbolButton('SWITCH_1G', Icons.toggle_on, '1G Switch'),
+                    _symbolButton('LIGHT', Icons.lightbulb, 'Light'),
+                    _symbolButton('OUTLET_DUPLEX', Icons.power, 'Duplex CO'),
+                    _symbolButton('ACU', Icons.ac_unit, 'Aircon'),
+                    _symbolButton('FAN', Icons.toys_outlined, 'Electric Fan'),
+                  ],
+                ),
+              ),
             ),
-          ),
         ],
       ),
     );
@@ -2249,22 +2677,8 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
 
                   setState(() {
                     _pixelsPerMeter = newPixelsPerMeter;
-
-                    // Recalculate all conduit routes
-                    for (int i = 0; i < _routes.length; i++) {
-                      final r = _routes[i];
-                      final p1 = _points.firstWhere((p) => p.id == r.fromPointId, orElse: () => _points.first);
-                      final p2 = _points.firstWhere((p) => p.id == r.toPointId, orElse: () => _points.first);
-                      final px = (Offset(p1.x, p1.y) - Offset(p2.x, p2.y)).distance;
-                      final realMeters = px / _pixelsPerMeter;
-                      _routes[i] = ConduitRoute(
-                        id: r.id,
-                        fromPointId: r.fromPointId,
-                        toPointId: r.toPointId,
-                        measuredLengthMeters: double.parse(realMeters.clamp(1.0, 99.0).toStringAsFixed(2)),
-                        conductorCount: r.conductorCount,
-                      );
-                    }
+                    _syncRoomSpacesFromBoxes(persist: false);
+                    _recalculateAllRouteLengths();
 
                     if (widget.project != null) {
                       widget.project!.calibrationPixelsPerMeter = _pixelsPerMeter;
@@ -2288,6 +2702,167 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
         ),
       ),
     );
+  }
+
+  Widget _stageStepPill({
+    required int stageNum,
+    required String title,
+    required String subtitle,
+    required bool isActive,
+    required bool isDone,
+    required VoidCallback onTap,
+  }) {
+    final Color borderColor = isActive
+        ? BanaagTheme.primaryAmber
+        : (isDone ? BanaagTheme.successGreen.withValues(alpha: 0.7) : Colors.white24);
+    final Color bgColor = isActive
+        ? BanaagTheme.primaryAmber.withValues(alpha: 0.18)
+        : (isDone ? BanaagTheme.successGreen.withValues(alpha: 0.10) : const Color(0xFF1E2430));
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+        decoration: BoxDecoration(
+          color: bgColor,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: borderColor, width: isActive ? 1.5 : 0.9),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: TextStyle(
+                color: isActive ? BanaagTheme.primaryAmber : (isDone ? BanaagTheme.successGreen : Colors.white),
+                fontSize: 10.5,
+                fontWeight: FontWeight.bold,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+            Text(
+              subtitle,
+              style: const TextStyle(color: Colors.white60, fontSize: 9.0),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showRenameSelectedRoomDialog() {
+    final spaces = widget.project?.spaces ?? [];
+    if (spaces.isEmpty) return;
+    final idx = _selectedRoomIndex.clamp(0, spaces.length - 1);
+    final sp = spaces[idx];
+    final nameCtrl = TextEditingController(text: sp.name);
+    final heightCtrl = TextEditingController(text: sp.ceilingHeight.toStringAsFixed(1));
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: BanaagTheme.surfaceCard,
+        title: const Text('Edit Room Details', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: nameCtrl,
+              decoration: const InputDecoration(labelText: 'Room Name (e.g. Function Hall, Office)'),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: heightCtrl,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(labelText: 'Ceiling Height (m)', suffixText: 'm'),
+            ),
+          ],
+        ),
+        actions: [
+          if (spaces.length > 1)
+            TextButton(
+              onPressed: () {
+                setState(() {
+                  _roomBoxes.remove(sp.id);
+                  spaces.removeAt(idx);
+                  _selectedRoomIndex = 0;
+                  _syncRoomSpacesFromBoxes(persist: true);
+                });
+                Navigator.pop(ctx);
+              },
+              child: const Text('Delete Room', style: TextStyle(color: BanaagTheme.alertRed)),
+            ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel', style: TextStyle(color: Colors.white70)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: BanaagTheme.primaryAmber, foregroundColor: Colors.black),
+            onPressed: () {
+              final newName = nameCtrl.text.trim();
+              final newH = double.tryParse(heightCtrl.text.trim()) ?? sp.ceilingHeight;
+              if (newName.isNotEmpty) {
+                setState(() {
+                  for (int i = 0; i < widget.project!.applianceLoads.length; i++) {
+                    final a = widget.project!.applianceLoads[i];
+                    if (a.roomCategory.toLowerCase() == sp.name.toLowerCase()) {
+                      widget.project!.applianceLoads[i] = ApplianceItem(
+                        id: a.id,
+                        name: a.name,
+                        roomCategory: newName,
+                        ratingVA: a.ratingVA,
+                        quantity: a.quantity,
+                        isDedicatedCircuit: a.isDedicatedCircuit,
+                        isLighting: a.isLighting,
+                        circuitNumber: a.circuitNumber,
+                      );
+                    }
+                  }
+                  spaces[idx] = RoomSpace(
+                    id: sp.id,
+                    name: newName,
+                    areaSqm: sp.areaSqm,
+                    ceilingHeight: newH,
+                    canvasX: sp.canvasX,
+                    canvasY: sp.canvasY,
+                    canvasWidth: sp.canvasWidth,
+                    canvasHeight: sp.canvasHeight,
+                  );
+                  _syncRoomSpacesFromBoxes(persist: true);
+                });
+              }
+              Navigator.pop(ctx);
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _addNewRoomBoxOnStage1() {
+    if (widget.project == null) return;
+    final newId = 'sp-${DateTime.now().millisecondsSinceEpoch}';
+    final newNum = widget.project!.spaces.length + 1;
+    final newRect = const Rect.fromLTWH(340.0, 320.0, 220.0, 160.0);
+    setState(() {
+      _roomBoxes[newId] = newRect;
+      widget.project!.spaces.add(
+        RoomSpace(
+          id: newId,
+          name: 'Room $newNum',
+          areaSqm: 18.0,
+          ceilingHeight: 2.8,
+          canvasX: newRect.left,
+          canvasY: newRect.top,
+          canvasWidth: newRect.width,
+          canvasHeight: newRect.height,
+        ),
+      );
+      _selectedRoomIndex = widget.project!.spaces.length - 1;
+      _syncRoomSpacesFromBoxes(persist: true);
+    });
   }
 
   Widget _layerFilterChip(String mode, String label) {
@@ -2413,6 +2988,9 @@ class CanvasPainter extends CustomPainter {
   final List<ConduitRoute> routes;
   final RoomGeometry? roomGeometry;
   final List<RoomSpace> spaces;
+  final int canvasStage;
+  final Map<String, Rect> roomBoxes;
+  final int selectedRoomIndex;
   final bool isHeatmap;
   final bool showLabels;
   final bool showConduits;
@@ -2432,6 +3010,9 @@ class CanvasPainter extends CustomPainter {
     required this.routes,
     this.roomGeometry,
     this.spaces = const [],
+    this.canvasStage = 3,
+    this.roomBoxes = const {},
+    this.selectedRoomIndex = 0,
     this.isHeatmap = false,
     this.showLabels = true,
     this.showConduits = true,
@@ -2470,6 +3051,123 @@ class CanvasPainter extends CustomPainter {
       }
     } else if (isCalibrating) {
       _drawCalibrationOverlay(canvas, size);
+    }
+
+    // STAGE 1: Draw Interactive Draggable Room Boxes with 4 Corner Handles (●) & Live Dimension Badges!
+    if (canvasStage == 1) {
+      final List<Color> roomColors = [
+        Colors.amberAccent,
+        Colors.cyanAccent,
+        Colors.lightGreenAccent,
+        Colors.orangeAccent,
+        Colors.purpleAccent,
+      ];
+      final double ppm = pixelsPerMeter > 5.0 ? pixelsPerMeter : 44.77;
+
+      for (int i = 0; i < spaces.length; i++) {
+        final sp = spaces[i];
+        final Rect? rect = roomBoxes[sp.id];
+        if (rect == null) continue;
+        final bool isSel = i == selectedRoomIndex;
+        final Color baseColor = roomColors[i % roomColors.length];
+
+        // 1. Translucent Room Fill
+        final fillPaint = Paint()
+          ..color = baseColor.withValues(alpha: isSel ? 0.22 : 0.11)
+          ..style = PaintingStyle.fill;
+        canvas.drawRect(rect, fillPaint);
+
+        // 2. Crisp Room Boundary Outline
+        final borderPaint = Paint()
+          ..color = isSel ? BanaagTheme.primaryAmber : baseColor.withValues(alpha: 0.85)
+          ..strokeWidth = isSel ? 2.8 : 1.6
+          ..style = PaintingStyle.stroke;
+        canvas.drawRect(rect, borderPaint);
+
+        // 3. 4 Draggable Corner Handles (●)
+        final corners = [rect.topLeft, rect.topRight, rect.bottomRight, rect.bottomLeft];
+        for (final cPos in corners) {
+          canvas.drawCircle(
+            cPos,
+            isSel ? 9.5 : 7.0,
+            Paint()..color = const Color(0xFF11151E),
+          );
+          canvas.drawCircle(
+            cPos,
+            isSel ? 8.0 : 5.5,
+            Paint()..color = isSel ? BanaagTheme.primaryAmber : baseColor,
+          );
+        }
+
+        // 4. Center Move Handle & Live Dimension / Area Badge (m x m • m²)
+        final double wM = rect.width / ppm;
+        final double hM = rect.height / ppm;
+        final double areaSqm = wM * hM;
+
+        final String titleLine = sp.name.toUpperCase();
+        final String dimLine = '${wM.toStringAsFixed(1)}m × ${hM.toStringAsFixed(1)}m (${areaSqm.toStringAsFixed(1)} m²)';
+
+        final tp = TextPainter(
+          text: TextSpan(
+            children: [
+              TextSpan(
+                text: '$titleLine\n',
+                style: TextStyle(
+                  color: isSel ? BanaagTheme.primaryAmber : Colors.white,
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              TextSpan(
+                text: dimLine,
+                style: const TextStyle(
+                  color: Colors.cyanAccent,
+                  fontSize: 9.5,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+          textAlign: TextAlign.center,
+          textDirection: TextDirection.ltr,
+        )..layout();
+
+        final badgeRect = RRect.fromRectAndRadius(
+          Rect.fromCenter(
+            center: rect.center,
+            width: tp.width + 16.0,
+            height: tp.height + 10.0,
+          ),
+          const Radius.circular(6),
+        );
+        canvas.drawRRect(badgeRect, Paint()..color = const Color(0xDF11151E));
+        canvas.drawRRect(
+          badgeRect,
+          Paint()
+            ..color = isSel ? BanaagTheme.primaryAmber : baseColor.withValues(alpha: 0.7)
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = isSel ? 1.5 : 0.9,
+        );
+        tp.paint(canvas, Offset(rect.center.dx - tp.width / 2, rect.center.dy - tp.height / 2));
+      }
+
+      // Draw Reference Scale Pin A - Pin B on top of Blank Floor Plan in Stage 1
+      _drawCalibrationOverlay(canvas, size);
+      return;
+    }
+
+    // STAGE 3: Draw Subtle Confirmed Room Outlines Behind Electrical Layout
+    for (int i = 0; i < spaces.length; i++) {
+      final sp = spaces[i];
+      final Rect? rect = roomBoxes[sp.id];
+      if (rect == null) continue;
+      canvas.drawRect(
+        rect,
+        Paint()
+          ..color = Colors.cyanAccent.withValues(alpha: 0.22)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.0,
+      );
     }
 
     // Paint Locked Room Polygons with Soft Translucent Fill & Clean Border

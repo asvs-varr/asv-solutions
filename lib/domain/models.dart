@@ -139,6 +139,10 @@ class RoomSpace {
   final String shapeType; // 'RECTANGULAR', 'L_SHAPE', 'T_SHAPE', 'CUSTOM'
   final double cutoutDepth;
   final double cutoutWidth;
+  final double? canvasX;
+  final double? canvasY;
+  final double? canvasWidth;
+  final double? canvasHeight;
 
   RoomSpace({
     required this.id,
@@ -148,6 +152,10 @@ class RoomSpace {
     this.shapeType = 'RECTANGULAR',
     this.cutoutDepth = 0.0,
     this.cutoutWidth = 0.0,
+    this.canvasX,
+    this.canvasY,
+    this.canvasWidth,
+    this.canvasHeight,
   });
 
   Map<String, dynamic> toJson() => {
@@ -158,6 +166,10 @@ class RoomSpace {
     'shapeType': shapeType,
     'cutoutDepth': cutoutDepth,
     'cutoutWidth': cutoutWidth,
+    'canvasX': canvasX,
+    'canvasY': canvasY,
+    'canvasWidth': canvasWidth,
+    'canvasHeight': canvasHeight,
   };
 
   factory RoomSpace.fromJson(Map<String, dynamic> json) => RoomSpace(
@@ -168,6 +180,10 @@ class RoomSpace {
     shapeType: json['shapeType'] ?? 'RECTANGULAR',
     cutoutDepth: (json['cutoutDepth'] as num?)?.toDouble() ?? 0.0,
     cutoutWidth: (json['cutoutWidth'] as num?)?.toDouble() ?? 0.0,
+    canvasX: (json['canvasX'] as num?)?.toDouble(),
+    canvasY: (json['canvasY'] as num?)?.toDouble(),
+    canvasWidth: (json['canvasWidth'] as num?)?.toDouble(),
+    canvasHeight: (json['canvasHeight'] as num?)?.toDouble(),
   );
 }
 

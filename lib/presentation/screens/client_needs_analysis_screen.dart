@@ -12,7 +12,8 @@ import 'plan_canvas_screen.dart';
 
 class ClientNeedsAnalysisScreen extends StatefulWidget {
   final Project project;
-  const ClientNeedsAnalysisScreen({super.key, required this.project});
+  final bool fromStageFlow;
+  const ClientNeedsAnalysisScreen({super.key, required this.project, this.fromStageFlow = false});
 
   @override
   State<ClientNeedsAnalysisScreen> createState() => _ClientNeedsAnalysisScreenState();
@@ -2743,12 +2744,20 @@ class _ClientNeedsAnalysisScreenState extends State<ClientNeedsAnalysisScreen> {
                             const SnackBar(content: Text('✅ Client Needs Analysis complete! Generating auto-layout on Plan Canvas...')),
                           );
 
-                          Navigator.pushReplacement(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => PlanCanvasScreen(project: widget.project),
-                            ),
-                          );
+                          if (widget.fromStageFlow) {
+                            Navigator.pop(context, true);
+                          } else {
+                            Navigator.pushReplacement(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => PlanCanvasScreen(
+                                  project: widget.project,
+                                  initialStage: 3,
+                                  forceRegenerateFromLoads: true,
+                                ),
+                              ),
+                            );
+                          }
                         },
                       ),
                     ),
