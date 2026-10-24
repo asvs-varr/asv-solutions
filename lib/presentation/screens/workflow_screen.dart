@@ -30,30 +30,17 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
   void initState() {
     super.initState();
     _project = widget.project;
-    _ensureFloorPlanIntakeChecklistItem();
+    _cleanRedundantC0ChecklistItem();
     _ensureDxfChecklistItem();
   }
 
-  void _ensureFloorPlanIntakeChecklistItem() {
+  void _cleanRedundantC0ChecklistItem() {
     final p1 = _project.phases.firstWhere(
       (p) => p.type == ProjectPhaseType.consultation,
       orElse: () => _project.phases.first,
     );
-    final hasC0 = p1.checklist.any((i) => i.id == 'c0');
-    if (!hasC0) {
-      final bool alreadyHasPlan = _project.blueprintImagePath != null &&
-          _project.blueprintImagePath!.isNotEmpty &&
-          _project.spaces.isNotEmpty &&
-          _project.spaces.every((s) => s.canvasX != null && s.canvasWidth != null);
-
-      p1.checklist.insert(
-        0,
-        PhaseCheckItem(
-          id: 'c0',
-          title: 'Floor Plan Blueprint Intake & Room Calibration (PDF/CAD/Image)',
-          isCompleted: alreadyHasPlan,
-        ),
-      );
+    if (p1.checklist.any((i) => i.id == 'c0')) {
+      p1.checklist.removeWhere((i) => i.id == 'c0');
       ProjectRepository.instance.updateProject(_project);
     }
   }
@@ -360,33 +347,12 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
   }
 
   Widget _buildChecklistTile(ProjectPhase phase, PhaseCheckItem item, bool isLocked) {
-    // HARD GATE: c1 (Open Tally) is locked until c0 (Floor Plan Intake & Room Calibration) is completed!
-    final bool isC0Completed = phase.checklist.any((c) => c.id == 'c0' && c.isCompleted);
-    final bool isItemGated = isLocked || (item.id == 'c1' && !isC0Completed);
-
     return ListTile(
       dense: true,
-      enabled: !isItemGated,
-      onTap: !isItemGated
+      enabled: !isLocked,
+      onTap: !isLocked
           ? () async {
-              if (item.id == 'c0') {
-                if (_project.blueprintImagePath == null || _project.blueprintImagePath!.isEmpty) {
-                  await _openFloorPlanScanner();
-                } else {
-                  await Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => PlanCanvasScreen(project: _project, initialStage: 1),
-                    ),
-                  );
-                }
-                setState(() {
-                  _project = ProjectRepository.instance.allProjects.firstWhere(
-                    (p) => p.id == _project.id,
-                    orElse: () => _project,
-                  );
-                });
-              } else if (item.id == 'c1') {
+              if (item.id == 'c1') {
                 await Navigator.push(
                   context,
                   MaterialPageRoute(
@@ -472,45 +438,14 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
                     decoration: item.isCompleted ? TextDecoration.lineThrough : null,
                     color: item.isCompleted
                         ? BanaagTheme.textMuted
-                        : (item.id == 'c0' || item.id == 'c1' || item.id == 'c2' || item.id == 'c_dxf' ? BanaagTheme.primaryAmber : BanaagTheme.textHighEmphasis),
-                    fontWeight: (item.id == 'c0' || item.id == 'c1' || item.id == 'c2' || item.id == 'c_dxf') ? FontWeight.bold : FontWeight.normal,
+                        : (item.id == 'c1' || item.id == 'c2' || item.id == 'c_dxf' ? BanaagTheme.primaryAmber : BanaagTheme.textHighEmphasis),
+                    fontWeight: (item.id == 'c1' || item.id == 'c2' || item.id == 'c_dxf') ? FontWeight.bold : FontWeight.normal,
                   ),
                 ),
               ),
             ],
           ),
-          if (item.id == 'c0' && !isLocked)
-            Padding(
-              padding: const EdgeInsets.only(top: 4.0),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: Colors.cyanAccent.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Text(
-                  _project.blueprintImagePath != null && _project.blueprintImagePath!.isNotEmpty
-                      ? 'CALIBRATE ROOMS ➔'
-                      : 'UPLOAD PLAN ➔',
-                  style: const TextStyle(color: Colors.cyanAccent, fontSize: 10, fontWeight: FontWeight.bold),
-                ),
-              ),
-            ),
-          if (item.id == 'c1' && isItemGated && !isLocked)
-            Padding(
-              padding: const EdgeInsets.only(top: 4.0),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: Colors.redAccent.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(4),
-                  border: Border.all(color: Colors.redAccent.withValues(alpha: 0.4)),
-                ),
-                child: const Text('🔒 LOCKED: Complete Floor Plan Calibration (c0) First',
-                    style: TextStyle(color: Colors.redAccent, fontSize: 9.5, fontWeight: FontWeight.bold)),
-              ),
-            ),
-          if (item.id == 'c1' && !isItemGated)
+          if (item.id == 'c1' && !isLocked)
             Padding(
               padding: const EdgeInsets.only(top: 4.0),
               child: Container(
@@ -655,35 +590,7 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
   }
 
   Widget? _buildCheckItemTrailing(ProjectPhase phase, PhaseCheckItem item, bool isLocked) {
-    if (item.id == 'c0') {
-      return IconButton(
-        icon: Icon(
-          item.isCompleted ? Icons.check_circle : Icons.document_scanner_outlined,
-          color: item.isCompleted ? BanaagTheme.successGreen : Colors.cyanAccent,
-        ),
-        tooltip: item.isCompleted ? 'Floor Plan Calibrated' : 'Intake & Calibrate Floor Plan',
-        onPressed: isLocked
-            ? null
-            : () async {
-                if (_project.blueprintImagePath == null || _project.blueprintImagePath!.isEmpty) {
-                  await _openFloorPlanScanner();
-                } else {
-                  await Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => PlanCanvasScreen(project: _project, initialStage: 1),
-                    ),
-                  );
-                }
-                setState(() {
-                  _project = ProjectRepository.instance.allProjects.firstWhere(
-                    (p) => p.id == _project.id,
-                    orElse: () => _project,
-                  );
-                });
-              },
-      );
-    } else if (item.id == 'c2') {
+    if (item.id == 'c2') {
       return IconButton(
         icon: Icon(
           item.isCompleted ? Icons.check_circle : Icons.rule_sharp,

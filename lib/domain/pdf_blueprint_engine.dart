@@ -150,7 +150,16 @@ class PdfBlueprintEngine {
                 }
               }
               final txt = sb.toString().toLowerCase();
-              if (txt.contains('hall') || txt.contains('room') || txt.contains('office') || txt.contains('staff') || txt.contains('landing') || txt.contains('stairs') || txt.contains('storage')) {
+              final isRoomText = txt.contains('hall') ||
+                  txt.contains('room') ||
+                  txt.contains('office') ||
+                  txt.contains('staff') ||
+                  txt.contains('landing') ||
+                  txt.contains('stairs') ||
+                  txt.contains('storage');
+              // Include outer dimension callouts (e.g. 15500, 4000, 4800, 3400, 3300, 19480)
+              final isDimensionCallout = RegExp(r'^\d{4,5}$').hasMatch(txt.trim());
+              if (isRoomText || isDimensionCallout) {
                 roomPoints.add(Offset(x, y));
               }
             }
@@ -164,10 +173,12 @@ class PdfBlueprintEngine {
         double minY = roomPoints.map((p) => p.dy).reduce(math.min);
         double maxY = roomPoints.map((p) => p.dy).reduce(math.max);
 
-        final double envX1 = (minX - 2200.0).clamp(0.0, 14000.0);
-        final double envX2 = (maxX + 1200.0).clamp(envX1 + 1000.0, 14000.0);
+        // Generous margins so top dimension strings (4000, 4800, 3400, 3300, 15500)
+        // and right/bottom dimension callouts have ample breathing space and are never clipped!
+        final double envX1 = (minX - 1800.0).clamp(0.0, 14000.0);
+        final double envX2 = (maxX + 1400.0).clamp(envX1 + 1000.0, 14000.0);
         final double envY1 = (minY - 1800.0).clamp(0.0, 9921.0);
-        final double envY2 = (maxY + 1000.0).clamp(envY1 + 1000.0, 9921.0);
+        final double envY2 = (maxY + 1800.0).clamp(envY1 + 1000.0, 9921.0);
 
         final double normLeft = envX1 / 14000.0;
         final double normRight = envX2 / 14000.0;

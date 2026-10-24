@@ -61,7 +61,6 @@ class ProjectRepository {
       switch (phaseType) {
         case ProjectPhaseType.consultation:
           checklist.addAll([
-            PhaseCheckItem(id: 'c0', title: 'Floor Plan Blueprint Intake & Room Calibration (PDF/CAD/Image)'),
             PhaseCheckItem(id: 'c1', title: 'Client Needs Analysis (Appliance & Connected Loads tally)'),
             PhaseCheckItem(id: 'c_takeoff', title: 'Initial Plan Takeoff & Wire Run Estimation (Plan Canvas)'),
             if (intakeMode == 'AUTOCAD_DXF')

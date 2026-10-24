@@ -161,11 +161,11 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
   static const double _planOriginY = 120.0;
 
   void _fitSheetToViewport() {
-    // 1400 x 1600 unconstrained CAD sheet fitted cleanly to mobile screen (~393px width)
-    const double fitScale = 0.28;
+    // Fit unconstrained CAD sheet with comfortable padding around outer dimension callouts
+    const double fitScale = 0.26;
     _currentZoom = fitScale;
     _zoomController.value = Matrix4.identity()
-      ..translateByDouble(2.0, 6.0, 0.0, 1.0)
+      ..translateByDouble(10.0, 16.0, 0.0, 1.0)
       ..scaleByDouble(fitScale, fitScale, 1.0, 1.0);
   }
 
@@ -681,18 +681,6 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
   Future<void> _confirmStage1AndOpenStage2Loads() async {
     _syncRoomSpacesFromBoxes(persist: true);
     if (widget.project == null) return;
-
-    // Mark c0 (Floor Plan Intake & Calibration) as completed in Project Phase 1!
-    final p1 = widget.project!.phases.firstWhere(
-      (p) => p.type == ProjectPhaseType.consultation,
-      orElse: () => widget.project!.phases.first,
-    );
-    for (final c in p1.checklist) {
-      if (c.id == 'c0') {
-        c.isCompleted = true;
-      }
-    }
-    ProjectRepository.instance.updateProject(widget.project!);
 
     final result = await Navigator.push<bool>(
       context,

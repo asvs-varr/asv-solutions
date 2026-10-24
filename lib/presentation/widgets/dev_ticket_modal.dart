@@ -129,75 +129,82 @@ class _DevTicketModalContentState extends State<DevTicketModalContent> {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      constraints: BoxConstraints(
-        maxHeight: MediaQuery.of(context).size.height * 0.88,
-      ),
-      padding: EdgeInsets.only(
-        top: 20,
-        left: 20,
-        right: 20,
-        bottom: MediaQuery.of(context).viewInsets.bottom + 24,
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header with Queue Switcher
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+    return SafeArea(
+      child: Padding(
+        padding: EdgeInsets.only(bottom: bottomInset),
+        child: Container(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.88,
+          ),
+          padding: const EdgeInsets.only(
+            top: 20,
+            left: 20,
+            right: 20,
+            bottom: 20,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Header with Queue Switcher
               Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: BanaagTheme.primaryAmber.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(Icons.confirmation_number_outlined, color: BanaagTheme.primaryAmber, size: 22),
-                  ),
-                  const SizedBox(width: 12),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  Row(
                     children: [
-                      const Text(
-                        'Submit Dev Ticket',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white),
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: BanaagTheme.primaryAmber.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(Icons.confirmation_number_outlined, color: BanaagTheme.primaryAmber, size: 22),
                       ),
-                      Text(
-                        widget.projectContext != null
-                            ? 'Context: ${widget.projectContext}'
-                            : 'Log bug, feature request o code tweak',
-                        style: const TextStyle(fontSize: 11, color: BanaagTheme.textMuted),
+                      const SizedBox(width: 12),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Submit Dev Ticket',
+                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white),
+                          ),
+                          Text(
+                            widget.projectContext != null
+                                ? 'Context: ${widget.projectContext}'
+                                : 'Log bug, feature request o code tweak',
+                            style: const TextStyle(fontSize: 11, color: BanaagTheme.textMuted),
+                          ),
+                        ],
                       ),
                     ],
                   ),
+                  TextButton.icon(
+                    style: TextButton.styleFrom(
+                      backgroundColor: BanaagTheme.surfaceCard,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    ),
+                    icon: Icon(_showListView ? Icons.add_comment : Icons.list_alt, size: 16),
+                    label: Text(
+                      _showListView ? 'New Ticket' : 'Queue (${_tickets.where((t) => t.status == 'open').length})',
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                    onPressed: () => setState(() => _showListView = !_showListView),
+                  ),
                 ],
               ),
-              TextButton.icon(
-                style: TextButton.styleFrom(
-                  backgroundColor: BanaagTheme.surfaceCard,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              const SizedBox(height: 16),
+
+              Flexible(
+                child: SingleChildScrollView(
+                  physics: const ClampingScrollPhysics(),
+                  child: _showListView ? _buildQueueView() : _buildCreateForm(),
                 ),
-                icon: Icon(_showListView ? Icons.add_comment : Icons.list_alt, size: 16),
-                label: Text(
-                  _showListView ? 'New Ticket' : 'Queue (${_tickets.where((t) => t.status == 'open').length})',
-                  style: const TextStyle(fontSize: 12),
-                ),
-                onPressed: () => setState(() => _showListView = !_showListView),
               ),
             ],
           ),
-          const SizedBox(height: 16),
-
-          Flexible(
-            child: SingleChildScrollView(
-              child: _showListView ? _buildQueueView() : _buildCreateForm(),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
