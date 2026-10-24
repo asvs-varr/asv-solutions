@@ -682,6 +682,18 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
     _syncRoomSpacesFromBoxes(persist: true);
     if (widget.project == null) return;
 
+    // Mark c0 (Floor Plan Intake & Calibration) as completed in Project Phase 1!
+    final p1 = widget.project!.phases.firstWhere(
+      (p) => p.type == ProjectPhaseType.consultation,
+      orElse: () => widget.project!.phases.first,
+    );
+    for (final c in p1.checklist) {
+      if (c.id == 'c0') {
+        c.isCompleted = true;
+      }
+    }
+    ProjectRepository.instance.updateProject(widget.project!);
+
     final result = await Navigator.push<bool>(
       context,
       MaterialPageRoute(

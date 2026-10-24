@@ -30,7 +30,32 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
   void initState() {
     super.initState();
     _project = widget.project;
+    _ensureFloorPlanIntakeChecklistItem();
     _ensureDxfChecklistItem();
+  }
+
+  void _ensureFloorPlanIntakeChecklistItem() {
+    final p1 = _project.phases.firstWhere(
+      (p) => p.type == ProjectPhaseType.consultation,
+      orElse: () => _project.phases.first,
+    );
+    final hasC0 = p1.checklist.any((i) => i.id == 'c0');
+    if (!hasC0) {
+      final bool alreadyHasPlan = _project.blueprintImagePath != null &&
+          _project.blueprintImagePath!.isNotEmpty &&
+          _project.spaces.isNotEmpty &&
+          _project.spaces.every((s) => s.canvasX != null && s.canvasWidth != null);
+
+      p1.checklist.insert(
+        0,
+        PhaseCheckItem(
+          id: 'c0',
+          title: 'Floor Plan Blueprint Intake & Room Calibration (PDF/CAD/Image)',
+          isCompleted: alreadyHasPlan,
+        ),
+      );
+      ProjectRepository.instance.updateProject(_project);
+    }
   }
 
   void _ensureDxfChecklistItem() {
@@ -335,12 +360,33 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
   }
 
   Widget _buildChecklistTile(ProjectPhase phase, PhaseCheckItem item, bool isLocked) {
+    // HARD GATE: c1 (Open Tally) is locked until c0 (Floor Plan Intake & Room Calibration) is completed!
+    final bool isC0Completed = phase.checklist.any((c) => c.id == 'c0' && c.isCompleted);
+    final bool isItemGated = isLocked || (item.id == 'c1' && !isC0Completed);
+
     return ListTile(
       dense: true,
-      enabled: !isLocked,
-      onTap: !isLocked
+      enabled: !isItemGated,
+      onTap: !isItemGated
           ? () async {
-              if (item.id == 'c1') {
+              if (item.id == 'c0') {
+                if (_project.blueprintImagePath == null || _project.blueprintImagePath!.isEmpty) {
+                  await _openFloorPlanScanner();
+                } else {
+                  await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => PlanCanvasScreen(project: _project, initialStage: 1),
+                    ),
+                  );
+                }
+                setState(() {
+                  _project = ProjectRepository.instance.allProjects.firstWhere(
+                    (p) => p.id == _project.id,
+                    orElse: () => _project,
+                  );
+                });
+              } else if (item.id == 'c1') {
                 await Navigator.push(
                   context,
                   MaterialPageRoute(
@@ -426,34 +472,45 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
                     decoration: item.isCompleted ? TextDecoration.lineThrough : null,
                     color: item.isCompleted
                         ? BanaagTheme.textMuted
-                        : (item.id == 'c1' || item.id == 'c2' || item.id == 'c_dxf' ? BanaagTheme.primaryAmber : BanaagTheme.textHighEmphasis),
-                    fontWeight: (item.id == 'c1' || item.id == 'c2' || item.id == 'c_dxf') ? FontWeight.bold : FontWeight.normal,
+                        : (item.id == 'c0' || item.id == 'c1' || item.id == 'c2' || item.id == 'c_dxf' ? BanaagTheme.primaryAmber : BanaagTheme.textHighEmphasis),
+                    fontWeight: (item.id == 'c0' || item.id == 'c1' || item.id == 'c2' || item.id == 'c_dxf') ? FontWeight.bold : FontWeight.normal,
                   ),
                 ),
               ),
             ],
           ),
-          if (item.id == 'c2' && _project.siteStructure != null)
+          if (item.id == 'c0' && !isLocked)
             Padding(
-              padding: const EdgeInsets.only(top: 2.0),
-              child: Text(
-                'Materials: ${_project.siteStructure!.racewayRecommendation}',
-                style: const TextStyle(color: BanaagTheme.successGreen, fontSize: 11, fontWeight: FontWeight.w600),
-              ),
-            ),
-          if (item.id == 'c3' && _project.utilityServiceDrop != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 2.0),
-              child: Text(
-                'Pole ${_project.utilityServiceDrop!.poleNumberTag} • ${_project.utilityServiceDrop!.distanceToPoleMeters}m (${_project.utilityServiceDrop!.crossesRoadway ? 'Tawid-Kalsada' : 'Driveway'})',
-                style: TextStyle(
-                  color: _project.utilityServiceDrop!.requiresIntermediatePole ? BanaagTheme.alertRed : BanaagTheme.successGreen,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
+              padding: const EdgeInsets.only(top: 4.0),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.cyanAccent.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  _project.blueprintImagePath != null && _project.blueprintImagePath!.isNotEmpty
+                      ? 'CALIBRATE ROOMS ➔'
+                      : 'UPLOAD PLAN ➔',
+                  style: const TextStyle(color: Colors.cyanAccent, fontSize: 10, fontWeight: FontWeight.bold),
                 ),
               ),
             ),
-          if (item.id == 'c1' && !isLocked)
+          if (item.id == 'c1' && isItemGated && !isLocked)
+            Padding(
+              padding: const EdgeInsets.only(top: 4.0),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.redAccent.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: Colors.redAccent.withValues(alpha: 0.4)),
+                ),
+                child: const Text('🔒 LOCKED: Complete Floor Plan Calibration (c0) First',
+                    style: TextStyle(color: Colors.redAccent, fontSize: 9.5, fontWeight: FontWeight.bold)),
+              ),
+            ),
+          if (item.id == 'c1' && !isItemGated)
             Padding(
               padding: const EdgeInsets.only(top: 4.0),
               child: Container(
@@ -478,7 +535,7 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
                       color: Colors.cyanAccent.withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(4),
                     ),
-                    child: const Text('OPEN CANVAS ➔', style: TextStyle(color: Colors.cyanAccent, fontSize: 10, fontWeight: FontWeight.bold)),
+                    child: const Text('OPEN CANVAS âž”', style: TextStyle(color: Colors.cyanAccent, fontSize: 10, fontWeight: FontWeight.bold)),
                   ),
                   if (_project.blueprintImagePath != null && _project.blueprintImagePath!.isNotEmpty)
                     GestureDetector(
@@ -489,7 +546,7 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
                           color: BanaagTheme.primaryAmber.withValues(alpha: 0.2),
                           borderRadius: BorderRadius.circular(4),
                         ),
-                        child: const Text('RE-SCAN PLAN 🔍', style: TextStyle(color: BanaagTheme.primaryAmber, fontSize: 10, fontWeight: FontWeight.bold)),
+                        child: const Text('RE-SCAN PLAN ðŸ”', style: TextStyle(color: BanaagTheme.primaryAmber, fontSize: 10, fontWeight: FontWeight.bold)),
                       ),
                     ),
                 ],
@@ -504,7 +561,7 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
                   color: BanaagTheme.primaryAmber.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(4),
                 ),
-                child: const Text('ASSESS SITE ➔', style: TextStyle(color: BanaagTheme.primaryAmber, fontSize: 10, fontWeight: FontWeight.bold)),
+                child: const Text('ASSESS SITE âž”', style: TextStyle(color: BanaagTheme.primaryAmber, fontSize: 10, fontWeight: FontWeight.bold)),
               ),
             ),
           if (item.id == 'c2' && item.isCompleted)
@@ -516,7 +573,7 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
                   color: BanaagTheme.successGreen.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(4),
                 ),
-                child: const Text('ASSESSED ✅', style: TextStyle(color: BanaagTheme.successGreen, fontSize: 10, fontWeight: FontWeight.bold)),
+                child: const Text('ASSESSED âœ…', style: TextStyle(color: BanaagTheme.successGreen, fontSize: 10, fontWeight: FontWeight.bold)),
               ),
             ),
           if (item.id == 'c3' && !isLocked && !item.isCompleted)
@@ -528,7 +585,7 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
                   color: BanaagTheme.primaryAmber.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(4),
                 ),
-                child: const Text('CALCULATE DROP ➔', style: TextStyle(color: BanaagTheme.primaryAmber, fontSize: 10, fontWeight: FontWeight.bold)),
+                child: const Text('CALCULATE DROP âž”', style: TextStyle(color: BanaagTheme.primaryAmber, fontSize: 10, fontWeight: FontWeight.bold)),
               ),
             ),
           if (item.id == 'c3' && item.isCompleted)
@@ -540,7 +597,7 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
                   color: BanaagTheme.successGreen.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(4),
                 ),
-                child: const Text('DROP VERIFIED ✅', style: TextStyle(color: BanaagTheme.successGreen, fontSize: 10, fontWeight: FontWeight.bold)),
+                child: const Text('DROP VERIFIED âœ…', style: TextStyle(color: BanaagTheme.successGreen, fontSize: 10, fontWeight: FontWeight.bold)),
               ),
             ),
           if (item.id == 'c_dxf' && !isLocked && !item.isCompleted)
@@ -552,7 +609,7 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
                   color: BanaagTheme.primaryAmber.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(4),
                 ),
-                child: const Text('UPLOAD ➔', style: TextStyle(color: BanaagTheme.primaryAmber, fontSize: 10, fontWeight: FontWeight.bold)),
+                child: const Text('UPLOAD âž”', style: TextStyle(color: BanaagTheme.primaryAmber, fontSize: 10, fontWeight: FontWeight.bold)),
               ),
             ),
           if (item.id == 'c_dxf' && item.isCompleted)
@@ -564,7 +621,7 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
                   color: BanaagTheme.successGreen.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(4),
                 ),
-                child: const Text('PARSED ✅', style: TextStyle(color: BanaagTheme.successGreen, fontSize: 10, fontWeight: FontWeight.bold)),
+                child: const Text('PARSED âœ…', style: TextStyle(color: BanaagTheme.successGreen, fontSize: 10, fontWeight: FontWeight.bold)),
               ),
             ),
           if (item.id == 'p1' && !isLocked && !item.isCompleted)
@@ -576,7 +633,7 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
                   color: BanaagTheme.primaryAmber.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(4),
                 ),
-                child: const Text('GENERATE SLD ➔', style: TextStyle(color: BanaagTheme.primaryAmber, fontSize: 10, fontWeight: FontWeight.bold)),
+                child: const Text('GENERATE SLD âž”', style: TextStyle(color: BanaagTheme.primaryAmber, fontSize: 10, fontWeight: FontWeight.bold)),
               ),
             ),
           if (item.id == 'p1' && item.isCompleted)
@@ -588,7 +645,7 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
                   color: BanaagTheme.successGreen.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(4),
                 ),
-                child: const Text('SLD READY ✅', style: TextStyle(color: BanaagTheme.successGreen, fontSize: 10, fontWeight: FontWeight.bold)),
+                child: const Text('SLD READY âœ…', style: TextStyle(color: BanaagTheme.successGreen, fontSize: 10, fontWeight: FontWeight.bold)),
               ),
             ),
         ],
@@ -598,7 +655,35 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
   }
 
   Widget? _buildCheckItemTrailing(ProjectPhase phase, PhaseCheckItem item, bool isLocked) {
-    if (item.id == 'c2') {
+    if (item.id == 'c0') {
+      return IconButton(
+        icon: Icon(
+          item.isCompleted ? Icons.check_circle : Icons.document_scanner_outlined,
+          color: item.isCompleted ? BanaagTheme.successGreen : Colors.cyanAccent,
+        ),
+        tooltip: item.isCompleted ? 'Floor Plan Calibrated' : 'Intake & Calibrate Floor Plan',
+        onPressed: isLocked
+            ? null
+            : () async {
+                if (_project.blueprintImagePath == null || _project.blueprintImagePath!.isEmpty) {
+                  await _openFloorPlanScanner();
+                } else {
+                  await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => PlanCanvasScreen(project: _project, initialStage: 1),
+                    ),
+                  );
+                }
+                setState(() {
+                  _project = ProjectRepository.instance.allProjects.firstWhere(
+                    (p) => p.id == _project.id,
+                    orElse: () => _project,
+                  );
+                });
+              },
+      );
+    } else if (item.id == 'c2') {
       return IconButton(
         icon: Icon(
           item.isCompleted ? Icons.check_circle : Icons.rule_sharp,
@@ -719,7 +804,7 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
             _toggleCheckItem(phase, item);
           });
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('📸 Pre-cover rough-in photo proof saved & verified!')),
+            const SnackBar(content: Text('ðŸ“¸ Pre-cover rough-in photo proof saved & verified!')),
           );
         },
       );
@@ -772,7 +857,7 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
                     ],
                   ),
                   const SizedBox(height: 6),
-                  const Text('File size: 1.4 MB • Format: ASCII DXF Release 2018', style: TextStyle(fontSize: 11, color: BanaagTheme.textMuted)),
+                  const Text('File size: 1.4 MB â€¢ Format: ASCII DXF Release 2018', style: TextStyle(fontSize: 11, color: BanaagTheme.textMuted)),
                   const Divider(color: Colors.white12, height: 16),
                   const Text('Layer Audit & Entity Scan Results:', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: BanaagTheme.primaryAmber)),
                   const SizedBox(height: 4),
@@ -825,7 +910,7 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
 
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
-                  content: Text('✅ AutoCAD .DXF uploaded & validated! Checklist automatically checked.'),
+                  content: Text('âœ… AutoCAD .DXF uploaded & validated! Checklist automatically checked.'),
                   backgroundColor: BanaagTheme.successGreen,
                 ),
               );
