@@ -178,6 +178,7 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
   // Orthogonal Snap & Floor Plan Snap Settings
   bool _isOrthoSnapEnabled = true;
   bool _isAiAutoWallDetectEnabled = true;
+  final List<Offset> _customProjectColumns = [];
   Offset? _lastHapticSnappedPoint;
   Offset? _roomDragStartPos;
   List<Offset>? _roomDragInitialPoly;
@@ -285,11 +286,13 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
   /// Dynamically active structural columns for snapping and rendering
   List<Offset> get _activeStructuralColumns {
     if (!_isAiAutoWallDetectEnabled) return const [];
+    final List<Offset> columns = [];
     if (_isCommercialCadPlan) {
-      return _cadStructuralColumns;
+      columns.addAll(_cadStructuralColumns);
     }
-    // Pure residential plans have stud/CHB walls, no commercial column grid
-    return const [];
+    // Merge user-tagged or smart-detected columns for residential/custom plans
+    columns.addAll(_customProjectColumns);
+    return columns;
   }
 
   /// Dynamically active architectural wall corners and turns
@@ -3208,6 +3211,72 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
+                          if (_selectedVertexForTap != null && poly.isNotEmpty) ...[
+                            Builder(
+                              builder: (ctx) {
+                                final int vIdx = _selectedVertexForTap!;
+                                if (vIdx >= poly.length) return const SizedBox.shrink();
+                                final pt = poly[vIdx];
+                                final bool isCol = _customProjectColumns.any((c) => (c - pt).distance < 12.0);
+                                return GestureDetector(
+                                  onTap: () {
+                                    setState(() {
+                                      if (isCol) {
+                                        _customProjectColumns.removeWhere((c) => (c - pt).distance < 12.0);
+                                      } else {
+                                        _customProjectColumns.add(pt);
+                                      }
+                                    });
+                                    HapticFeedback.selectionClick();
+                                    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        duration: const Duration(milliseconds: 1200),
+                                        content: Text(
+                                          isCol
+                                              ? '🏛️ Column removed from corner (Converted to pure Wall Corner)'
+                                              : '🏛️ Column post marked on corner (Tri-Snap Centerline & Faces Active!)',
+                                        ),
+                                        backgroundColor: isCol ? Colors.grey[800] : BanaagTheme.primaryAmber,
+                                      ),
+                                    );
+                                  },
+                                  child: Container(
+                                    margin: const EdgeInsets.only(left: 6),
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: isCol
+                                          ? BanaagTheme.primaryAmber.withValues(alpha: 0.25)
+                                          : Colors.cyanAccent.withValues(alpha: 0.15),
+                                      borderRadius: BorderRadius.circular(4),
+                                      border: Border.all(
+                                        color: isCol ? BanaagTheme.primaryAmber : Colors.cyanAccent.withValues(alpha: 0.8),
+                                      ),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          isCol ? Icons.check_circle : Icons.add_circle_outline,
+                                          size: 11,
+                                          color: isCol ? BanaagTheme.primaryAmber : Colors.cyanAccent,
+                                        ),
+                                        const SizedBox(width: 3),
+                                        Text(
+                                          isCol ? 'Post: ON' : '+ Post',
+                                          style: TextStyle(
+                                            color: isCol ? BanaagTheme.primaryAmber : Colors.cyanAccent,
+                                            fontSize: 10.5,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                          ],
                           if (_selectedVertexForTap != null && poly.length > 3)
                             GestureDetector(
                               onTap: () {
