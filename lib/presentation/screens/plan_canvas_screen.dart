@@ -42,7 +42,7 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
   late List<ConduitRoute> _routes;
   RoomGeometry? _roomGeometry;
   bool _isHeatmapVisible = false;
-  String _selectedTool = 'PAN';
+  String _selectedTool = 'SELECT';
   bool _isUnderlayVisible = true;
   final double _underlayOpacity = 0.78;
   String? _blueprintPath;
@@ -1750,7 +1750,6 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
     }
   }
   void _handlePanStart(DragStartDetails details) {
-    if (_selectedTool == 'PAN') return;
 
     final tapPos = details.localPosition;
     final tapX = tapPos.dx;
@@ -3793,7 +3792,7 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                     constrained: false,
                     minScale: 0.15,
                     maxScale: 10.0,
-                    panEnabled: _selectedTool == 'PAN' || (_activeDraggingPin == null && _draggedPoint == null),
+                    panEnabled: true,
                     scaleEnabled: true,
                     panAxis: PanAxis.free,
                     boundaryMargin: const EdgeInsets.all(900.0),
@@ -3808,9 +3807,9 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                       child: GestureDetector(
                         behavior: HitTestBehavior.translucent,
                         onTapUp: _handleCanvasTap,
-                        onPanStart: _selectedTool == 'PAN' ? null : _handlePanStart,
-                        onPanUpdate: _selectedTool == 'PAN' ? null : _handlePanUpdate,
-                        onPanEnd: _selectedTool == 'PAN' ? null : _handlePanEnd,
+                        onPanStart: _handlePanStart,
+                        onPanUpdate: _handlePanUpdate,
+                        onPanEnd: _handlePanEnd,
                         child: Stack(
                           fit: StackFit.expand,
                           children: [
@@ -4146,7 +4145,6 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
 
                 return Row(
                   children: [
-                    _symbolButton('PAN', Icons.pan_tool, 'Pan'),
                     _symbolButton(
                       'SELECT',
                       Icons.open_with,
@@ -4220,7 +4218,6 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                 scrollDirection: Axis.horizontal,
                 child: Row(
                   children: [
-                    _symbolButton('PAN', Icons.pan_tool, 'Pan / Zoom'),
                     _symbolButton('SELECT', Icons.near_me, 'Select / Move'),
                     _symbolButton('CALIBRATE', Icons.straighten, 'Scale (mm)'),
                     _symbolButton('PANEL', Icons.dashboard, 'Panel'),
