@@ -105,6 +105,8 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
   int? _activeDraggingWallIndex;
   Offset? _wallDragStartPos;
   List<Offset>? _wallDragInitialPoly;
+  bool _isPerpendicularCornerSnapped = false;
+  Offset? _perpendicularSnapCornerPos;
 
   // Multi-Point Polygon Calibration Engine for Real Rooms
   final List<Offset> _activePolygonPoints = [];
@@ -577,12 +579,28 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
       }
     }
 
-    // 2. Orthogonal Snap: Lock to 0°/90° relative to neighboring polygon vertices
+    // 2. Orthogonal & Perpendicular Snap: Lock to 0 deg / 90 deg relative to neighboring vertices
+    bool isCornerPerpendicular = false;
     if (activePoly.length >= 3) {
       final prevV = activePoly[(activeVertexIdx - 1 + activePoly.length) % activePoly.length];
       final nextV = activePoly[(activeVertexIdx + 1) % activePoly.length];
 
-      if (_isOrthoSnapEnabled) {
+      // Candidate 1: aligned horizontally with prevV and vertically with nextV -> (nextV.dx, prevV.dy)
+      final cand1 = Offset(nextV.dx, prevV.dy);
+      // Candidate 2: aligned vertically with prevV and horizontally with nextV -> (prevV.dx, nextV.dy)
+      final cand2 = Offset(prevV.dx, nextV.dy);
+
+      final double dist1 = (rawPos - cand1).distance;
+      final double dist2 = (rawPos - cand2).distance;
+      const double perpSnapTol = 24.0;
+
+      if (dist1 <= perpSnapTol || dist2 <= perpSnapTol) {
+        final exactPerp = dist1 <= dist2 ? cand1 : cand2;
+        sx = exactPerp.dx;
+        sy = exactPerp.dy;
+        snapTarget = exactPerp;
+        isCornerPerpendicular = true;
+      } else if (_isOrthoSnapEnabled) {
         final double distPrev = (rawPos - prevV).distance;
         final double distNext = (rawPos - nextV).distance;
         final anchor = distPrev <= distNext ? prevV : nextV;
@@ -602,6 +620,9 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
         if ((sy - nextV.dy).abs() <= 10.0) sy = nextV.dy;
       }
     }
+
+    _isPerpendicularCornerSnapped = isCornerPerpendicular;
+    _perpendicularSnapCornerPos = isCornerPerpendicular ? Offset(sx, sy) : null;
 
     // 3. Snap to Column Intersections & Wall Midpoints / Grid lines
     final featSnapped = _snapToFloorPlanFeatures(Offset(sx, sy), snapTol: snapTol);
@@ -1719,6 +1740,8 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
         _roomDragInitialPoly = null;
         _wallDragStartPos = null;
         _wallDragInitialPoly = null;
+        _isPerpendicularCornerSnapped = false;
+        _perpendicularSnapCornerPos = null;
         _hasMovedSignificantly = false;
       });
       _syncRoomSpacesFromBoxes(persist: true);
@@ -3246,6 +3269,9 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                                 pinB: _pinB,
                                 activeDraggingPin: _activeDraggingPin,
                                 activeDraggingWallIndex: _activeDraggingWallIndex,
+                                activeDraggingVertexIndex: _activeDraggingVertexIndex,
+                                isPerpendicularCornerSnapped: _isPerpendicularCornerSnapped,
+                                perpendicularSnapCornerPos: _perpendicularSnapCornerPos,
                                 activeSnapPoint: _activeSnapPoint,
                                 pixelsPerMeter: _pixelsPerMeter,
                                 activePolygonPoints: _activePolygonPoints,
@@ -4610,6 +4636,9 @@ class CanvasPainter extends CustomPainter {
 
   final int? activeDraggingPin;
   final int? activeDraggingWallIndex;
+  final int? activeDraggingVertexIndex;
+  final bool isPerpendicularCornerSnapped;
+  final Offset? perpendicularSnapCornerPos;
 
   CanvasPainter({
     required this.points,
@@ -4634,6 +4663,9 @@ class CanvasPainter extends CustomPainter {
     this.pinB = const Offset(240, 200),
     this.activeDraggingPin,
     this.activeDraggingWallIndex,
+    this.activeDraggingVertexIndex,
+    this.isPerpendicularCornerSnapped = false,
+    this.perpendicularSnapCornerPos,
     this.activeSnapPoint,
     this.pixelsPerMeter = 30.0,
     this.activePolygonPoints = const [],
@@ -4837,11 +4869,59 @@ class CanvasPainter extends CustomPainter {
           segTp.paint(canvas, Offset(pillCenter.dx - segTp.width / 2, pillCenter.dy - segTp.height / 2));
         }
 
-        // 3. Draggable Corner Vertices (●)
-        for (final cPos in poly) {
-          canvas.drawCircle(cPos, 10.0, Paint()..color = const Color(0xFF11151E));
-          canvas.drawCircle(cPos, 8.2, Paint()..color = BanaagTheme.primaryAmber);
+        // 3. Draggable Corner Vertices with Perpendicular (90 deg) Snap Feedback
+        for (int vi = 0; vi < poly.length; vi++) {
+          final cPos = poly[vi];
+          final bool isSnappedPerp = isPerpendicularCornerSnapped &&
+              (activeDraggingVertexIndex == vi || (perpendicularSnapCornerPos != null && (cPos - perpendicularSnapCornerPos!).distance < 2.0));
+
+          canvas.drawCircle(cPos, isSnappedPerp ? 12.0 : 10.0, Paint()..color = const Color(0xFF11151E));
+          canvas.drawCircle(
+            cPos,
+            isSnappedPerp ? 9.5 : 8.2,
+            Paint()..color = isSnappedPerp ? Colors.greenAccent : BanaagTheme.primaryAmber,
+          );
           canvas.drawCircle(cPos, 3.0, Paint()..color = Colors.black);
+
+          // Draw Right-Angle Square Glyph on the corner when perfectly perpendicular
+          if (isSnappedPerp) {
+            final prevPt = poly[(vi - 1 + poly.length) % poly.length];
+            final nextPt = poly[(vi + 1) % poly.length];
+            final Offset dirP = (prevPt - cPos);
+            final Offset dirN = (nextPt - cPos);
+            final double lenP = dirP.distance > 0 ? dirP.distance : 1.0;
+            final double lenN = dirN.distance > 0 ? dirN.distance : 1.0;
+            final Offset uP = Offset(dirP.dx / lenP * 12.0, dirP.dy / lenP * 12.0);
+            final Offset uN = Offset(dirN.dx / lenN * 12.0, dirN.dy / lenN * 12.0);
+
+            final rightAnglePath = Path()
+              ..moveTo(cPos.dx + uP.dx, cPos.dy + uP.dy)
+              ..lineTo(cPos.dx + uP.dx + uN.dx, cPos.dy + uP.dy + uN.dy)
+              ..lineTo(cPos.dx + uN.dx, cPos.dy + uN.dy);
+
+            canvas.drawPath(
+              rightAnglePath,
+              Paint()
+                ..color = Colors.greenAccent
+                ..strokeWidth = 2.0
+                ..style = PaintingStyle.stroke,
+            );
+
+            final perpBadge = TextPainter(
+              text: const TextSpan(
+                text: '90 deg',
+                style: TextStyle(color: Colors.black, fontSize: 9.0, fontWeight: FontWeight.bold),
+              ),
+              textDirection: TextDirection.ltr,
+            )..layout();
+            final badgeCenter = Offset(cPos.dx + (uP.dx + uN.dx) * 1.5, cPos.dy + (uP.dy + uN.dy) * 1.5);
+            final bgRRect = RRect.fromRectAndRadius(
+              Rect.fromCenter(center: badgeCenter, width: perpBadge.width + 8, height: perpBadge.height + 4),
+              const Radius.circular(4),
+            );
+            canvas.drawRRect(bgRRect, Paint()..color = Colors.greenAccent);
+            perpBadge.paint(canvas, Offset(badgeCenter.dx - perpBadge.width / 2, badgeCenter.dy - perpBadge.height / 2));
+          }
         }
 
         // 4. Active Magnetic Wall Snap Crosshair Indicator
