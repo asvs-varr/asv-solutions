@@ -565,6 +565,8 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
     final double ppm = _pixelsPerMeter > 5.0 ? _pixelsPerMeter : 44.77;
     final double wallThickPx = (_wallThicknessMm / 1000.0) * ppm;
     final double halfThickPx = wallThickPx / 2.0;
+    // Strict Visual-to-Hit Synchronization: Only snap to face points if zoom >= 3.0x where they are visible!
+    final bool enableFaceSnaps = _currentZoom >= 3.0;
 
     for (final colCenter in _cadStructuralColumns) {
       // 2.1 Centerline of column
@@ -574,13 +576,15 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
         nearestSnap = colCenter;
       }
       // 2.2 Tri-Snap: Column Face / Edges (Loob at Labas ng Poste)
-      for (final ox in [-halfThickPx, halfThickPx]) {
-        for (final oy in [-halfThickPx, halfThickPx]) {
-          final facePt = Offset(colCenter.dx + ox, colCenter.dy + oy);
-          final distFace = (pos - facePt).distance;
-          if (distFace <= 14.0 && distFace < minDistance) {
-            minDistance = distFace;
-            nearestSnap = facePt;
+      if (enableFaceSnaps) {
+        for (final ox in [-halfThickPx, halfThickPx]) {
+          for (final oy in [-halfThickPx, halfThickPx]) {
+            final facePt = Offset(colCenter.dx + ox, colCenter.dy + oy);
+            final distFace = (pos - facePt).distance;
+            if (distFace <= 14.0 && distFace < minDistance) {
+              minDistance = distFace;
+              nearestSnap = facePt;
+            }
           }
         }
       }
@@ -593,13 +597,15 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
         minDistance = distCorner;
         nearestSnap = wCorner;
       }
-      for (final ox in [-halfThickPx, halfThickPx]) {
-        for (final oy in [-halfThickPx, halfThickPx]) {
-          final facePt = Offset(wCorner.dx + ox, wCorner.dy + oy);
-          final distFace = (pos - facePt).distance;
-          if (distFace <= 14.0 && distFace < minDistance) {
-            minDistance = distFace;
-            nearestSnap = facePt;
+      if (enableFaceSnaps) {
+        for (final ox in [-halfThickPx, halfThickPx]) {
+          for (final oy in [-halfThickPx, halfThickPx]) {
+            final facePt = Offset(wCorner.dx + ox, wCorner.dy + oy);
+            final distFace = (pos - facePt).distance;
+            if (distFace <= 14.0 && distFace < minDistance) {
+              minDistance = distFace;
+              nearestSnap = facePt;
+            }
           }
         }
       }
@@ -654,6 +660,8 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
     final double ppm = _pixelsPerMeter > 5.0 ? _pixelsPerMeter : 44.77;
     final double wallThickPx = (_wallThicknessMm / 1000.0) * ppm;
     final double halfThickPx = wallThickPx / 2.0;
+    // Strict Visual-to-Hit Synchronization: Only snap to face points if zoom >= 3.0x where they are visible!
+    final bool enableFaceSnaps = _currentZoom >= 3.0;
 
     for (final colCenter in _cadStructuralColumns) {
       final d = (tapPos - colCenter).distance;
@@ -661,13 +669,15 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
         minD = d;
         nearest = colCenter;
       }
-      for (final ox in [-halfThickPx, halfThickPx]) {
-        for (final oy in [-halfThickPx, halfThickPx]) {
-          final facePt = Offset(colCenter.dx + ox, colCenter.dy + oy);
-          final fd = (tapPos - facePt).distance;
-          if (fd <= minD) {
-            minD = fd;
-            nearest = facePt;
+      if (enableFaceSnaps) {
+        for (final ox in [-halfThickPx, halfThickPx]) {
+          for (final oy in [-halfThickPx, halfThickPx]) {
+            final facePt = Offset(colCenter.dx + ox, colCenter.dy + oy);
+            final fd = (tapPos - facePt).distance;
+            if (fd <= minD) {
+              minD = fd;
+              nearest = facePt;
+            }
           }
         }
       }
@@ -680,13 +690,15 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
         minD = d;
         nearest = wCorner;
       }
-      for (final ox in [-halfThickPx, halfThickPx]) {
-        for (final oy in [-halfThickPx, halfThickPx]) {
-          final facePt = Offset(wCorner.dx + ox, wCorner.dy + oy);
-          final fd = (tapPos - facePt).distance;
-          if (fd <= minD) {
-            minD = fd;
-            nearest = facePt;
+      if (enableFaceSnaps) {
+        for (final ox in [-halfThickPx, halfThickPx]) {
+          for (final oy in [-halfThickPx, halfThickPx]) {
+            final facePt = Offset(wCorner.dx + ox, wCorner.dy + oy);
+            final fd = (tapPos - facePt).distance;
+            if (fd <= minD) {
+              minD = fd;
+              nearest = facePt;
+            }
           }
         }
       }
@@ -3002,6 +3014,43 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
+                          if (_selectedVertexForTap != null && poly.length > 3)
+                            GestureDetector(
+                              onTap: () {
+                                final int vIdx = _selectedVertexForTap!;
+                                if (vIdx < poly.length && poly.length > 3) {
+                                  _pushUndoState();
+                                  setState(() {
+                                    poly.removeAt(vIdx);
+                                    _roomPolygons[activeSp.id] = List<Offset>.from(poly);
+                                    _selectedVertexForTap = null;
+                                  });
+                                  _syncRoomSpacesFromBoxes(persist: true);
+                                  HapticFeedback.mediumImpact();
+                                  ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      duration: Duration(milliseconds: 1000),
+                                      content: Text('🗑️ Point deleted from room boundary'),
+                                      backgroundColor: Colors.redAccent,
+                                    ),
+                                  );
+                                }
+                              },
+                              child: Container(
+                                margin: const EdgeInsets.only(left: 6),
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Colors.redAccent.withValues(alpha: 0.25),
+                                  borderRadius: BorderRadius.circular(4),
+                                  border: Border.all(color: Colors.redAccent.withValues(alpha: 0.8)),
+                                ),
+                                child: const Text(
+                                  '🗑️ Del Pt',
+                                  style: TextStyle(color: Colors.redAccent, fontSize: 10.5, fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                            ),
                           if (_polygonUndoHistory.isNotEmpty || poly.length > 3)
                             GestureDetector(
                               onTap: () {
