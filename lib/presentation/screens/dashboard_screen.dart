@@ -443,10 +443,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     if (auth.isAuthenticated) {
       final quota = await auth.getProjectQuota();
-      final remaining = (quota['remaining'] as num?)?.toInt() ?? 1;
+      final isLicensed = quota['isLicensed'] == true;
+      final remaining = (quota['remaining'] as num?)?.toInt() ?? 0;
+
+      if (!isLicensed) {
+        if (!context.mounted) return;
+        // Prompt ₱100 Base Pack for unlicensed accounts
+        GcashPaymentModal.show(context, packageType: 'BASE_PACK_100', onPaymentSuccess: () {
+          _showNewProjectDialog(context);
+        });
+        return;
+      }
+
       if (remaining <= 0) {
         if (!context.mounted) return;
-        // Prompt GCash Base Pack or Top-Up modal directly
+        // Prompt ₱50 Top-Up for licensed accounts that consumed quota
         GcashPaymentModal.show(context, packageType: 'TOPUP_50', onPaymentSuccess: () {
           _showNewProjectDialog(context);
         });

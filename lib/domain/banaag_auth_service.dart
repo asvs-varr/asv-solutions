@@ -1,4 +1,4 @@
-﻿// BANAAG Offline-First Account & Identity Service
+// BANAAG Offline-First Account & Identity Service
 // Manages Verified Google/Gmail Binding with 30-Day Zero-Trust Offline Leasing.
 // Guarantees 100% offline functionality while preventing unauthorized APK sharing.
 
@@ -147,10 +147,18 @@ class BanaagAuthService {
   /// Fetches project quota from cloud with offline fallback
   Future<Map<String, dynamic>> getProjectQuota() async {
     if (_currentUser == null || _currentUser!.isGuest) {
-      return {'success': true, 'remaining': 1, 'isGuest': true};
+      return {'success': false, 'remaining': 0, 'isGuest': true, 'isLicensed': false};
+    }
+
+    final email = _currentUser!.email.trim().toLowerCase();
+
+    // Master admins always have unlimited quota
+    if (email == 'vincentjamitoarrogante@gmail.com' || email == 'mr.arvin03@gmail.com') {
+      return {'success': true, 'remaining': 999, 'total_credits': 999, 'used_credits': 0, 'isLicensed': true};
     }
 
     try {
+      // 1. Check official Supabase RPC first
       final url = Uri.parse('$_supabaseUrl/rest/v1/rpc/get_project_quota');
       final response = await http.post(
         url,
@@ -159,19 +167,61 @@ class BanaagAuthService {
           'Authorization': 'Bearer $_anonKey',
           'Content-Type': 'application/json',
         },
-        body: jsonEncode({'p_email': _currentUser!.email}),
+        body: jsonEncode({'p_email': email}),
       );
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        if (data is Map<String, dynamic>) {
-          return data;
+        if (data is Map<String, dynamic> && data['success'] == true) {
+          final total = (data['total_credits'] as num?)?.toInt() ?? 0;
+          final used = (data['used_credits'] as num?)?.toInt() ?? 0;
+          final remaining = (data['remaining'] as num?)?.toInt() ?? (total - used);
+          if (total > 0) {
+            return {
+              'success': true,
+              'remaining': remaining,
+              'total_credits': total,
+              'used_credits': used,
+              'isLicensed': true,
+            };
+          }
+        }
+      }
+
+      // 2. Check active credited vouchers in project_vouchers table for this email
+      final urlVoucher = Uri.parse('$_supabaseUrl/rest/v1/project_vouchers?redeemed_by_email=eq.$email&is_redeemed=eq.true');
+      final respV = await http.get(
+        urlVoucher,
+        headers: {
+          'apikey': _anonKey,
+          'Authorization': 'Bearer $_anonKey',
+        },
+      );
+
+      if (respV.statusCode == 200) {
+        final List<dynamic> list = jsonDecode(respV.body);
+        // Exclude proof submissions, count real activated slots
+        final realSlots = list.where((v) => !(v['code'] as String? ?? '').startsWith('PROOF|')).length;
+        if (realSlots > 0) {
+          return {
+            'success': true,
+            'remaining': realSlots,
+            'total_credits': realSlots,
+            'used_credits': 0,
+            'isLicensed': true,
+          };
         }
       }
     } catch (_) {}
 
-    // Fallback if offline
-    return {'success': true, 'remaining': 1, 'isOffline': true};
+    // Unlicensed user / No approved Base Pack: exactly 0 remaining quota
+    return {
+      'success': false,
+      'remaining': 0,
+      'total_credits': 0,
+      'used_credits': 0,
+      'isLicensed': false,
+    };
   }
 
   /// Redeems a voucher code via Supabase RPC
