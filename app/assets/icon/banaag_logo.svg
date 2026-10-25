@@ -1,0 +1,76 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="100%" height="100%">
+  <defs>
+    <!-- Matte Obsidian Charcoal with Warm Ember Undertone -->
+    <radialGradient id="obsidianBg2" cx="50%" cy="48%" r="65%">
+      <stop offset="0%" stop-color="#1F150E" stop-opacity="1" />
+      <stop offset="45%" stop-color="#120E0C" stop-opacity="1" />
+      <stop offset="100%" stop-color="#060607" stop-opacity="1" />
+    </radialGradient>
+
+    <!-- Thermal Smoke Haze sa Background -->
+    <radialGradient id="warmSmoke2" cx="50%" cy="46%" r="38%">
+      <stop offset="0%" stop-color="#FF9900" stop-opacity="0.18" />
+      <stop offset="50%" stop-color="#9E4711" stop-opacity="0.08" />
+      <stop offset="100%" stop-color="#000000" stop-opacity="0" />
+    </radialGradient>
+
+    <!-- Tuktok na Arc Flash sa tapat ng Letrang 'A' -->
+    <radialGradient id="peakSpark2" cx="56%" cy="32%" r="22%">
+      <stop offset="0%" stop-color="#FFFFB3" stop-opacity="0.25" />
+      <stop offset="100%" stop-color="#FFAE00" stop-opacity="0" />
+    </radialGradient>
+
+    <!-- Subtle CAD Grid sa Thermal Smoke -->
+    <pattern id="cadGrid2" width="64" height="64" patternUnits="userSpaceOnUse">
+      <path d="M 64 0 L 0 0 0 64" fill="none" stroke="#FFAE00" stroke-width="1" stroke-opacity="0.05" />
+    </pattern>
+    <radialGradient id="gridMaskGrad2" cx="50%" cy="46%" r="36%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="1" />
+      <stop offset="100%" stop-color="#000000" stop-opacity="0" />
+    </radialGradient>
+    <mask id="gridMask2">
+      <rect width="1024" height="1024" fill="url(#gridMaskGrad2)" />
+    </mask>
+
+    <!-- HIERARCHY GRADIENTS (Thermal / Arc Spectrum) -->
+    <!-- 1. V: Unang Antas (Warm Bronze / Deep Amber) -->
+    <linearGradient id="thermalV" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#80350A" stop-opacity="0.80" />
+      <stop offset="100%" stop-color="#C95B12" stop-opacity="0.88" />
+    </linearGradient>
+
+    <!-- 2. S: Pangalawang Antas (Rich Safety Gold / Marigold) -->
+    <linearGradient id="thermalS" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#FF8800" stop-opacity="1" />
+      <stop offset="100%" stop-color="#FFCC00" stop-opacity="1" />
+    </linearGradient>
+
+    <!-- 3. A: Pangatlong Antas / Pinakamaliwanag (Blinding Lemon-White Spark) -->
+    <linearGradient id="thermalA" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#FFEE55" stop-opacity="1" />
+      <stop offset="45%" stop-color="#FFFFCC" stop-opacity="1" />
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="1" />
+    </linearGradient>
+  </defs>
+
+  <!-- Squircle Icon Base -->
+  <rect width="1024" height="1024" rx="225" fill="url(#obsidianBg2)" />
+  <rect width="1024" height="1024" rx="225" fill="url(#cadGrid2)" mask="url(#gridMask2)" />
+
+  <!-- Background Haze -->
+  <circle cx="512" cy="480" r="390" fill="url(#warmSmoke2)" />
+  <circle cx="565" cy="330" r="220" fill="url(#peakSpark2)" />
+
+  <!-- ================================================================= -->
+  <!-- EKSAKTONG HEOMETRIYA NG S - A - V (RAZOR-SHARP & FLAT ENDS)       -->
+  <!-- ================================================================= -->
+
+  <!-- 1. LETRANG 'V' (Unang Antas: Unang Pag-aninag / Warm Bronze-Amber) -->
+  <polyline points="493,542 360,871 648,454 618,454" fill="none" stroke="url(#thermalV)" stroke-width="9" stroke-linecap="butt" stroke-linejoin="miter" stroke-miterlimit="12" />
+
+  <!-- 2. LETRANG 'S' (Pangalawang Antas: Matalas at Protektado / Safety Marigold) -->
+  <polyline points="664,153 427,522 510,522 411,770" fill="none" stroke="url(#thermalS)" stroke-width="9.5" stroke-linecap="butt" stroke-linejoin="miter" stroke-miterlimit="12" />
+
+  <!-- 3. LETRANG 'A' (Pinakamaliwanag: "Aha! Moment" / Blinding Lemon-White) -->
+  <polyline points="456,502 650,198 555,454" fill="none" stroke="url(#thermalA)" stroke-width="10" stroke-linecap="butt" stroke-linejoin="miter" stroke-miterlimit="12" />
+</svg>
