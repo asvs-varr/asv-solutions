@@ -1,6 +1,5 @@
-// BANAAG GCash Payment & Screenshot Upload Modal
-// Allows contractors to pay via GCash (0976 041 8794 - VINCENT A.)
-// and submit their transaction reference number and receipt screenshot.
+// BANAAG GCash Payment & Screenshot-Only Proof Upload Modal
+// Contractors simply tap [Upload Receipt Screenshot] without typing any reference numbers.
 
 import 'dart:io';
 import 'package:flutter/material.dart';
@@ -39,7 +38,6 @@ class GcashPaymentModal extends StatefulWidget {
 }
 
 class _GcashPaymentModalState extends State<GcashPaymentModal> {
-  final _refController = TextEditingController();
   String? _selectedImagePath;
   bool _isSubmitting = false;
   String? _statusMessage;
@@ -58,29 +56,29 @@ class _GcashPaymentModalState extends State<GcashPaymentModal> {
     final user = BanaagAuthService.instance.currentUser;
     if (user == null || user.isGuest) return;
 
-    final submissions = await PaymentRepository.instance.getSubmissions();
-    final pending = submissions.where((s) => s.email == user.email && s.status == 'PENDING').toList();
-    if (pending.isNotEmpty && mounted) {
+    final hasPending = await PaymentRepository.instance.hasPendingSubmission(user.email);
+    if (hasPending && mounted) {
+      final list = await PaymentRepository.instance.getSubmissions();
+      final item = list.firstWhere((s) => s.email == user.email && s.status == 'PENDING');
       setState(() {
         _isPendingReview = true;
-        _refController.text = pending.first.referenceNo;
-        _selectedImagePath = pending.first.localReceiptPath;
+        _selectedImagePath = item.localReceiptPath;
       });
     }
   }
 
-  @override
-  void dispose() {
-    _refController.dispose();
-    super.dispose();
-  }
-
   Future<void> _pickReceipt(ImageSource source) async {
     final picker = ImagePicker();
-    final photo = await picker.pickImage(source: source, imageQuality: 85);
+    final photo = await picker.pickImage(
+      source: source,
+      maxWidth: 1024,
+      maxHeight: 1024,
+      imageQuality: 70, // Optimized for fast upload
+    );
     if (photo != null && mounted) {
       setState(() {
         _selectedImagePath = photo.path;
+        _statusMessage = null;
       });
     }
   }
@@ -89,22 +87,14 @@ class _GcashPaymentModalState extends State<GcashPaymentModal> {
     final user = BanaagAuthService.instance.currentUser;
     if (user == null || user.isGuest) {
       setState(() {
-        _statusMessage = '⚠️ Please bind your Google Account before submitting payment.';
-      });
-      return;
-    }
-
-    final refNo = _refController.text.trim();
-    if (refNo.isEmpty) {
-      setState(() {
-        _statusMessage = '⚠️ Please enter the GCash Reference Number from your receipt.';
+        _statusMessage = '⚠️ Please link your Google Account before submitting.';
       });
       return;
     }
 
     if (_selectedImagePath == null || !File(_selectedImagePath!).existsSync()) {
       setState(() {
-        _statusMessage = '⚠️ Please attach your GCash payment screenshot.';
+        _statusMessage = '⚠️ Please attach your GCash receipt screenshot.';
       });
       return;
     }
@@ -115,10 +105,9 @@ class _GcashPaymentModalState extends State<GcashPaymentModal> {
     });
 
     try {
-      await PaymentRepository.instance.submitPayment(
+      await PaymentRepository.instance.submitPaymentProof(
         email: user.email,
         packageType: widget.packageType,
-        referenceNo: refNo,
         localReceiptPath: _selectedImagePath!,
       );
 
@@ -137,7 +126,7 @@ class _GcashPaymentModalState extends State<GcashPaymentModal> {
                 SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'GCash payment submitted! Admin will verify and activate your slot shortly.',
+                    'GCash receipt submitted! Admin will verify and activate your slot shortly.',
                     style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
                   ),
                 ),
@@ -289,7 +278,7 @@ class _GcashPaymentModalState extends State<GcashPaymentModal> {
             ),
             const SizedBox(height: 16),
 
-            // Pending Status Notice (if already submitted)
+            // Pending Status Notice
             if (_isPendingReview) ...[
               Container(
                 padding: const EdgeInsets.all(12),
@@ -314,40 +303,23 @@ class _GcashPaymentModalState extends State<GcashPaymentModal> {
               const SizedBox(height: 14),
             ],
 
-            // Reference Number Input
+            // Screenshot Proof Upload Section (Zero typing required!)
             const Text(
-              'GCash Reference Number',
-              style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12, fontWeight: FontWeight.bold),
+              'Attach Proof of Payment',
+              style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
             ),
-            const SizedBox(height: 6),
-            TextField(
-              controller: _refController,
-              enabled: !_isPendingReview,
-              keyboardType: TextInputType.number,
-              style: const TextStyle(color: Colors.white, fontSize: 13),
-              decoration: InputDecoration(
-                hintText: 'e.g. 9012 3456 7890',
-                hintStyle: const TextStyle(color: Color(0xFF475569), fontSize: 12),
-                filled: true,
-                fillColor: const Color(0xFF0D111A),
-                prefixIcon: const Icon(Icons.receipt_long, color: Color(0xFF64748B), size: 18),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
-              ),
+            const SizedBox(height: 4),
+            const Text(
+              'Mag-upload lamang ng screenshot ng inyong GCash transaction receipt. Hindi na kailangang mag-type ng Reference Number.',
+              style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11, height: 1.3),
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 10),
 
-            // Screenshot Upload Section
-            const Text(
-              'Payment Screenshot Proof',
-              style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 6),
             if (_selectedImagePath != null && File(_selectedImagePath!).existsSync()) ...[
               ClipRRect(
                 borderRadius: BorderRadius.circular(10),
                 child: Container(
-                  height: 120,
+                  height: 160,
                   width: double.infinity,
                   color: Colors.black26,
                   child: Stack(
@@ -355,19 +327,19 @@ class _GcashPaymentModalState extends State<GcashPaymentModal> {
                       Center(
                         child: Image.file(
                           File(_selectedImagePath!),
-                          fit: BoxFit.cover,
+                          fit: BoxFit.contain,
                           width: double.infinity,
                         ),
                       ),
                       if (!_isPendingReview)
                         Positioned(
-                          top: 6,
-                          right: 6,
+                          top: 8,
+                          right: 8,
                           child: InkWell(
                             onTap: () => setState(() => _selectedImagePath = null),
                             child: Container(
-                              padding: const EdgeInsets.all(4),
-                              decoration: const BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
+                              padding: const EdgeInsets.all(6),
+                              decoration: const BoxDecoration(color: Colors.black87, shape: BoxShape.circle),
                               child: const Icon(Icons.close, color: Colors.white, size: 16),
                             ),
                           ),
@@ -384,26 +356,26 @@ class _GcashPaymentModalState extends State<GcashPaymentModal> {
                       style: OutlinedButton.styleFrom(
                         foregroundColor: const Color(0xFF38BDF8),
                         side: const BorderSide(color: Color(0xFF2A364F)),
-                        padding: const EdgeInsets.symmetric(vertical: 10),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                       ),
                       onPressed: () => _pickReceipt(ImageSource.gallery),
-                      icon: const Icon(Icons.photo_library, size: 16),
-                      label: const Text('Gallery', style: TextStyle(fontSize: 12)),
+                      icon: const Icon(Icons.photo_library, size: 18),
+                      label: const Text('From Gallery', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 10),
                   Expanded(
                     child: OutlinedButton.icon(
                       style: OutlinedButton.styleFrom(
                         foregroundColor: const Color(0xFF38BDF8),
                         side: const BorderSide(color: Color(0xFF2A364F)),
-                        padding: const EdgeInsets.symmetric(vertical: 10),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                       ),
                       onPressed: () => _pickReceipt(ImageSource.camera),
-                      icon: const Icon(Icons.camera_alt, size: 16),
-                      label: const Text('Camera', style: TextStyle(fontSize: 12)),
+                      icon: const Icon(Icons.camera_alt, size: 18),
+                      label: const Text('Take Photo', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                     ),
                   ),
                 ],
@@ -423,16 +395,18 @@ class _GcashPaymentModalState extends State<GcashPaymentModal> {
           child: const Text('Close', style: TextStyle(color: Color(0xFF64748B))),
         ),
         if (!_isPendingReview)
-          ElevatedButton(
+          ElevatedButton.icon(
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF007DFE),
+              foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
               padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
             ),
             onPressed: _isSubmitting ? null : _handleSubmit,
-            child: _isSubmitting
+            icon: _isSubmitting
                 ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                : const Text('Submit Payment Proof', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                : const Icon(Icons.send, size: 16),
+            label: Text(_isSubmitting ? 'Uploading Proof...' : 'Submit Receipt Proof', style: const TextStyle(fontWeight: FontWeight.bold)),
           ),
       ],
     );

@@ -1,8 +1,9 @@
 // BANAAG Payment Repository
-// Handles cloud submission to Supabase (via project_vouchers metadata bridge)
-// and offline-first local persistence.
+// Handles zero-typing screenshot-only GCash proof upload to Supabase
+// with base64 image sync, local persistence, and master admin review.
 
 import 'dart:convert';
+import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../domain/payment_submission.dart';
@@ -38,19 +39,36 @@ class PaymentRepository {
     return List.unmodifiable(_cached);
   }
 
-  /// Submits GCash payment proof to both cloud (Supabase) and local cache
-  Future<bool> submitPayment({
+  /// Checks if an email currently has a pending proof submission
+  Future<bool> hasPendingSubmission(String email) async {
+    final list = await getSubmissions();
+    return list.any((s) => s.email == email.trim().toLowerCase() && s.status == 'PENDING');
+  }
+
+  /// Submits GCash payment proof: compresses image to Base64 and uploads to cloud
+  Future<bool> submitPaymentProof({
     required String email,
     required String packageType,
-    required String referenceNo,
     required String localReceiptPath,
   }) async {
+    final sanitizedEmail = email.trim().toLowerCase();
     final submissionId = 'SUB_${DateTime.now().millisecondsSinceEpoch}';
+
+    // 1. Read and encode image to base64
+    String base64Image = '';
+    try {
+      final file = File(localReceiptPath);
+      if (file.existsSync()) {
+        final bytes = await file.readAsBytes();
+        base64Image = base64Encode(bytes);
+      }
+    } catch (_) {}
+
     final submission = PaymentSubmission(
       id: submissionId,
-      email: email.trim().toLowerCase(),
+      email: sanitizedEmail,
       packageType: packageType,
-      referenceNo: referenceNo.trim(),
+      referenceNo: 'PHOTO_RECEIPT',
       localReceiptPath: localReceiptPath,
       status: 'PENDING',
       submittedAt: DateTime.now(),
@@ -58,12 +76,15 @@ class PaymentRepository {
 
     // Save locally
     await getSubmissions();
+    _cached.removeWhere((s) => s.email == sanitizedEmail && s.status == 'PENDING');
     _cached.insert(0, submission);
     await _persist();
 
-    // Broadcast to cloud via Supabase project_vouchers metadata bridge
+    // 2. Broadcast to cloud via Supabase project_vouchers table
+    // code format: PROOF_V2|email|packageType|timestamp
+    // redeemed_by_email stores the base64 image data payload for admin inspection
     try {
-      final code = 'PROOF|${submission.email}|${submission.referenceNo}|${submission.packageType}';
+      final code = 'PROOF_V2|$sanitizedEmail|$packageType|${DateTime.now().millisecondsSinceEpoch}';
       final url = Uri.parse('$_supabaseUrl/rest/v1/project_vouchers');
       await http.post(
         url,
@@ -75,9 +96,9 @@ class PaymentRepository {
         },
         body: jsonEncode({
           'code': code,
-          'credits_amount': packageType == 'BASE_PACK_100' ? 1 : 1,
+          'credits_amount': 1,
           'is_redeemed': false,
-          'redeemed_by_email': submission.email,
+          'redeemed_by_email': base64Image.isNotEmpty ? base64Image : sanitizedEmail,
         }),
       );
     } catch (_) {}
@@ -88,7 +109,7 @@ class PaymentRepository {
   /// Fetches all cloud submissions (for Master Admin)
   Future<List<Map<String, dynamic>>> fetchCloudSubmissions() async {
     try {
-      final url = Uri.parse('$_supabaseUrl/rest/v1/project_vouchers?code=like.PROOF|*&order=created_at.desc');
+      final url = Uri.parse('$_supabaseUrl/rest/v1/project_vouchers?code=like.PROOF*&order=created_at.desc');
       final response = await http.get(
         url,
         headers: {
@@ -104,17 +125,17 @@ class PaymentRepository {
     return [];
   }
 
-  /// Approves a submission: generates an active slot voucher, redeems it, and deletes the pending proof record
+  /// Approves a submission: creates a real unlocked slot voucher in cloud, redeems it for user, and marks proof as verified
   Future<Map<String, dynamic>> approveSubmission({
     required String cloudVoucherId,
     required String userEmail,
-    required String proofCode,
   }) async {
+    final sanitizedEmail = userEmail.trim().toLowerCase();
     final randomSuffix = (DateTime.now().millisecondsSinceEpoch % 9000 + 1000).toString();
     final newVoucherCode = 'SLOT-$randomSuffix';
 
     try {
-      // 1. Create official voucher in Supabase
+      // 1. Create official unlocked voucher in Supabase
       final urlCreate = Uri.parse('$_supabaseUrl/rest/v1/project_vouchers');
       final respCreate = await http.post(
         urlCreate,
@@ -126,47 +147,29 @@ class PaymentRepository {
         body: jsonEncode({
           'code': newVoucherCode,
           'credits_amount': 1,
-          'is_redeemed': false,
-        }),
-      );
-
-      if (respCreate.statusCode != 201 && respCreate.statusCode != 200) {
-        return {'success': false, 'message': 'Failed to generate voucher code'};
-      }
-
-      // 2. Automatically redeem it on behalf of the customer
-      final urlRedeem = Uri.parse('$_supabaseUrl/rest/v1/rpc/redeem_project_voucher');
-      final respRedeem = await http.post(
-        urlRedeem,
-        headers: {
-          'apikey': _anonKey,
-          'Authorization': 'Bearer $_anonKey',
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode({
-          'p_email': userEmail,
-          'p_code': newVoucherCode,
-        }),
-      );
-
-      // 3. Mark the proof voucher record as redeemed/completed
-      final urlPatchProof = Uri.parse('$_supabaseUrl/rest/v1/project_vouchers?id=eq.$cloudVoucherId');
-      await http.patch(
-        urlPatchProof,
-        headers: {
-          'apikey': _anonKey,
-          'Authorization': 'Bearer $_anonKey',
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode({
-          'is_redeemed': true,
+          'is_redeemed': true, // Directly marked as redeemed and credited
+          'redeemed_by_email': sanitizedEmail,
           'redeemed_at': DateTime.now().toIso8601String(),
         }),
       );
 
-      // Update local cache
+      if (respCreate.statusCode != 201 && respCreate.statusCode != 200) {
+        return {'success': false, 'message': 'Failed to credit slot in database.'};
+      }
+
+      // 2. Delete the pending proof record from project_vouchers to clean up queue
+      final urlDelProof = Uri.parse('$_supabaseUrl/rest/v1/project_vouchers?id=eq.$cloudVoucherId');
+      await http.delete(
+        urlDelProof,
+        headers: {
+          'apikey': _anonKey,
+          'Authorization': 'Bearer $_anonKey',
+        },
+      );
+
+      // 3. Update local cache
       await getSubmissions();
-      final index = _cached.indexWhere((s) => s.email == userEmail);
+      final index = _cached.indexWhere((s) => s.email == sanitizedEmail);
       if (index != -1) {
         _cached[index] = _cached[index].copyWith(status: 'APPROVED', approvedVoucherCode: newVoucherCode);
         await _persist();
@@ -175,7 +178,7 @@ class PaymentRepository {
       return {
         'success': true,
         'voucherCode': newVoucherCode,
-        'message': 'Successfully approved! +1 Project slot credited to $userEmail (Voucher: $newVoucherCode)',
+        'message': 'Successfully approved! 1 Project Slot has been credited to $sanitizedEmail.',
       };
     } catch (e) {
       return {'success': false, 'message': 'Error approving submission: $e'};
@@ -187,6 +190,7 @@ class PaymentRepository {
     required String cloudVoucherId,
     required String userEmail,
   }) async {
+    final sanitizedEmail = userEmail.trim().toLowerCase();
     try {
       final url = Uri.parse('$_supabaseUrl/rest/v1/project_vouchers?id=eq.$cloudVoucherId');
       await http.delete(
@@ -199,7 +203,7 @@ class PaymentRepository {
     } catch (_) {}
 
     await getSubmissions();
-    final index = _cached.indexWhere((s) => s.email == userEmail);
+    final index = _cached.indexWhere((s) => s.email == sanitizedEmail);
     if (index != -1) {
       _cached[index] = _cached[index].copyWith(status: 'REJECTED');
       await _persist();
