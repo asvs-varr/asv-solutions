@@ -124,6 +124,10 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
     // Stairs Landing intermediate wall turns & corners
     Offset(703.5, 730.8),
     Offset(703.5, 1090.7),
+    // Alcove wall turns & corners between Grid 3 and Office (Ticket TKT-1792929351058)
+    Offset(843.0, 638.0),
+    Offset(843.0, 674.5),
+    Offset(794.8, 674.5),
     // Void / Setback architectural boundary corners
     Offset(355.3, 1088.5),
     Offset(555.2, 1185.8),
@@ -299,20 +303,30 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
   /// Dynamically active architectural wall corners and turns
   List<Offset> get _activeArchitecturalCorners {
     if (!_isAiAutoWallDetectEnabled) return const [];
+    final List<Offset> rawCorners = [];
     if (_isCommercialCadPlan) {
-      return _cadArchitecturalCorners;
+      rawCorners.addAll(_cadArchitecturalCorners);
+    } else if (_isResidentialPlan) {
+      rawCorners.addAll(BlueprintSnapEngine.residentialWallCorners);
+    } else {
+      rawCorners.add(_pinA);
+      rawCorners.add(_pinB);
+      _roomPolygons.forEach((_, poly) {
+        rawCorners.addAll(poly);
+      });
     }
-    if (_isResidentialPlan) {
-      return BlueprintSnapEngine.residentialWallCorners;
-    }
-    // Generic fallback: Wall corners derived from Pin A and Pin B bounds + confirmed room vertices
-    final corners = <Offset>[];
-    corners.add(_pinA);
-    corners.add(_pinB);
-    _roomPolygons.forEach((_, poly) {
-      corners.addAll(poly);
-    });
-    return corners;
+
+    // Column-Priority Deduplication: If a spot has a column (within 20px), column is active and takes priority!
+    final activeCols = _activeStructuralColumns;
+    if (activeCols.isEmpty) return rawCorners;
+    return rawCorners.where((corner) {
+      for (final col in activeCols) {
+        if ((corner - col).distance <= 20.0) {
+          return false; // Column takes priority at this spot
+        }
+      }
+      return true;
+    }).toList();
   }
 
   /// Dynamically active dimension needles and witness ticks
@@ -673,7 +687,7 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
     final double wallThickPx = (_wallThicknessMm / 1000.0) * ppm;
     final double halfThickPx = wallThickPx / 2.0;
     // Strict Visual-to-Hit Synchronization: Only snap to face points if zoom >= 3.0x where they are visible!
-    final bool enableFaceSnaps = _currentZoom >= 3.0;
+    final bool enableFaceSnaps = _currentZoom >= 2.5;
 
     for (final colCenter in _activeStructuralColumns) {
       // 2.1 Centerline of column
@@ -768,7 +782,7 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
     final double wallThickPx = (_wallThicknessMm / 1000.0) * ppm;
     final double halfThickPx = wallThickPx / 2.0;
     // Strict Visual-to-Hit Synchronization: Only snap to face points if zoom >= 3.0x where they are visible!
-    final bool enableFaceSnaps = _currentZoom >= 3.0;
+    final bool enableFaceSnaps = _currentZoom >= 2.5;
 
     for (final colCenter in _activeStructuralColumns) {
       final d = (tapPos - colCenter).distance;
@@ -3014,7 +3028,7 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                         children: [
                           Expanded(
                             child: Text(
-                              '📏 Pin A–B: ${refLengthMm.round()} mm (${refLengthM.toStringAsFixed(2)} m)  •  🧱 Wall: ${_wallThicknessMm.round()} mm CHB',
+                              '📏 Pin A–B: ${refLengthMm.round()} mm (${refLengthM.toStringAsFixed(2)}m / ${(refLengthMm / 25.4 / 12.0).floor()}\'-${(refLengthMm / 25.4 % 12.0).round()}")  •  🧱 Wall: ${_wallThicknessMm.round()} mm CHB',
                               style: const TextStyle(color: BanaagTheme.primaryAmber, fontSize: 11.5, fontWeight: FontWeight.w700),
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -4328,11 +4342,23 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
     final pixelDist = (_pinA - _pinB).distance;
     if (pixelDist < 5.0) return;
 
-    bool isMm = true;
+    // 3-Way Unit Selector: 'mm' | 'm' | 'ft-in' (Ticket TKT-1792922320289)
+    String selectedUnit = 'mm';
     final currentCalibratedMm = (pixelDist / _pixelsPerMeter) * 1000.0;
+    final totalInches = currentCalibratedMm / 25.4;
+    int initialFeet = (totalInches / 12).floor();
+    int initialInches = (totalInches % 12).round();
+    if (initialInches == 12) {
+      initialFeet += 1;
+      initialInches = 0;
+    }
+
     final distCtrl = TextEditingController(
       text: currentCalibratedMm.round().toString(),
     );
+    final feetCtrl = TextEditingController(text: initialFeet.toString());
+    final inchCtrl = TextEditingController(text: initialInches.toString());
+
     final wallCtrl = TextEditingController(
       text: _wallThicknessMm.round().toString(),
     );
@@ -4369,76 +4395,197 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                   style: TextStyle(fontSize: 11, color: BanaagTheme.textMuted),
                 ),
                 const SizedBox(height: 8),
+                // 3-Way Unit Selector Chips: [ mm ] [ m ] [ ft-in ]
                 Row(
                   children: [
-                    Expanded(
-                      child: TextField(
-                        controller: distCtrl,
-                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                        decoration: InputDecoration(
-                          labelText: isMm ? 'Distance (mm)' : 'Distance (m)',
-                          isDense: true,
-                          suffixText: isMm ? 'mm' : 'm',
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
+                    const Text('Unit: ', style: TextStyle(color: BanaagTheme.textMuted, fontSize: 11)),
+                    const SizedBox(width: 4),
                     ChoiceChip(
-                      label: Text(isMm ? 'mm' : 'meters', style: const TextStyle(fontSize: 11)),
-                      selected: true,
+                      label: const Text('mm', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                      selected: selectedUnit == 'mm',
                       selectedColor: BanaagTheme.primaryAmber,
                       onSelected: (_) {
                         setDlgState(() {
-                          final currentVal = double.tryParse(distCtrl.text.trim()) ?? 0.0;
-                          if (isMm) {
-                            distCtrl.text = (currentVal / 1000.0).toStringAsFixed(3);
-                          } else {
-                            distCtrl.text = (currentVal * 1000.0).round().toString();
+                          if (selectedUnit == 'm') {
+                            final mVal = double.tryParse(distCtrl.text.trim()) ?? 0.0;
+                            distCtrl.text = (mVal * 1000.0).round().toString();
+                          } else if (selectedUnit == 'ft-in') {
+                            final ft = double.tryParse(feetCtrl.text.trim()) ?? 0.0;
+                            final inc = double.tryParse(inchCtrl.text.trim()) ?? 0.0;
+                            final mm = ((ft * 12.0) + inc) * 25.4;
+                            distCtrl.text = mm.round().toString();
                           }
-                          isMm = !isMm;
+                          selectedUnit = 'mm';
+                        });
+                      },
+                    ),
+                    const SizedBox(width: 6),
+                    ChoiceChip(
+                      label: const Text('m', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                      selected: selectedUnit == 'm',
+                      selectedColor: BanaagTheme.primaryAmber,
+                      onSelected: (_) {
+                        setDlgState(() {
+                          if (selectedUnit == 'mm') {
+                            final mmVal = double.tryParse(distCtrl.text.trim()) ?? 0.0;
+                            distCtrl.text = (mmVal / 1000.0).toStringAsFixed(3);
+                          } else if (selectedUnit == 'ft-in') {
+                            final ft = double.tryParse(feetCtrl.text.trim()) ?? 0.0;
+                            final inc = double.tryParse(inchCtrl.text.trim()) ?? 0.0;
+                            final mVal = (((ft * 12.0) + inc) * 25.4) / 1000.0;
+                            distCtrl.text = mVal.toStringAsFixed(3);
+                          }
+                          selectedUnit = 'm';
+                        });
+                      },
+                    ),
+                    const SizedBox(width: 6),
+                    ChoiceChip(
+                      label: const Text("ft - in (28'-0\")", style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                      selected: selectedUnit == 'ft-in',
+                      selectedColor: BanaagTheme.primaryAmber,
+                      onSelected: (_) {
+                        setDlgState(() {
+                          double curMm = 0.0;
+                          if (selectedUnit == 'mm') {
+                            curMm = double.tryParse(distCtrl.text.trim()) ?? 0.0;
+                          } else {
+                            curMm = (double.tryParse(distCtrl.text.trim()) ?? 0.0) * 1000.0;
+                          }
+                          final totIn = curMm / 25.4;
+                          int f = (totIn / 12.0).floor();
+                          int ic = (totIn % 12.0).round();
+                          if (ic == 12) {
+                            f += 1;
+                            ic = 0;
+                          }
+                          feetCtrl.text = f.toString();
+                          inchCtrl.text = ic.toString();
+                          selectedUnit = 'ft-in';
                         });
                       },
                     ),
                   ],
                 ),
+                const SizedBox(height: 10),
+                if (selectedUnit == 'ft-in')
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: feetCtrl,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                            labelText: "Feet (ft / ')",
+                            isDense: true,
+                            suffixText: 'ft',
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: TextField(
+                          controller: inchCtrl,
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          decoration: const InputDecoration(
+                            labelText: 'Inches (in / ")',
+                            isDense: true,
+                            suffixText: 'in',
+                          ),
+                        ),
+                      ),
+                    ],
+                  )
+                else
+                  TextField(
+                    controller: distCtrl,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    decoration: InputDecoration(
+                      labelText: selectedUnit == 'mm' ? 'Distance (mm)' : 'Distance (m)',
+                      isDense: true,
+                      suffixText: selectedUnit == 'mm' ? 'mm' : 'm',
+                    ),
+                  ),
                 const SizedBox(height: 8),
                 Wrap(
                   spacing: 6,
                   children: [
                     ActionChip(
-                      label: const Text('8534 mm (28\'-0")', style: TextStyle(fontSize: 10, color: Colors.cyanAccent)),
+                      label: const Text("28'-0\" (8,534 mm)", style: TextStyle(fontSize: 10, color: Colors.cyanAccent, fontWeight: FontWeight.bold)),
                       onPressed: () => setDlgState(() {
-                        distCtrl.text = isMm ? '8534' : '8.534';
+                        if (selectedUnit == 'ft-in') {
+                          feetCtrl.text = '28';
+                          inchCtrl.text = '0';
+                        } else if (selectedUnit == 'mm') {
+                          distCtrl.text = '8534';
+                        } else {
+                          distCtrl.text = '8.534';
+                        }
                       }),
                     ),
                     ActionChip(
-                      label: const Text('9754 mm (32\'-0")', style: TextStyle(fontSize: 10, color: Colors.cyanAccent)),
+                      label: const Text("32'-0\" (9,754 mm)", style: TextStyle(fontSize: 10, color: Colors.cyanAccent, fontWeight: FontWeight.bold)),
                       onPressed: () => setDlgState(() {
-                        distCtrl.text = isMm ? '9754' : '9.754';
+                        if (selectedUnit == 'ft-in') {
+                          feetCtrl.text = '32';
+                          inchCtrl.text = '0';
+                        } else if (selectedUnit == 'mm') {
+                          distCtrl.text = '9754';
+                        } else {
+                          distCtrl.text = '9.754';
+                        }
                       }),
                     ),
                     ActionChip(
                       label: const Text('15500 mm (15.5m)', style: TextStyle(fontSize: 10, color: BanaagTheme.primaryAmber)),
                       onPressed: () => setDlgState(() {
-                        distCtrl.text = isMm ? '15500' : '15.500';
+                        if (selectedUnit == 'ft-in') {
+                          feetCtrl.text = '50';
+                          inchCtrl.text = '10';
+                        } else if (selectedUnit == 'mm') {
+                          distCtrl.text = '15500';
+                        } else {
+                          distCtrl.text = '15.500';
+                        }
                       }),
                     ),
                     ActionChip(
                       label: const Text('18480 mm (18.5m)', style: TextStyle(fontSize: 10, color: BanaagTheme.primaryAmber)),
                       onPressed: () => setDlgState(() {
-                        distCtrl.text = isMm ? '18480' : '18.480';
+                        if (selectedUnit == 'ft-in') {
+                          feetCtrl.text = '60';
+                          inchCtrl.text = '8';
+                        } else if (selectedUnit == 'mm') {
+                          distCtrl.text = '18480';
+                        } else {
+                          distCtrl.text = '18.480';
+                        }
                       }),
                     ),
                     ActionChip(
                       label: const Text('4800 mm (4.8m)', style: TextStyle(fontSize: 10)),
                       onPressed: () => setDlgState(() {
-                        distCtrl.text = isMm ? '4800' : '4.800';
+                        if (selectedUnit == 'ft-in') {
+                          feetCtrl.text = '15';
+                          inchCtrl.text = '9';
+                        } else if (selectedUnit == 'mm') {
+                          distCtrl.text = '4800';
+                        } else {
+                          distCtrl.text = '4.800';
+                        }
                       }),
                     ),
                     ActionChip(
                       label: const Text('6000 mm (6m)', style: TextStyle(fontSize: 10)),
                       onPressed: () => setDlgState(() {
-                        distCtrl.text = isMm ? '6000' : '6.000';
+                        if (selectedUnit == 'ft-in') {
+                          feetCtrl.text = '19';
+                          inchCtrl.text = '8';
+                        } else if (selectedUnit == 'mm') {
+                          distCtrl.text = '6000';
+                        } else {
+                          distCtrl.text = '6.000';
+                        }
                       }),
                     ),
                   ],
@@ -4492,10 +4639,19 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                 foregroundColor: Colors.black,
               ),
               onPressed: () {
-                final val = double.tryParse(distCtrl.text.trim()) ?? 0.0;
+                double distMeters = 0.0;
+                if (selectedUnit == 'ft-in') {
+                  final ft = double.tryParse(feetCtrl.text.trim()) ?? 0.0;
+                  final inc = double.tryParse(inchCtrl.text.trim()) ?? 0.0;
+                  distMeters = (((ft * 12.0) + inc) * 25.4) / 1000.0;
+                } else if (selectedUnit == 'mm') {
+                  final val = double.tryParse(distCtrl.text.trim()) ?? 0.0;
+                  distMeters = val / 1000.0;
+                } else {
+                  distMeters = double.tryParse(distCtrl.text.trim()) ?? 0.0;
+                }
                 final wallVal = double.tryParse(wallCtrl.text.trim()) ?? 150.0;
-                if (val > 0) {
-                  final double distMeters = isMm ? (val / 1000.0) : val;
+                if (distMeters > 0) {
                   final double newPixelsPerMeter = pixelDist / distMeters;
 
                   setState(() {
@@ -6283,7 +6439,14 @@ class CanvasPainter extends CustomPainter {
     final realMm = (pixelDist / pixelsPerMeter) * 1000.0;
     final realMeters = realMm / 1000.0;
 
-    final badgeText = '${realMm.round()} mm (${realMeters.toStringAsFixed(2)}m)';
+    final totalIn = realMm / 25.4;
+    int fVal = (totalIn / 12.0).floor();
+    int inVal = (totalIn % 12.0).round();
+    if (inVal == 12) {
+      fVal += 1;
+      inVal = 0;
+    }
+    final badgeText = '${realMm.round()} mm (${realMeters.toStringAsFixed(2)}m / $fVal\'-$inVal")';
     final textSpan = TextSpan(
       text: badgeText,
       style: const TextStyle(
@@ -6369,7 +6532,7 @@ class CanvasPainter extends CustomPainter {
     final double halfThickPx = wallThickPx / 2.0;
 
     // Paint for Tri-Snap (Inner Face & Outer Face) at Zoom >= 3.0x
-    final bool showFaceSnaps = currentZoom >= 3.0;
+    final bool showFaceSnaps = currentZoom >= 2.5;
     final innerFacePaint = Paint()
       ..color = Colors.greenAccent.withValues(alpha: 0.85)
       ..style = PaintingStyle.fill;
