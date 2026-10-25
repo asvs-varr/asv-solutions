@@ -73,13 +73,29 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
   int? _activeDraggingRoomCorner; // 0=TL, 1=TR, 2=BR, 3=BL, 4=CenterMove
   int? _activeDraggingVertexIndex; // Active polygon vertex index being dragged in Step 1
 
-  // Scanned CAD Structural Wall Grid Lines on 1400x1600 Sheet (for Magnetic Wall Snapping)
-  static const List<double> _cadSnapGridX = [338.0, 518.0, 650.0, 732.0, 884.0, 995.0, 1032.0];
-  static const List<double> _cadSnapGridY = [162.0, 268.0, 398.0, 462.0, 648.0, 718.0, 788.0, 862.0];
+  // Exact Scanned CAD Structural Column Centers on 1400x1600 Sheet
+  static const List<double> _cadSnapGridX = [274.8, 514.3, 802.8, 1006.4, 1204.4];
+  static const List<double> _cadSnapGridY = [60.3, 243.3, 454.4, 558.2, 661.9, 865.5, 986.2, 1106.9, 1229.5];
 
-  // CAD Dimension Line / Needle Witness Snap Coordinates (Ticks, Arrowheads & Needles)
-  static const List<double> _cadDimensionNeedleX = [338.0, 518.0, 650.0, 732.0, 884.0, 995.0, 1032.0, 1068.0, 1102.0];
-  static const List<double> _cadDimensionNeedleY = [92.0, 128.0, 162.0, 268.0, 398.0, 462.0, 648.0, 718.0, 788.0, 862.0, 918.0, 946.0];
+  // Exact CAD Dimension Needles, Witness Ticks & Extension Line Endpoints
+  static const List<Offset> _cadDimensionNeedles = [
+    // Top Horizontal Dimension Needles / Ticks (4000, 4800, 3400, 3300, 15500mm lines)
+    Offset(274.8, 17.0), Offset(274.8, 54.7), Offset(274.8, 6.6),
+    Offset(514.3, 17.0), Offset(514.3, 54.7), Offset(514.3, 6.6),
+    Offset(802.8, 17.0), Offset(802.8, 54.7), Offset(802.8, 6.6),
+    Offset(1006.4, 17.0), Offset(1006.4, 54.7), Offset(1006.4, 6.6),
+    Offset(1204.4, 17.0), Offset(1204.4, 54.7), Offset(1204.4, 6.6),
+    // Right Vertical Dimension Needles / Ticks (3050, 3500, 3480, 3400, 2000, 2075, 1975, 19480mm lines)
+    Offset(1265.7, 60.3), Offset(1323.2, 60.3), Offset(1333.6, 60.3),
+    Offset(1265.7, 243.3), Offset(1323.2, 243.3), Offset(1333.6, 243.3),
+    Offset(1265.7, 454.4), Offset(1323.2, 454.4), Offset(1333.6, 454.4),
+    Offset(1265.7, 558.2), Offset(1323.2, 558.2), Offset(1333.6, 558.2),
+    Offset(1265.7, 661.9), Offset(1323.2, 661.9), Offset(1333.6, 661.9),
+    Offset(1265.7, 865.5), Offset(1323.2, 865.5), Offset(1333.6, 865.5),
+    Offset(1265.7, 986.2), Offset(1323.2, 986.2), Offset(1333.6, 986.2),
+    Offset(1265.7, 1106.9), Offset(1323.2, 1106.9), Offset(1333.6, 1106.9),
+    Offset(1265.7, 1229.5), Offset(1323.2, 1229.5), Offset(1333.6, 1229.5),
+  ];
 
   // Orthogonal Snap & Floor Plan Snap Settings
   bool _isOrthoSnapEnabled = true;
@@ -490,15 +506,12 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
       }
     }
 
-    // 3. Snap to CAD Dimension Needles / Witness Ticks & Arrowhead Endpoints
-    for (final nx in _cadDimensionNeedleX) {
-      for (final ny in _cadDimensionNeedleY) {
-        final needlePt = Offset(nx, ny);
-        final distNeedle = (pos - needlePt).distance;
-        if (distNeedle <= minDistance) {
-          minDistance = distNeedle;
-          nearestSnap = needlePt;
-        }
+    // 3. Snap to CAD Dimension Needles / Witness Ticks & Arrowhead Endpoints (Generous 26px Tolerance)
+    for (final needlePt in _cadDimensionNeedles) {
+      final distNeedle = (pos - needlePt).distance;
+      if (distNeedle <= math.max(minDistance, 24.0)) {
+        minDistance = distNeedle;
+        nearestSnap = needlePt;
       }
     }
 
