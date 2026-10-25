@@ -54,6 +54,7 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
   // Default Reference Scale Pins along the 15,500 mm top exterior wall (centered on 1400x1600 sheet)
   Offset _pinA = const Offset(338, 162);
   Offset _pinB = const Offset(1032, 162);
+  bool _isDraggingItem = false;
 
   // 3-Stage Engineering Flow State:
   // Stage 1 = Blank Floor Plan Scale (Step 0) & 1-by-1 Polygon Room Wizard (Step 1)
@@ -1749,6 +1750,61 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
       }
     }
   }
+  bool _isPointOverDraggable(Offset tapPos) {
+    // 1. Calibration Pins A & B or Midpoint Badge
+    if (_canvasStage == 1 || _selectedTool == 'CALIBRATE') {
+      if (_stage1SubStep == 0 || _selectedTool == 'CALIBRATE') {
+        if ((_pinA - tapPos).distance <= 36.0 || (_pinB - tapPos).distance <= 36.0) {
+          return true;
+        }
+        final mid = Offset((_pinA.dx + _pinB.dx) / 2, (_pinA.dy + _pinB.dy) / 2);
+        if ((mid - tapPos).distance <= 40.0) {
+          return true;
+        }
+        if (_stage1SubStep == 0) return false;
+      }
+
+      // 2. Active Room Polygon Vertices, Midpoint Handles, Walls, and Interior
+      if ((_stage1SubStep == 1 || _stage1SubStep == 3) && widget.project != null) {
+        final spaces = widget.project!.spaces;
+        if (spaces.isNotEmpty && _selectedRoomIndex >= 0 && _selectedRoomIndex < spaces.length) {
+          final sp = spaces[_selectedRoomIndex];
+          final poly = _roomPolygons[sp.id] ?? _defaultCadPolygonForRoom(sp.name, _selectedRoomIndex);
+
+          // Vertices
+          for (int v = 0; v < poly.length; v++) {
+            if ((poly[v] - tapPos).distance <= 32.0) return true;
+          }
+          // Midpoint Handles
+          for (int v = 0; v < poly.length; v++) {
+            final p1 = poly[v];
+            final p2 = poly[(v + 1) % poly.length];
+            final midPt = Offset((p1.dx + p2.dx) / 2, (p1.dy + p2.dy) / 2);
+            if ((midPt - tapPos).distance <= 28.0) return true;
+          }
+          // Wall Segments
+          for (int v = 0; v < poly.length; v++) {
+            final p1 = poly[v];
+            final p2 = poly[(v + 1) % poly.length];
+            if (_distanceToSegment(tapPos, p1, p2) <= 20.0) return true;
+          }
+          // Inside room polygon
+          if (_isPointInPolygon(tapPos, poly)) return true;
+        }
+      }
+      return false;
+    }
+
+    // 3. Stage 3 Electrical Devices
+    for (final pt in _points) {
+      if ((Offset(pt.x, pt.y) - tapPos).distance <= 32.0) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
   void _handlePanStart(DragStartDetails details) {
 
     final tapPos = details.localPosition;
@@ -2038,6 +2094,7 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
         _wallDragInitialPoly = null;
         _isPerpendicularCornerSnapped = false;
         _perpendicularSnapCornerPos = null;
+        _isDraggingItem = false;
         _hasMovedSignificantly = false;
       });
       _syncRoomSpacesFromBoxes(persist: true);
@@ -2063,6 +2120,7 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
         _draggedPoint = null;
         _dragStartOffset = null;
         _hasMovedSignificantly = false;
+        _isDraggingItem = false;
       });
     }
   }
@@ -3804,13 +3862,43 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                     child: SizedBox(
                       width: _cadCanvasWidth,
                       height: _cadCanvasHeight,
-                      child: GestureDetector(
+                      child: Listener(
                         behavior: HitTestBehavior.translucent,
-                        onTapUp: _handleCanvasTap,
-                        onPanStart: _handlePanStart,
-                        onPanUpdate: _handlePanUpdate,
-                        onPanEnd: _handlePanEnd,
-                        child: Stack(
+                        onPointerDown: (event) {
+                          final localPos = event.localPosition;
+                          final isOverHandle = _isPointOverDraggable(localPos);
+                          if (isOverHandle != _isDraggingItem) {
+                            setState(() {
+                              _isDraggingItem = isOverHandle;
+                            });
+                          }
+                        },
+                        onPointerUp: (event) {
+                          if (_isDraggingItem &&
+                              _activeDraggingPin == null &&
+                              _draggedPoint == null &&
+                              _activeDraggingVertexIndex == null &&
+                              _activeDraggingWallIndex == null &&
+                              _activeDraggingRoomCorner == null) {
+                            setState(() {
+                              _isDraggingItem = false;
+                            });
+                          }
+                        },
+                        onPointerCancel: (event) {
+                          if (_isDraggingItem) {
+                            setState(() {
+                              _isDraggingItem = false;
+                            });
+                          }
+                        },
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.translucent,
+                          onTapUp: _handleCanvasTap,
+                          onPanStart: _isDraggingItem ? _handlePanStart : null,
+                          onPanUpdate: _isDraggingItem ? _handlePanUpdate : null,
+                          onPanEnd: _isDraggingItem ? _handlePanEnd : null,
+                          child: Stack(
                           fit: StackFit.expand,
                           children: [
                             // 1. Blueprint Floor Plan Underlay locked to expanded 1400 x 1600 CAD canvas with contain aspect fit
@@ -3910,6 +3998,7 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                       ),
                     ),
                   ),
+                ),
 
                   // 3. Floating Blueprint Layer Pill Indicator (Top-Left)
                   if (_hasBlueprintFile)
