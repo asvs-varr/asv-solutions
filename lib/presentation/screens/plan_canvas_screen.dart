@@ -80,6 +80,8 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
   // Orthogonal Snap & Floor Plan Snap Settings
   bool _isOrthoSnapEnabled = true;
   Offset? _lastHapticSnappedPoint;
+  Offset? _roomDragStartPos;
+  List<Offset>? _roomDragInitialPoly;
 
   // Multi-Point Polygon Calibration Engine for Real Rooms
   final List<Offset> _activePolygonPoints = [];
@@ -501,7 +503,7 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
     double sx = rawPos.dx.clamp(20.0, 980.0);
     double sy = rawPos.dy.clamp(20.0, 1200.0);
     Offset? snapTarget;
-    const double snapTol = 14.0;
+    const double snapTol = 16.0;
 
     // 1. Snap to confirmed rooms' vertices so adjacent rooms share exact walls without gaps
     final spaces = widget.project?.spaces ?? [];
@@ -511,34 +513,69 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
       if (otherPoly == null) continue;
       for (final v in otherPoly) {
         if ((v - rawPos).distance <= snapTol) {
+          if (_lastHapticSnappedPoint == null || (_lastHapticSnappedPoint! - v).distance > 4.0) {
+            HapticFeedback.selectionClick();
+            _lastHapticSnappedPoint = v;
+          }
+          _activeSnapPoint = v;
           return v;
         }
       }
     }
 
-    // 2. Snap to 90° orthogonal alignment with adjacent vertices in the same polygon
+    // 2. Orthogonal Snap: Lock to 0°/90° relative to neighboring polygon vertices
     if (activePoly.length >= 3) {
       final prevV = activePoly[(activeVertexIdx - 1 + activePoly.length) % activePoly.length];
       final nextV = activePoly[(activeVertexIdx + 1) % activePoly.length];
-      if ((sx - prevV.dx).abs() <= 10.0) sx = prevV.dx;
-      if ((sx - nextV.dx).abs() <= 10.0) sx = nextV.dx;
-      if ((sy - prevV.dy).abs() <= 10.0) sy = prevV.dy;
-      if ((sy - nextV.dy).abs() <= 10.0) sy = nextV.dy;
-    }
 
-    // 3. Snap to scanned CAD floor plan structural wall grid lines
-    for (final gx in _cadSnapGridX) {
-      if ((sx - gx).abs() <= snapTol) {
-        sx = gx;
-        snapTarget = Offset(sx, sy);
-        break;
+      if (_isOrthoSnapEnabled) {
+        final double distPrev = (rawPos - prevV).distance;
+        final double distNext = (rawPos - nextV).distance;
+        final anchor = distPrev <= distNext ? prevV : nextV;
+        final double dX = (sx - anchor.dx).abs();
+        final double dY = (sy - anchor.dy).abs();
+        if (dX <= 36.0 || dY <= 36.0) {
+          if (dX < dY) {
+            sx = anchor.dx; // Vertical lock
+          } else {
+            sy = anchor.dy; // Horizontal lock
+          }
+        }
+      } else {
+        if ((sx - prevV.dx).abs() <= 10.0) sx = prevV.dx;
+        if ((sx - nextV.dx).abs() <= 10.0) sx = nextV.dx;
+        if ((sy - prevV.dy).abs() <= 10.0) sy = prevV.dy;
+        if ((sy - nextV.dy).abs() <= 10.0) sy = nextV.dy;
       }
     }
-    for (final gy in _cadSnapGridY) {
-      if ((sy - gy).abs() <= snapTol) {
-        sy = gy;
-        snapTarget = Offset(sx, sy);
-        break;
+
+    // 3. Snap to Column Intersections & Wall Midpoints / Grid lines
+    final featSnapped = _snapToFloorPlanFeatures(Offset(sx, sy), snapTol: snapTol);
+    if ((featSnapped - Offset(sx, sy)).distance <= snapTol) {
+      sx = featSnapped.dx;
+      sy = featSnapped.dy;
+      snapTarget = featSnapped;
+    } else {
+      for (final gx in _cadSnapGridX) {
+        if ((sx - gx).abs() <= snapTol) {
+          sx = gx;
+          snapTarget = Offset(sx, sy);
+          break;
+        }
+      }
+      for (final gy in _cadSnapGridY) {
+        if ((sy - gy).abs() <= snapTol) {
+          sy = gy;
+          snapTarget = Offset(sx, sy);
+          break;
+        }
+      }
+    }
+
+    if (snapTarget != null) {
+      if (_lastHapticSnappedPoint == null || (_lastHapticSnappedPoint! - snapTarget).distance > 4.0) {
+        HapticFeedback.selectionClick();
+        _lastHapticSnappedPoint = snapTarget;
       }
     }
     _activeSnapPoint = snapTarget;
@@ -556,7 +593,12 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
       _pixelsPerMeter = proj.calibrationPixelsPerMeter!;
     }
 
-    if (proj.spaces.isEmpty) {
+    final bool hasBlueprint = _blueprintPath != null && File(_blueprintPath!).existsSync();
+    final bool isLegacyResidentialDefault = proj.spaces.isNotEmpty &&
+        proj.spaces.any((s) => s.id == 'sp-1' || s.name.toLowerCase().contains('living & dining'));
+
+    if (proj.spaces.isEmpty || (hasBlueprint && isLegacyResidentialDefault)) {
+      proj.spaces.clear();
       proj.spaces.addAll([
         RoomSpace(id: 'sp-func', name: 'Function Hall / Event Place', areaSqm: 64.5, ceilingHeight: 3.5),
         RoomSpace(id: 'sp-staff', name: 'Staff Room', areaSqm: 9.6, ceilingHeight: 2.8),
@@ -566,6 +608,8 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
       ]);
     }
 
+    _roomPolygons.clear();
+    _roomBoxes.clear();
     for (int i = 0; i < proj.spaces.length; i++) {
       final sp = proj.spaces[i];
       List<Offset> poly;
@@ -586,42 +630,43 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
   }
 
   /// Silently scans the uploaded blueprint using ML Kit / CAD text stream in the background
-  /// to refine room names and bounding dimensions without any modal interruption!
+  /// to dynamically detect and populate rooms directly from the blueprint!
   Future<void> _triggerSilentBlueprintOcrScanIfNeeded({bool forceRescan = false}) async {
     final proj = widget.project;
     final path = _blueprintPath;
     if (proj == null || path == null || !File(path).existsSync()) return;
 
-    // Only run if spaces still have default IDs or if forceRescan is requested
-    final bool isDefaultSpaces = proj.spaces.isNotEmpty && proj.spaces.first.id == 'sp-func';
+    final bool isDefaultSpaces = proj.spaces.isEmpty ||
+        proj.spaces.any((s) => s.id.startsWith('sp-') || s.name.toLowerCase().contains('living & dining'));
     if (!isDefaultSpaces && !forceRescan) return;
 
     try {
       final scanResult = await FloorPlanScannerEngine.scanFloorPlanWithMetadata(path, pdfPageIndex: _pdfSheetIndex);
       if (scanResult.rooms.isNotEmpty && mounted) {
         setState(() {
-          // Keep existing polygon geometries but update room names & default heights if matches found
-          for (int i = 0; i < proj.spaces.length && i < scanResult.rooms.length; i++) {
+          proj.spaces.clear();
+          _roomPolygons.clear();
+          _roomBoxes.clear();
+
+          for (int i = 0; i < scanResult.rooms.length; i++) {
             final scanned = scanResult.rooms[i];
-            final existing = proj.spaces[i];
-            if (scanned.name.isNotEmpty && !scanned.name.startsWith('Space')) {
-              proj.spaces[i] = RoomSpace(
-                id: existing.id,
-                name: scanned.name,
-                areaSqm: existing.areaSqm,
-                ceilingHeight: LightingEngine.suggestDefaultCeilingHeight(scanned.name),
-                shapeType: existing.shapeType,
-                cutoutDepth: existing.cutoutDepth,
-                cutoutWidth: existing.cutoutWidth,
-                canvasX: existing.canvasX,
-                canvasY: existing.canvasY,
-                canvasWidth: existing.canvasWidth,
-                canvasHeight: existing.canvasHeight,
-                perimeterMeters: existing.perimeterMeters,
-                rcrValue: existing.rcrValue,
-                polygonVertices: existing.polygonVertices,
-              );
-            }
+            final roomSpace = RoomSpace(
+              id: 'sp-scan-',
+              name: scanned.name,
+              areaSqm: scanned.areaSqm > 0 ? scanned.areaSqm : 15.0,
+              ceilingHeight: LightingEngine.suggestDefaultCeilingHeight(scanned.name),
+              shapeType: scanned.shapeType,
+              cutoutDepth: scanned.cutoutDepth,
+              cutoutWidth: scanned.cutoutWidth,
+            );
+            proj.spaces.add(roomSpace);
+
+            final poly = _defaultCadPolygonForRoom(roomSpace.name, i);
+            _roomPolygons[roomSpace.id] = poly;
+            _roomBoxes[roomSpace.id] = _boundingBoxOfPolygon(poly);
+          }
+          if (_selectedRoomIndex >= proj.spaces.length) {
+            _selectedRoomIndex = 0;
           }
           _syncRoomSpacesFromBoxes(persist: true);
         });
@@ -1408,6 +1453,8 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
           setState(() {
             _activeDraggingVertexIndex = null;
             _activeDraggingRoomCorner = 4;
+            _roomDragStartPos = tapPos;
+            _roomDragInitialPoly = List<Offset>.from(poly);
           });
           return;
         }
@@ -1470,18 +1517,46 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
       return;
     }
 
-    // 3. Translating Whole Active Room Polygon (Center Move)
+    // 3. Translating Whole Active Room Polygon (Center Move) with Ortho & Feature Snapping
     if (_canvasStage == 1 && _activeDraggingRoomCorner == 4 && widget.project != null) {
       final spaces = widget.project!.spaces;
       if (_selectedRoomIndex >= 0 && _selectedRoomIndex < spaces.length) {
         final sp = spaces[_selectedRoomIndex];
-        final poly = List<Offset>.from(_roomPolygons[sp.id] ?? _defaultCadPolygonForRoom(sp.name, _selectedRoomIndex));
-        final rect = _boundingBoxOfPolygon(poly);
-        final double dx = details.delta.dx.clamp(20.0 - rect.left, 980.0 - rect.right);
-        final double dy = details.delta.dy.clamp(20.0 - rect.top, 1200.0 - rect.bottom);
-        for (int i = 0; i < poly.length; i++) {
-          poly[i] = Offset(poly[i].dx + dx, poly[i].dy + dy);
+        final basePoly = _roomDragInitialPoly ??
+            List<Offset>.from(_roomPolygons[sp.id] ?? _defaultCadPolygonForRoom(sp.name, _selectedRoomIndex));
+        final startPos = _roomDragStartPos ?? details.localPosition;
+        double shiftX = details.localPosition.dx - startPos.dx;
+        double shiftY = details.localPosition.dy - startPos.dy;
+
+        // Orthogonal Lock: strictly horizontal (0°) or vertical (90°)
+        if (_isOrthoSnapEnabled) {
+          if (shiftX.abs() >= shiftY.abs()) {
+            shiftY = 0.0;
+          } else {
+            shiftX = 0.0;
+          }
         }
+
+        final poly = <Offset>[];
+        for (final pt in basePoly) {
+          poly.add(Offset(pt.dx + shiftX, pt.dy + shiftY));
+        }
+
+        // Clamp inside canvas bounds
+        final rect = _boundingBoxOfPolygon(poly);
+        double clampDx = 0.0;
+        double clampDy = 0.0;
+        if (rect.left < 20.0) clampDx = 20.0 - rect.left;
+        if (rect.right > 980.0) clampDx = 980.0 - rect.right;
+        if (rect.top < 20.0) clampDy = 20.0 - rect.top;
+        if (rect.bottom > 1200.0) clampDy = 1200.0 - rect.bottom;
+
+        if (clampDx != 0.0 || clampDy != 0.0) {
+          for (int i = 0; i < poly.length; i++) {
+            poly[i] = Offset(poly[i].dx + clampDx, poly[i].dy + clampDy);
+          }
+        }
+
         setState(() {
           _roomPolygons[sp.id] = poly;
           _syncRoomSpacesFromBoxes(persist: false);
@@ -1511,6 +1586,8 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
         _activeDraggingRoomCorner = null;
         _activeSnapPoint = null;
         _dragStartOffset = null;
+        _roomDragStartPos = null;
+        _roomDragInitialPoly = null;
         _hasMovedSignificantly = false;
       });
       _syncRoomSpacesFromBoxes(persist: true);
@@ -2462,6 +2539,58 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                               'Tama ba ang room ID at hugis? (${activeSp.name})',
                               style: const TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.bold),
                               overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          GestureDetector(
+                            onTap: () {
+                              setState(() {
+                                _isOrthoSnapEnabled = !_isOrthoSnapEnabled;
+                              });
+                              HapticFeedback.selectionClick();
+                              ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  duration: const Duration(milliseconds: 1200),
+                                  content: Text(
+                                    _isOrthoSnapEnabled
+                                        ? '📐 Orthogonal Snap: ON (Locks to 0°/90° & Column/Wall)'
+                                        : '📐 Orthogonal Snap: OFF (Free-Angle Movement)',
+                                  ),
+                                  backgroundColor: _isOrthoSnapEnabled ? BanaagTheme.primaryAmber : Colors.grey[800],
+                                ),
+                              );
+                            },
+                            child: Container(
+                              margin: const EdgeInsets.only(right: 6),
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: _isOrthoSnapEnabled
+                                    ? BanaagTheme.primaryAmber.withValues(alpha: 0.22)
+                                    : Colors.white.withValues(alpha: 0.08),
+                                borderRadius: BorderRadius.circular(5),
+                                border: Border.all(
+                                  color: _isOrthoSnapEnabled ? BanaagTheme.primaryAmber : Colors.white24,
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.square_foot,
+                                    size: 12,
+                                    color: _isOrthoSnapEnabled ? BanaagTheme.primaryAmber : Colors.white70,
+                                  ),
+                                  const SizedBox(width: 3),
+                                  Text(
+                                    _isOrthoSnapEnabled ? 'Ortho: ON' : 'Ortho: OFF',
+                                    style: TextStyle(
+                                      color: _isOrthoSnapEnabled ? BanaagTheme.primaryAmber : Colors.white70,
+                                      fontSize: 10.0,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
                           GestureDetector(

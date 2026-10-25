@@ -283,7 +283,7 @@ class FloorPlanScannerEngine {
 
     // Parse rooms by matching against keywords
     for (int i = 0; i < rawLines.length; i++) {
-      final line = rawLines[i].trim();
+      final line = rawLines[i].replaceAll(RegExp(r'\s+'), ' ').trim();
       final lower = line.toLowerCase();
 
       String? matchedKw;
