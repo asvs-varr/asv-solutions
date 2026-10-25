@@ -77,6 +77,10 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
   static const List<double> _cadSnapGridX = [338.0, 518.0, 650.0, 732.0, 884.0, 995.0, 1032.0];
   static const List<double> _cadSnapGridY = [162.0, 268.0, 398.0, 462.0, 648.0, 718.0, 788.0, 862.0];
 
+  // Orthogonal Snap & Floor Plan Snap Settings
+  bool _isOrthoSnapEnabled = true;
+  Offset? _lastHapticSnappedPoint;
+
   // Multi-Point Polygon Calibration Engine for Real Rooms
   final List<Offset> _activePolygonPoints = [];
   int _activeCalibratingRoomIndex = 0;
@@ -423,6 +427,75 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
     );
   }
 
+  /// Snaps a position to Floor Plan structural snap points (Column Corners/Centers and Wall Midpoints/Edges)
+  Offset _snapToFloorPlanFeatures(Offset rawPos, {Offset? orthoAnchor, double snapTol = 16.0}) {
+    Offset pos = rawPos;
+
+    // 1. Orthogonal Snap: lock to horizontal (0°) or vertical (90°) relative to orthoAnchor
+    if (_isOrthoSnapEnabled && orthoAnchor != null) {
+      final double dx = (pos.dx - orthoAnchor.dx).abs();
+      final double dy = (pos.dy - orthoAnchor.dy).abs();
+      if (dx >= dy) {
+        // Horizontal lock
+        pos = Offset(pos.dx, orthoAnchor.dy);
+      } else {
+        // Vertical lock
+        pos = Offset(orthoAnchor.dx, pos.dy);
+      }
+    }
+
+    Offset? nearestSnap;
+    double minDistance = snapTol;
+
+    // 2. Snap to Column Intersections (Poste Corners/Centers)
+    for (final gx in _cadSnapGridX) {
+      for (final gy in _cadSnapGridY) {
+        final colPt = Offset(gx, gy);
+        final dist = (pos - colPt).distance;
+        if (dist <= minDistance) {
+          minDistance = dist;
+          nearestSnap = colPt;
+        }
+      }
+    }
+
+    // 3. Snap to Wall Midpoints / Edges between consecutive columns
+    for (final gy in _cadSnapGridY) {
+      for (int i = 0; i < _cadSnapGridX.length - 1; i++) {
+        final midCol = Offset((_cadSnapGridX[i] + _cadSnapGridX[i + 1]) / 2.0, gy);
+        final dist = (pos - midCol).distance;
+        if (dist <= minDistance) {
+          minDistance = dist;
+          nearestSnap = midCol;
+        }
+      }
+    }
+    for (final gx in _cadSnapGridX) {
+      for (int j = 0; j < _cadSnapGridY.length - 1; j++) {
+        final midRow = Offset(gx, (_cadSnapGridY[j] + _cadSnapGridY[j + 1]) / 2.0);
+        final dist = (pos - midRow).distance;
+        if (dist <= minDistance) {
+          minDistance = dist;
+          nearestSnap = midRow;
+        }
+      }
+    }
+
+    if (nearestSnap != null) {
+      if (_lastHapticSnappedPoint == null || (_lastHapticSnappedPoint! - nearestSnap).distance > 4.0) {
+        HapticFeedback.selectionClick();
+        _lastHapticSnappedPoint = nearestSnap;
+      }
+      _activeSnapPoint = nearestSnap;
+      return nearestSnap;
+    } else {
+      _lastHapticSnappedPoint = null;
+      _activeSnapPoint = null;
+    }
+
+    return pos;
+  }
+
   /// Magnetic Wall & Corner Snapping for Step 1 Polygon Vertices
   Offset _snapPolygonVertex(Offset rawPos, List<Offset> activePoly, int activeVertexIdx) {
     double sx = rawPos.dx.clamp(20.0, 980.0);
@@ -681,6 +754,18 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
   Future<void> _confirmStage1AndOpenStage2Loads() async {
     _syncRoomSpacesFromBoxes(persist: true);
     if (widget.project == null) return;
+
+    // Mark c0 (Floor Plan Intake & Calibration) as completed in Project Phase 1!
+    final p1 = widget.project!.phases.firstWhere(
+      (p) => p.type == ProjectPhaseType.consultation,
+      orElse: () => widget.project!.phases.first,
+    );
+    for (final c in p1.checklist) {
+      if (c.id == 'c0') {
+        c.isCompleted = true;
+      }
+    }
+    ProjectRepository.instance.updateProject(widget.project!);
 
     final result = await Navigator.push<bool>(
       context,
@@ -1357,14 +1442,10 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
     // 1. Dragging Reference Scale Pin A or Pin B (Step 0)
     if ((_canvasStage == 1 || _selectedTool == 'CALIBRATE') && _activeDraggingPin != null) {
       setState(() {
-        final snapped = Offset(
-          (newPos.dx / 2.0).round() * 2.0,
-          (newPos.dy / 2.0).round() * 2.0,
-        );
         if (_activeDraggingPin == 1) {
-          _pinA = snapped;
+          _pinA = _snapToFloorPlanFeatures(newPos, orthoAnchor: _pinB);
         } else if (_activeDraggingPin == 2) {
-          _pinB = snapped;
+          _pinB = _snapToFloorPlanFeatures(newPos, orthoAnchor: _pinA);
         }
       });
       return;
@@ -2277,6 +2358,58 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                               '📏 Pin A–B: ${refLengthMm.round()} mm (${refLengthM.toStringAsFixed(2)} m)  •  🧱 Wall: ${_wallThicknessMm.round()} mm CHB',
                               style: const TextStyle(color: BanaagTheme.primaryAmber, fontSize: 11.5, fontWeight: FontWeight.w700),
                               overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          GestureDetector(
+                            onTap: () {
+                              setState(() {
+                                _isOrthoSnapEnabled = !_isOrthoSnapEnabled;
+                              });
+                              HapticFeedback.selectionClick();
+                              ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  duration: const Duration(milliseconds: 1200),
+                                  content: Text(
+                                    _isOrthoSnapEnabled
+                                        ? '📐 Orthogonal Snap: ON (Locks to 0°/90° & Column/Wall)'
+                                        : '📐 Orthogonal Snap: OFF (Free-Angle Movement)',
+                                  ),
+                                  backgroundColor: _isOrthoSnapEnabled ? BanaagTheme.primaryAmber : Colors.grey[800],
+                                ),
+                              );
+                            },
+                            child: Container(
+                              margin: const EdgeInsets.only(right: 6),
+                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: _isOrthoSnapEnabled
+                                    ? BanaagTheme.primaryAmber.withValues(alpha: 0.22)
+                                    : Colors.white.withValues(alpha: 0.08),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(
+                                  color: _isOrthoSnapEnabled ? BanaagTheme.primaryAmber : Colors.white24,
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.square_foot,
+                                    size: 13,
+                                    color: _isOrthoSnapEnabled ? BanaagTheme.primaryAmber : Colors.white70,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    _isOrthoSnapEnabled ? 'Ortho: ON' : 'Ortho: OFF',
+                                    style: TextStyle(
+                                      color: _isOrthoSnapEnabled ? BanaagTheme.primaryAmber : Colors.white70,
+                                      fontSize: 10.5,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
                           GestureDetector(
