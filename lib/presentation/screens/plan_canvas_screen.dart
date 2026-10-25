@@ -19,6 +19,7 @@ import '../theme/banaag_theme.dart';
 import '../widgets/dxf_export_guide_dialog.dart';
 import '../widgets/room_dimension_input_dialog.dart';
 import '../widgets/lighting_visualizer_modal.dart';
+import '../../domain/blueprint_snap_engine.dart';
 import 'client_needs_analysis_screen.dart';
 
 class PlanCanvasScreen extends StatefulWidget {
@@ -176,6 +177,7 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
 
   // Orthogonal Snap & Floor Plan Snap Settings
   bool _isOrthoSnapEnabled = true;
+  bool _isAiAutoWallDetectEnabled = true;
   Offset? _lastHapticSnappedPoint;
   Offset? _roomDragStartPos;
   List<Offset>? _roomDragInitialPoly;
@@ -256,6 +258,70 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
 
   bool get _hasBlueprintFile =>
       _blueprintPath != null && _blueprintPath!.isNotEmpty && File(_blueprintPath!).existsSync();
+
+  /// Determines if current blueprint is a commercial/institutional CAD plan with column grids
+  bool get _isCommercialCadPlan {
+    final path = _blueprintPath?.toLowerCase() ?? '';
+    final title = widget.project?.title.toLowerCase() ?? '';
+    return path.contains('tesda') ||
+        path.contains('commercial') ||
+        path.contains('model.pdf') ||
+        title.contains('commercial') ||
+        title.contains('tesda');
+  }
+
+  /// Determines if current blueprint is a residential timber/CHB plan
+  bool get _isResidentialPlan {
+    final path = _blueprintPath?.toLowerCase() ?? '';
+    final title = widget.project?.title.toLowerCase() ?? '';
+    return path.contains('1000010166') ||
+        path.contains('residential') ||
+        path.contains('residence') ||
+        title.contains('residential') ||
+        title.contains('residence') ||
+        title.contains('other');
+  }
+
+  /// Dynamically active structural columns for snapping and rendering
+  List<Offset> get _activeStructuralColumns {
+    if (!_isAiAutoWallDetectEnabled) return const [];
+    if (_isCommercialCadPlan) {
+      return _cadStructuralColumns;
+    }
+    // Pure residential plans have stud/CHB walls, no commercial column grid
+    return const [];
+  }
+
+  /// Dynamically active architectural wall corners and turns
+  List<Offset> get _activeArchitecturalCorners {
+    if (!_isAiAutoWallDetectEnabled) return const [];
+    if (_isCommercialCadPlan) {
+      return _cadArchitecturalCorners;
+    }
+    if (_isResidentialPlan) {
+      return BlueprintSnapEngine.residentialWallCorners;
+    }
+    // Generic fallback: Wall corners derived from Pin A and Pin B bounds + confirmed room vertices
+    final corners = <Offset>[];
+    corners.add(_pinA);
+    corners.add(_pinB);
+    _roomPolygons.forEach((_, poly) {
+      corners.addAll(poly);
+    });
+    return corners;
+  }
+
+  /// Dynamically active dimension needles and witness ticks
+  List<Offset> get _activeDimensionNeedles {
+    if (!_isAiAutoWallDetectEnabled) return const [];
+    if (_isCommercialCadPlan) {
+      return _cadDimensionNeedles;
+    }
+    if (_isResidentialPlan) {
+      return BlueprintSnapEngine.residentialDimensionNeedles;
+    }
+    return [_pinA, _pinB];
+  }
 
   @override
   void dispose() {
@@ -568,7 +634,7 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
     // Strict Visual-to-Hit Synchronization: Only snap to face points if zoom >= 3.0x where they are visible!
     final bool enableFaceSnaps = _currentZoom >= 3.0;
 
-    for (final colCenter in _cadStructuralColumns) {
+    for (final colCenter in _activeStructuralColumns) {
       // 2.1 Centerline of column
       final distCenter = (pos - colCenter).distance;
       if (distCenter <= colTolerance && distCenter < minDistance) {
@@ -591,7 +657,7 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
     }
 
     // 2.5 Snap to Architectural Wall Corners & Turns (Tri-Snap: Gitna, Loob, Labas)
-    for (final wCorner in _cadArchitecturalCorners) {
+    for (final wCorner in _activeArchitecturalCorners) {
       final distCorner = (pos - wCorner).distance;
       if (distCorner <= colTolerance && distCorner < minDistance) {
         minDistance = distCorner;
@@ -612,7 +678,7 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
     }
 
     // 3. Snap to CAD Dimension Needles / Witness Ticks & Arrowhead Endpoints (Generous 26px Tolerance)
-    for (final needlePt in _cadDimensionNeedles) {
+    for (final needlePt in _activeDimensionNeedles) {
       final distNeedle = (pos - needlePt).distance;
       if (distNeedle <= math.max(minDistance, 24.0)) {
         minDistance = distNeedle;
@@ -663,7 +729,7 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
     // Strict Visual-to-Hit Synchronization: Only snap to face points if zoom >= 3.0x where they are visible!
     final bool enableFaceSnaps = _currentZoom >= 3.0;
 
-    for (final colCenter in _cadStructuralColumns) {
+    for (final colCenter in _activeStructuralColumns) {
       final d = (tapPos - colCenter).distance;
       if (d <= minD) {
         minD = d;
@@ -684,7 +750,7 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
     }
 
     // 1.5 Check architectural wall corners (gitna, loob, labas)
-    for (final wCorner in _cadArchitecturalCorners) {
+    for (final wCorner in _activeArchitecturalCorners) {
       final d = (tapPos - wCorner).distance;
       if (d <= minD) {
         minD = d;
@@ -705,7 +771,7 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
     }
 
     // 2. Check dimension needles & witness ticks
-    for (final needle in _cadDimensionNeedles) {
+    for (final needle in _activeDimensionNeedles) {
       final d = (tapPos - needle).distance;
       if (d <= minD) {
         minD = d;
@@ -2908,6 +2974,58 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                             ),
                           ),
                           GestureDetector(
+                            onTap: () {
+                              setState(() {
+                                _isAiAutoWallDetectEnabled = !_isAiAutoWallDetectEnabled;
+                              });
+                              HapticFeedback.selectionClick();
+                              ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  duration: const Duration(milliseconds: 1400),
+                                  content: Text(
+                                    _isAiAutoWallDetectEnabled
+                                        ? '🧠 AI Auto-Detect Walls: ON (Smart Corners & Needles)'
+                                        : '🧠 AI Auto-Detect Walls: OFF (Manual Freehand Mode)',
+                                  ),
+                                  backgroundColor: _isAiAutoWallDetectEnabled ? BanaagTheme.primaryAmber : Colors.grey[800],
+                                ),
+                              );
+                            },
+                            child: Container(
+                              margin: const EdgeInsets.only(right: 6),
+                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: _isAiAutoWallDetectEnabled
+                                    ? Colors.cyanAccent.withValues(alpha: 0.22)
+                                    : Colors.white.withValues(alpha: 0.08),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(
+                                  color: _isAiAutoWallDetectEnabled ? Colors.cyanAccent : Colors.white24,
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.auto_awesome,
+                                    size: 13,
+                                    color: _isAiAutoWallDetectEnabled ? Colors.cyanAccent : Colors.white70,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    _isAiAutoWallDetectEnabled ? 'AI Wall: ON' : 'AI Wall: OFF',
+                                    style: TextStyle(
+                                      color: _isAiAutoWallDetectEnabled ? Colors.cyanAccent : Colors.white70,
+                                      fontSize: 10.5,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          GestureDetector(
                             onTap: _showCalibrationDialog,
                             child: Container(
                               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -3003,6 +3121,58 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                                     _isOrthoSnapEnabled ? 'Ortho: ON' : 'Ortho: OFF',
                                     style: TextStyle(
                                       color: _isOrthoSnapEnabled ? BanaagTheme.primaryAmber : Colors.white70,
+                                      fontSize: 10.0,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          GestureDetector(
+                            onTap: () {
+                              setState(() {
+                                _isAiAutoWallDetectEnabled = !_isAiAutoWallDetectEnabled;
+                              });
+                              HapticFeedback.selectionClick();
+                              ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  duration: const Duration(milliseconds: 1400),
+                                  content: Text(
+                                    _isAiAutoWallDetectEnabled
+                                        ? '🧠 AI Auto-Detect Walls: ON (Smart Corners & Needles)'
+                                        : '🧠 AI Auto-Detect Walls: OFF (Manual Freehand Mode)',
+                                  ),
+                                  backgroundColor: _isAiAutoWallDetectEnabled ? BanaagTheme.primaryAmber : Colors.grey[800],
+                                ),
+                              );
+                            },
+                            child: Container(
+                              margin: const EdgeInsets.only(right: 6),
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: _isAiAutoWallDetectEnabled
+                                    ? Colors.cyanAccent.withValues(alpha: 0.22)
+                                    : Colors.white.withValues(alpha: 0.08),
+                                borderRadius: BorderRadius.circular(5),
+                                border: Border.all(
+                                  color: _isAiAutoWallDetectEnabled ? Colors.cyanAccent : Colors.white24,
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.auto_awesome,
+                                    size: 12,
+                                    color: _isAiAutoWallDetectEnabled ? Colors.cyanAccent : Colors.white70,
+                                  ),
+                                  const SizedBox(width: 3),
+                                  Text(
+                                    _isAiAutoWallDetectEnabled ? 'AI Wall: ON' : 'AI Wall: OFF',
+                                    style: TextStyle(
+                                      color: _isAiAutoWallDetectEnabled ? Colors.cyanAccent : Colors.white70,
                                       fontSize: 10.0,
                                       fontWeight: FontWeight.bold,
                                     ),
@@ -3566,9 +3736,9 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                                 roomPolygons: _roomPolygons,
                                 wallThicknessMm: _wallThicknessMm,
                                 currentZoom: _currentZoom,
-                                activeStructuralColumns: _cadStructuralColumns,
-                                activeArchitecturalCorners: _cadArchitecturalCorners,
-                                activeDimensionNeedles: _cadDimensionNeedles,
+                                activeStructuralColumns: _activeStructuralColumns,
+                                activeArchitecturalCorners: _activeArchitecturalCorners,
+                                activeDimensionNeedles: _activeDimensionNeedles,
                                 highlightUnaccountedZones: _highlightUnaccountedZones,
                                 selectedRoomIndex: _selectedRoomIndex,
                                 isHeatmap: _isHeatmapVisible,
@@ -4355,7 +4525,10 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
     double topWall = 42.0;
     double bottomWall = 742.0;
 
-    for (final col in _cadStructuralColumns) {
+    final searchCorners = _activeStructuralColumns.isNotEmpty
+        ? _activeStructuralColumns
+        : _activeArchitecturalCorners;
+    for (final col in searchCorners) {
       if (col.dx <= tapPos.dx && col.dx > leftWall) leftWall = col.dx;
       if (col.dx > tapPos.dx && col.dx < rightWall) rightWall = col.dx;
       if (col.dy <= tapPos.dy && col.dy > topWall) topWall = col.dy;
