@@ -14,6 +14,7 @@ import 'banaag_pro_screen.dart';
 import '../widgets/project_management_dialogs.dart';
 import '../widgets/dev_ticket_modal.dart';
 import '../widgets/project_quota_voucher_modal.dart';
+import '../widgets/google_auth_modal.dart';
 import '../../domain/banaag_auth_service.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -409,6 +410,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   void _showNewProjectDialog(BuildContext context) async {
     final auth = BanaagAuthService.instance;
+    if (!auth.isAuthenticated) {
+      final bindResult = await GoogleAuthModal.show(context);
+      if (!context.mounted) return;
+      if (bindResult == null || !auth.isAuthenticated) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('⚠️ Kailangang i-bind ang Google Account para makapag-create ng project.'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+        return;
+      }
+    }
+
     if (auth.isAuthenticated) {
       final quota = await auth.getProjectQuota();
       final remaining = (quota['remaining'] as num?)?.toInt() ?? 1;
