@@ -77,11 +77,18 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
   static const List<double> _cadSnapGridX = [338.0, 518.0, 650.0, 732.0, 884.0, 995.0, 1032.0];
   static const List<double> _cadSnapGridY = [162.0, 268.0, 398.0, 462.0, 648.0, 718.0, 788.0, 862.0];
 
+  // CAD Dimension Line / Needle Witness Snap Coordinates (Ticks, Arrowheads & Needles)
+  static const List<double> _cadDimensionNeedleX = [338.0, 518.0, 650.0, 732.0, 884.0, 995.0, 1032.0, 1068.0, 1102.0];
+  static const List<double> _cadDimensionNeedleY = [92.0, 128.0, 162.0, 268.0, 398.0, 462.0, 648.0, 718.0, 788.0, 862.0, 918.0, 946.0];
+
   // Orthogonal Snap & Floor Plan Snap Settings
   bool _isOrthoSnapEnabled = true;
   Offset? _lastHapticSnappedPoint;
   Offset? _roomDragStartPos;
   List<Offset>? _roomDragInitialPoly;
+  int? _activeDraggingWallIndex;
+  Offset? _wallDragStartPos;
+  List<Offset>? _wallDragInitialPoly;
 
   // Multi-Point Polygon Calibration Engine for Real Rooms
   final List<Offset> _activePolygonPoints = [];
@@ -382,6 +389,15 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
   }
 
   /// Ray-casting Point-in-Polygon check (strictly keeps ceiling luminaires inside L-shapes/polygons)
+    /// Computes the perpendicular distance from point p to line segment (a - b)
+  double _distanceToSegment(Offset p, Offset a, Offset b) {
+    final double l2 = (b - a).distanceSquared;
+    if (l2 == 0.0) return (p - a).distance;
+    final double t = math.max(0.0, math.min(1.0, ((p.dx - a.dx) * (b.dx - a.dx) + (p.dy - a.dy) * (b.dy - a.dy)) / l2));
+    final Offset proj = Offset(a.dx + t * (b.dx - a.dx), a.dy + t * (b.dy - a.dy));
+    return (p - proj).distance;
+  }
+
   bool _isPointInPolygon(Offset pt, List<Offset> poly) {
     if (poly.length < 3) return true;
     bool inside = false;
@@ -449,19 +465,44 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
     Offset? nearestSnap;
     double minDistance = snapTol;
 
-    // 2. Snap to Column Intersections (Poste Corners/Centers)
+    // 2. Snap to Column Intersections & Exact Column Centers (Center ng Poste)
+    const double colHalfWidth = 10.0;
     for (final gx in _cadSnapGridX) {
       for (final gy in _cadSnapGridY) {
-        final colPt = Offset(gx, gy);
-        final dist = (pos - colPt).distance;
-        if (dist <= minDistance) {
-          minDistance = dist;
-          nearestSnap = colPt;
+        // Exact column center
+        final colCenter = Offset(gx, gy);
+        final distCenter = (pos - colCenter).distance;
+        if (distCenter <= minDistance) {
+          minDistance = distCenter;
+          nearestSnap = colCenter;
+        }
+        // Column corners / offset edges
+        for (final ox in [-colHalfWidth, colHalfWidth]) {
+          for (final oy in [-colHalfWidth, colHalfWidth]) {
+            final colCorner = Offset(gx + ox, gy + oy);
+            final distCorner = (pos - colCorner).distance;
+            if (distCorner <= minDistance) {
+              minDistance = distCorner;
+              nearestSnap = colCorner;
+            }
+          }
         }
       }
     }
 
-    // 3. Snap to Wall Midpoints / Edges between consecutive columns
+    // 3. Snap to CAD Dimension Needles / Witness Ticks & Arrowhead Endpoints
+    for (final nx in _cadDimensionNeedleX) {
+      for (final ny in _cadDimensionNeedleY) {
+        final needlePt = Offset(nx, ny);
+        final distNeedle = (pos - needlePt).distance;
+        if (distNeedle <= minDistance) {
+          minDistance = distNeedle;
+          nearestSnap = needlePt;
+        }
+      }
+    }
+
+    // 4. Snap to Wall Midpoints / Edges between consecutive columns
     for (final gy in _cadSnapGridY) {
       for (int i = 0; i < _cadSnapGridX.length - 1; i++) {
         final midCol = Offset((_cadSnapGridX[i] + _cadSnapGridX[i + 1]) / 2.0, gy);
@@ -1448,11 +1489,29 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
           }
         }
 
-        // 3. Check if dragging inside the active room polygon (whole-polygon move)
+        // 3. Check Wall Segments (Movable Wall) — touching anywhere on the wall moves the whole wall!
+        for (int v = 0; v < poly.length; v++) {
+          final p1 = poly[v];
+          final p2 = poly[(v + 1) % poly.length];
+          if (_distanceToSegment(tapPos, p1, p2) <= 18.0) {
+            setState(() {
+              _activeDraggingWallIndex = v;
+              _activeDraggingVertexIndex = null;
+              _activeDraggingRoomCorner = null;
+              _wallDragStartPos = tapPos;
+              _wallDragInitialPoly = List<Offset>.from(poly);
+            });
+            HapticFeedback.selectionClick();
+            return;
+          }
+        }
+
+        // 4. Check if dragging inside the active room polygon (whole-polygon move)
         if (_isPointInPolygon(tapPos, poly)) {
           setState(() {
             _activeDraggingVertexIndex = null;
             _activeDraggingRoomCorner = 4;
+            _activeDraggingWallIndex = null;
             _roomDragStartPos = tapPos;
             _roomDragInitialPoly = List<Offset>.from(poly);
           });
@@ -1513,6 +1572,62 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
             _syncRoomSpacesFromBoxes(persist: false);
           });
         }
+      }
+      return;
+    }
+
+    // 2.5 Dragging Whole Wall Segment (Movable Wall with Orthogonal & Snap Lock)
+    if (_canvasStage == 1 && _activeDraggingWallIndex != null && widget.project != null) {
+      final spaces = widget.project!.spaces;
+      if (_selectedRoomIndex >= 0 && _selectedRoomIndex < spaces.length) {
+        final sp = spaces[_selectedRoomIndex];
+        final basePoly = _wallDragInitialPoly ??
+            List<Offset>.from(_roomPolygons[sp.id] ?? _defaultCadPolygonForRoom(sp.name, _selectedRoomIndex));
+        final int wIdx = _activeDraggingWallIndex!;
+        final int nextIdx = (wIdx + 1) % basePoly.length;
+        final startPos = _wallDragStartPos ?? details.localPosition;
+
+        final Offset origP1 = basePoly[wIdx];
+        final Offset origP2 = basePoly[nextIdx];
+        final bool isHorizontalWall = (origP2.dx - origP1.dx).abs() >= (origP2.dy - origP1.dy).abs();
+
+        double shiftX = 0.0;
+        double shiftY = 0.0;
+
+        if (isHorizontalWall) {
+          // Horizontal wall moves strictly vertically (up / down)
+          shiftY = details.localPosition.dy - startPos.dy;
+          double targetY = origP1.dy + shiftY;
+          final snappedPt = _snapToFloorPlanFeatures(Offset(origP1.dx, targetY));
+          if ((snappedPt.dy - targetY).abs() <= 16.0) {
+            targetY = snappedPt.dy;
+            shiftY = targetY - origP1.dy;
+          }
+        } else {
+          // Vertical wall moves strictly horizontally (left / right)
+          shiftX = details.localPosition.dx - startPos.dx;
+          double targetX = origP1.dx + shiftX;
+          final snappedPt = _snapToFloorPlanFeatures(Offset(targetX, origP1.dy));
+          if ((snappedPt.dx - targetX).abs() <= 16.0) {
+            targetX = snappedPt.dx;
+            shiftX = targetX - origP1.dx;
+          }
+        }
+
+        final poly = List<Offset>.from(basePoly);
+        poly[wIdx] = Offset(
+          (origP1.dx + shiftX).clamp(20.0, _cadCanvasWidth - 20.0),
+          (origP1.dy + shiftY).clamp(20.0, _cadCanvasHeight - 20.0),
+        );
+        poly[nextIdx] = Offset(
+          (origP2.dx + shiftX).clamp(20.0, _cadCanvasWidth - 20.0),
+          (origP2.dy + shiftY).clamp(20.0, _cadCanvasHeight - 20.0),
+        );
+
+        setState(() {
+          _roomPolygons[sp.id] = poly;
+          _syncRoomSpacesFromBoxes(persist: false);
+        });
       }
       return;
     }
@@ -1583,11 +1698,14 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
       setState(() {
         _activeDraggingPin = null;
         _activeDraggingVertexIndex = null;
+        _activeDraggingWallIndex = null;
         _activeDraggingRoomCorner = null;
         _activeSnapPoint = null;
         _dragStartOffset = null;
         _roomDragStartPos = null;
         _roomDragInitialPoly = null;
+        _wallDragStartPos = null;
+        _wallDragInitialPoly = null;
         _hasMovedSignificantly = false;
       });
       _syncRoomSpacesFromBoxes(persist: true);
@@ -3114,6 +3232,7 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                                 pinA: _pinA,
                                 pinB: _pinB,
                                 activeDraggingPin: _activeDraggingPin,
+                                activeDraggingWallIndex: _activeDraggingWallIndex,
                                 activeSnapPoint: _activeSnapPoint,
                                 pixelsPerMeter: _pixelsPerMeter,
                                 activePolygonPoints: _activePolygonPoints,
@@ -4477,6 +4596,7 @@ class CanvasPainter extends CustomPainter {
   final Map<String, List<Offset>> calibratedRoomPolygons;
 
   final int? activeDraggingPin;
+  final int? activeDraggingWallIndex;
 
   CanvasPainter({
     required this.points,
@@ -4500,6 +4620,7 @@ class CanvasPainter extends CustomPainter {
     this.pinA = const Offset(60, 200),
     this.pinB = const Offset(240, 200),
     this.activeDraggingPin,
+    this.activeDraggingWallIndex,
     this.activeSnapPoint,
     this.pixelsPerMeter = 30.0,
     this.activePolygonPoints = const [],
@@ -4644,6 +4765,19 @@ class CanvasPainter extends CustomPainter {
         for (int v = 0; v < poly.length; v++) {
           final Offset p1 = poly[v];
           final Offset p2 = poly[(v + 1) % poly.length];
+
+          // Highlight the actively dragged movable wall segment in bright cyan
+          if (activeDraggingWallIndex == v) {
+            canvas.drawLine(
+              p1,
+              p2,
+              Paint()
+                ..color = Colors.cyanAccent
+                ..strokeWidth = 4.5
+                ..strokeCap = StrokeCap.round
+                ..style = PaintingStyle.stroke,
+            );
+          }
           final Offset midPt = Offset((p1.dx + p2.dx) / 2, (p1.dy + p2.dy) / 2);
           final double segMeters = (p2 - p1).distance / ppm;
 
