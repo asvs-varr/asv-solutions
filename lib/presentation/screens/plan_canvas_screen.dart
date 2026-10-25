@@ -75,29 +75,94 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
   int? _selectedPinForTap; // 1=Pin A, 2=Pin B selected for tap-to-target snap
   int? _selectedVertexForTap; // Room corner vertex index selected for tap-to-target snap
 
-  // Exact Scanned CAD Structural Column Centers on 1400x1600 Sheet
-  static const List<double> _cadSnapGridX = [274.8, 514.3, 802.8, 1006.4, 1204.4];
-  static const List<double> _cadSnapGridY = [60.3, 243.3, 454.4, 558.2, 661.9, 865.5, 986.2, 1106.9, 1229.5];
+  // Exact Structural Column Centers (Center ng Poste) & Vital Floor Plan Snap Points
+  // Dynamically populated from blueprint or calibrated to genuine structural posts
+  static const List<Offset> _cadStructuralColumns = [
+    // Top Row (Grid Line 1 - 4000, 4800, 3400, 3300 bays)
+    Offset(355.3, 317.5),
+    Offset(555.2, 317.4),
+    Offset(794.8, 317.4),
+    Offset(964.5, 317.5),
+    Offset(1129.5, 317.4),
+    // Row 2 (Grid Line 2)
+    Offset(355.3, 469.9),
+    Offset(964.4, 469.9),
+    Offset(1129.6, 469.9),
+    // Row 3 (Grid Line 3)
+    Offset(355.2, 644.4),
+    Offset(555.2, 644.4),
+    Offset(794.8, 644.5),
+    Offset(964.6, 644.6),
+    Offset(1129.6, 644.5),
+    // Row 4 (Grid Line 4)
+    Offset(355.3, 732.4),
+    Offset(554.9, 732.5),
+    // Row 5 (Grid Line 5)
+    Offset(794.7, 818.7),
+    Offset(1129.5, 818.8),
+    // Row 6 (Grid Line 6)
+    Offset(794.8, 988.6),
+    Offset(964.5, 988.6),
+    Offset(1129.5, 988.6),
+    // Row 7 (Grid Line 7)
+    Offset(794.7, 1088.5),
+    Offset(964.4, 1088.6),
+    Offset(1129.5, 1088.6),
+    // Row 8 (Grid Line 8)
+    Offset(794.7, 1185.8),
+    Offset(964.4, 1192.4),
+    Offset(1129.5, 1192.3),
+    // Row 9 (Grid Line 9)
+    Offset(964.9, 1291.1),
+    Offset(1129.5, 1290.9),
+  ];
 
-  // Exact CAD Dimension Needles, Witness Ticks & Extension Line Endpoints
+  // Exact CAD Dimension Needles & Extension Line Tick Endpoints
   static const List<Offset> _cadDimensionNeedles = [
     // Top Horizontal Dimension Needles / Ticks (4000, 4800, 3400, 3300, 15500mm lines)
-    Offset(274.8, 17.0), Offset(274.8, 54.7), Offset(274.8, 6.6),
-    Offset(514.3, 17.0), Offset(514.3, 54.7), Offset(514.3, 6.6),
-    Offset(802.8, 17.0), Offset(802.8, 54.7), Offset(802.8, 6.6),
-    Offset(1006.4, 17.0), Offset(1006.4, 54.7), Offset(1006.4, 6.6),
-    Offset(1204.4, 17.0), Offset(1204.4, 54.7), Offset(1204.4, 6.6),
-    // Right Vertical Dimension Needles / Ticks (3050, 3500, 3480, 3400, 2000, 2075, 1975, 19480mm lines)
-    Offset(1265.7, 60.3), Offset(1323.2, 60.3), Offset(1333.6, 60.3),
-    Offset(1265.7, 243.3), Offset(1323.2, 243.3), Offset(1333.6, 243.3),
-    Offset(1265.7, 454.4), Offset(1323.2, 454.4), Offset(1333.6, 454.4),
-    Offset(1265.7, 558.2), Offset(1323.2, 558.2), Offset(1333.6, 558.2),
-    Offset(1265.7, 661.9), Offset(1323.2, 661.9), Offset(1333.6, 661.9),
-    Offset(1265.7, 865.5), Offset(1323.2, 865.5), Offset(1333.6, 865.5),
-    Offset(1265.7, 986.2), Offset(1323.2, 986.2), Offset(1333.6, 986.2),
-    Offset(1265.7, 1106.9), Offset(1323.2, 1106.9), Offset(1333.6, 1106.9),
-    Offset(1265.7, 1229.5), Offset(1323.2, 1229.5), Offset(1333.6, 1229.5),
+    Offset(355.3, 289.2), Offset(355.3, 303.3),
+    Offset(555.2, 289.2), Offset(555.2, 303.3),
+    Offset(794.8, 289.2), Offset(794.8, 303.3),
+    Offset(964.5, 289.2), Offset(964.5, 303.3),
+    Offset(1129.5, 289.2), Offset(1129.5, 303.3),
+    // Right Vertical Dimension Needles / Ticks (3050, 3500, 3480, 3400, etc.)
+    Offset(1185.0, 317.5), Offset(1240.0, 317.5),
+    Offset(1185.0, 469.9), Offset(1240.0, 469.9),
+    Offset(1185.0, 644.5), Offset(1240.0, 644.5),
+    Offset(1185.0, 818.8), Offset(1240.0, 818.8),
+    Offset(1185.0, 988.6), Offset(1240.0, 988.6),
+    Offset(1185.0, 1088.6), Offset(1240.0, 1088.6),
+    Offset(1185.0, 1192.3), Offset(1240.0, 1192.3),
+    Offset(1185.0, 1291.0), Offset(1240.0, 1291.0),
   ];
+
+  // Multi-Step Undo History Stack for Step 1 & Step 3 Polygon Geometry
+  final List<Map<String, List<Offset>>> _polygonUndoHistory = [];
+
+  void _pushUndoState() {
+    final Map<String, List<Offset>> snapshot = {};
+    _roomPolygons.forEach((k, v) {
+      snapshot[k] = List<Offset>.from(v);
+    });
+    _polygonUndoHistory.add(snapshot);
+    if (_polygonUndoHistory.length > 25) {
+      _polygonUndoHistory.removeAt(0);
+    }
+  }
+
+  void _performUndo() {
+    if (_polygonUndoHistory.isEmpty) return;
+    final lastState = _polygonUndoHistory.removeLast();
+    setState(() {
+      _roomPolygons.clear();
+      lastState.forEach((k, v) {
+        _roomPolygons[k] = List<Offset>.from(v);
+      });
+      _selectedVertexForTap = null;
+    });
+    _syncRoomSpacesFromBoxes(persist: true);
+    HapticFeedback.mediumImpact();
+  }
 
   // Orthogonal Snap & Floor Plan Snap Settings
   bool _isOrthoSnapEnabled = true;
@@ -486,27 +551,12 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
     double minDistance = snapTol;
 
     // 2. Snap to Column Intersections & Exact Column Centers (Center ng Poste)
-    const double colHalfWidth = 10.0;
-    for (final gx in _cadSnapGridX) {
-      for (final gy in _cadSnapGridY) {
-        // Exact column center
-        final colCenter = Offset(gx, gy);
-        final distCenter = (pos - colCenter).distance;
-        if (distCenter <= minDistance) {
-          minDistance = distCenter;
-          nearestSnap = colCenter;
-        }
-        // Column corners / offset edges
-        for (final ox in [-colHalfWidth, colHalfWidth]) {
-          for (final oy in [-colHalfWidth, colHalfWidth]) {
-            final colCorner = Offset(gx + ox, gy + oy);
-            final distCorner = (pos - colCorner).distance;
-            if (distCorner <= minDistance) {
-              minDistance = distCorner;
-              nearestSnap = colCorner;
-            }
-          }
-        }
+    const double colTolerance = 24.0;
+    for (final colCenter in _cadStructuralColumns) {
+      final distCenter = (pos - colCenter).distance;
+      if (distCenter <= colTolerance && distCenter < minDistance) {
+        minDistance = distCenter;
+        nearestSnap = colCenter;
       }
     }
 
@@ -519,24 +569,17 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
       }
     }
 
-    // 4. Snap to Wall Midpoints / Edges between consecutive columns
-    for (final gy in _cadSnapGridY) {
-      for (int i = 0; i < _cadSnapGridX.length - 1; i++) {
-        final midCol = Offset((_cadSnapGridX[i] + _cadSnapGridX[i + 1]) / 2.0, gy);
-        final dist = (pos - midCol).distance;
-        if (dist <= minDistance) {
-          minDistance = dist;
-          nearestSnap = midCol;
-        }
-      }
-    }
-    for (final gx in _cadSnapGridX) {
-      for (int j = 0; j < _cadSnapGridY.length - 1; j++) {
-        final midRow = Offset(gx, (_cadSnapGridY[j] + _cadSnapGridY[j + 1]) / 2.0);
-        final dist = (pos - midRow).distance;
-        if (dist <= minDistance) {
-          minDistance = dist;
-          nearestSnap = midRow;
+    // 4. Snap to Confirmed Room Corners (Adjacent Room Sharing)
+    final spaces = widget.project?.spaces ?? [];
+    for (int i = 0; i < spaces.length; i++) {
+      if (i == _selectedRoomIndex) continue;
+      final otherPoly = _roomPolygons[spaces[i].id];
+      if (otherPoly == null) continue;
+      for (final v in otherPoly) {
+        final distV = (pos - v).distance;
+        if (distV <= snapTol && distV < minDistance) {
+          minDistance = distV;
+          nearestSnap = v;
         }
       }
     }
@@ -556,21 +599,18 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
     return pos;
   }
 
-  /// Locates the nearest structural column center, dimension needle, or column grid intersection
-  /// for tap-to-target snapping (Center ng Poste / Ticks / Intersections)
+  /// Locates the nearest structural column center, dimension needle, or confirmed room corner
+  /// for tap-to-target snapping (Center ng Poste / Ticks / Room Corners)
   Offset? _findNearestTargetSnapPoint(Offset tapPos, {double maxDistance = 50.0}) {
     Offset? nearest;
     double minD = maxDistance;
 
     // 1. Check exact structural column centers (Center ng Poste)
-    for (final gx in _cadSnapGridX) {
-      for (final gy in _cadSnapGridY) {
-        final colCenter = Offset(gx, gy);
-        final d = (tapPos - colCenter).distance;
-        if (d <= minD) {
-          minD = d;
-          nearest = colCenter;
-        }
+    for (final colCenter in _cadStructuralColumns) {
+      final d = (tapPos - colCenter).distance;
+      if (d <= minD) {
+        minD = d;
+        nearest = colCenter;
       }
     }
 
@@ -583,24 +623,17 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
       }
     }
 
-    // 3. Check column midpoints / wall grid intersections
-    for (final gy in _cadSnapGridY) {
-      for (int i = 0; i < _cadSnapGridX.length - 1; i++) {
-        final midCol = Offset((_cadSnapGridX[i] + _cadSnapGridX[i + 1]) / 2.0, gy);
-        final d = (tapPos - midCol).distance;
+    // 3. Check corners of other confirmed rooms (shared wall corners)
+    final spaces = widget.project?.spaces ?? [];
+    for (int i = 0; i < spaces.length; i++) {
+      if (i == _selectedRoomIndex) continue;
+      final otherPoly = _roomPolygons[spaces[i].id];
+      if (otherPoly == null) continue;
+      for (final v in otherPoly) {
+        final d = (tapPos - v).distance;
         if (d <= minD) {
           minD = d;
-          nearest = midCol;
-        }
-      }
-    }
-    for (final gx in _cadSnapGridX) {
-      for (int j = 0; j < _cadSnapGridY.length - 1; j++) {
-        final midRow = Offset(gx, (_cadSnapGridY[j] + _cadSnapGridY[j + 1]) / 2.0);
-        final d = (tapPos - midRow).distance;
-        if (d <= minD) {
-          minD = d;
-          nearest = midRow;
+          nearest = v;
         }
       }
     }
@@ -678,27 +711,12 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
     _isPerpendicularCornerSnapped = isCornerPerpendicular;
     _perpendicularSnapCornerPos = isCornerPerpendicular ? Offset(sx, sy) : null;
 
-    // 3. Snap to Column Intersections & Wall Midpoints / Grid lines
+    // 3. Snap to Structural Columns, Dimension Needles, & Shared Corners
     final featSnapped = _snapToFloorPlanFeatures(Offset(sx, sy), snapTol: snapTol);
     if ((featSnapped - Offset(sx, sy)).distance <= snapTol) {
       sx = featSnapped.dx;
       sy = featSnapped.dy;
       snapTarget = featSnapped;
-    } else {
-      for (final gx in _cadSnapGridX) {
-        if ((sx - gx).abs() <= snapTol) {
-          sx = gx;
-          snapTarget = Offset(sx, sy);
-          break;
-        }
-      }
-      for (final gy in _cadSnapGridY) {
-        if ((sy - gy).abs() <= snapTol) {
-          sy = gy;
-          snapTarget = Offset(sx, sy);
-          break;
-        }
-      }
     }
 
     if (snapTarget != null) {
@@ -1550,6 +1568,7 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
         // 1. Check Corner Vertices (●) of the active room polygon
         for (int v = 0; v < poly.length; v++) {
           if ((poly[v] - tapPos).distance <= 28.0) {
+            _pushUndoState();
             setState(() {
               _activeDraggingVertexIndex = v;
               _activeDraggingRoomCorner = null;
@@ -1565,6 +1584,7 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
           final p2 = poly[(v + 1) % poly.length];
           final midPt = Offset((p1.dx + p2.dx) / 2, (p1.dy + p2.dy) / 2);
           if ((midPt - tapPos).distance <= 24.0) {
+            _pushUndoState();
             setState(() {
               poly.insert(v + 1, midPt);
               _roomPolygons[sp.id] = poly;
@@ -1582,6 +1602,7 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
           final p1 = poly[v];
           final p2 = poly[(v + 1) % poly.length];
           if (_distanceToSegment(tapPos, p1, p2) <= 18.0) {
+            _pushUndoState();
             setState(() {
               _activeDraggingWallIndex = v;
               _activeDraggingVertexIndex = null;
@@ -1596,6 +1617,7 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
 
         // 4. Check if dragging inside the active room polygon (whole-polygon move)
         if (_isPointInPolygon(tapPos, poly)) {
+          _pushUndoState();
           setState(() {
             _activeDraggingVertexIndex = null;
             _activeDraggingRoomCorner = 4;
@@ -2066,6 +2088,7 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
         if (_selectedVertexForTap != null && _selectedVertexForTap! < poly.length) {
           final targetSnap = _findNearestTargetSnapPoint(tapPos, maxDistance: 45.0);
           if (targetSnap != null) {
+            _pushUndoState();
             setState(() {
               poly[_selectedVertexForTap!] = targetSnap;
               _roomPolygons[sp.id] = poly;
@@ -2901,19 +2924,24 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
-                          if (poly.length > 3)
+                          if (_polygonUndoHistory.isNotEmpty || poly.length > 3)
                             GestureDetector(
                               onTap: () {
-                                setState(() {
-                                  poly.removeLast();
-                                  _roomPolygons[activeSp.id] = List<Offset>.from(poly);
-                                  _syncRoomSpacesFromBoxes(persist: true);
-                                });
+                                if (_polygonUndoHistory.isNotEmpty) {
+                                  _performUndo();
+                                } else if (poly.length > 3) {
+                                  _pushUndoState();
+                                  setState(() {
+                                    poly.removeLast();
+                                    _roomPolygons[activeSp.id] = List<Offset>.from(poly);
+                                    _syncRoomSpacesFromBoxes(persist: true);
+                                  });
+                                }
                               },
                               child: const Padding(
                                 padding: EdgeInsets.only(left: 6),
                                 child: Text(
-                                  '↩️ Undo Pt',
+                                  '↩️ Undo',
                                   style: TextStyle(color: Colors.orangeAccent, fontSize: 10.5, fontWeight: FontWeight.bold),
                                 ),
                               ),
@@ -4169,13 +4197,11 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
     double topWall = 42.0;
     double bottomWall = 742.0;
 
-    for (final gx in _cadSnapGridX) {
-      if (gx <= tapPos.dx && gx > leftWall) leftWall = gx;
-      if (gx > tapPos.dx && gx < rightWall) rightWall = gx;
-    }
-    for (final gy in _cadSnapGridY) {
-      if (gy <= tapPos.dy && gy > topWall) topWall = gy;
-      if (gy > tapPos.dy && gy < bottomWall) bottomWall = gy;
+    for (final col in _cadStructuralColumns) {
+      if (col.dx <= tapPos.dx && col.dx > leftWall) leftWall = col.dx;
+      if (col.dx > tapPos.dx && col.dx < rightWall) rightWall = col.dx;
+      if (col.dy <= tapPos.dy && col.dy > topWall) topWall = col.dy;
+      if (col.dy > tapPos.dy && col.dy < bottomWall) bottomWall = col.dy;
     }
     if ((rightWall - leftWall) < 60.0) rightWall = (leftWall + 148.0).clamp(100.0, _cadCanvasWidth - 40.0);
     if ((bottomWall - topWall) < 60.0) bottomWall = (topWall + 130.0).clamp(100.0, _cadCanvasHeight - 40.0);
@@ -5745,19 +5771,17 @@ class CanvasPainter extends CustomPainter {
       ..color = Colors.cyanAccent.withValues(alpha: 0.8)
       ..strokeWidth = 1.0;
 
-    for (final gx in _PlanCanvasScreenState._cadSnapGridX) {
-      for (final gy in _PlanCanvasScreenState._cadSnapGridY) {
-        final pt = Offset(gx, gy);
-        // Outer halo ring
-        canvas.drawCircle(pt, 12.0, colOuterPaint);
-        // Inner crisp target ring
-        canvas.drawCircle(pt, 6.0, colInnerPaint);
-        // Micro center dot
-        canvas.drawCircle(pt, 2.0, colCenterPaint);
-        // Reticle ticks
-        canvas.drawLine(pt + const Offset(-crossArm, 0), pt + const Offset(crossArm, 0), crossPaint);
-        canvas.drawLine(pt + const Offset(0, -crossArm), pt + const Offset(0, crossArm), crossPaint);
-      }
+    // 1. Exact Column Centers (Center ng Poste) — Halo Rings + Target Reticle
+    for (final pt in _PlanCanvasScreenState._cadStructuralColumns) {
+      // Outer halo ring
+      canvas.drawCircle(pt, 12.0, colOuterPaint);
+      // Inner crisp target ring
+      canvas.drawCircle(pt, 6.0, colInnerPaint);
+      // Micro center dot
+      canvas.drawCircle(pt, 2.0, colCenterPaint);
+      // Reticle ticks
+      canvas.drawLine(pt + const Offset(-crossArm, 0), pt + const Offset(crossArm, 0), crossPaint);
+      canvas.drawLine(pt + const Offset(0, -crossArm), pt + const Offset(0, crossArm), crossPaint);
     }
 
     // 2. Dimension Needle Ticks — Crisp Diamond / Diamond Rings
