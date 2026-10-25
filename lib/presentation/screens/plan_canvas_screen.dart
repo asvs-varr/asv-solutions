@@ -72,6 +72,8 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
   int _selectedRoomIndex = 0;
   int? _activeDraggingRoomCorner; // 0=TL, 1=TR, 2=BR, 3=BL, 4=CenterMove
   int? _activeDraggingVertexIndex; // Active polygon vertex index being dragged in Step 1
+  int? _selectedPinForTap; // 1=Pin A, 2=Pin B selected for tap-to-target snap
+  int? _selectedVertexForTap; // Room corner vertex index selected for tap-to-target snap
 
   // Exact Scanned CAD Structural Column Centers on 1400x1600 Sheet
   static const List<double> _cadSnapGridX = [274.8, 514.3, 802.8, 1006.4, 1204.4];
@@ -552,6 +554,58 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
     }
 
     return pos;
+  }
+
+  /// Locates the nearest structural column center, dimension needle, or column grid intersection
+  /// for tap-to-target snapping (Center ng Poste / Ticks / Intersections)
+  Offset? _findNearestTargetSnapPoint(Offset tapPos, {double maxDistance = 50.0}) {
+    Offset? nearest;
+    double minD = maxDistance;
+
+    // 1. Check exact structural column centers (Center ng Poste)
+    for (final gx in _cadSnapGridX) {
+      for (final gy in _cadSnapGridY) {
+        final colCenter = Offset(gx, gy);
+        final d = (tapPos - colCenter).distance;
+        if (d <= minD) {
+          minD = d;
+          nearest = colCenter;
+        }
+      }
+    }
+
+    // 2. Check dimension needles & witness ticks
+    for (final needle in _cadDimensionNeedles) {
+      final d = (tapPos - needle).distance;
+      if (d <= minD) {
+        minD = d;
+        nearest = needle;
+      }
+    }
+
+    // 3. Check column midpoints / wall grid intersections
+    for (final gy in _cadSnapGridY) {
+      for (int i = 0; i < _cadSnapGridX.length - 1; i++) {
+        final midCol = Offset((_cadSnapGridX[i] + _cadSnapGridX[i + 1]) / 2.0, gy);
+        final d = (tapPos - midCol).distance;
+        if (d <= minD) {
+          minD = d;
+          nearest = midCol;
+        }
+      }
+    }
+    for (final gx in _cadSnapGridX) {
+      for (int j = 0; j < _cadSnapGridY.length - 1; j++) {
+        final midRow = Offset(gx, (_cadSnapGridY[j] + _cadSnapGridY[j + 1]) / 2.0);
+        final d = (tapPos - midRow).distance;
+        if (d <= minD) {
+          minD = d;
+          nearest = midRow;
+        }
+      }
+    }
+
+    return nearest;
   }
 
   /// Magnetic Wall & Corner Snapping for Step 1 Polygon Vertices
@@ -1950,11 +2004,52 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
   void _handleCanvasTap(TapUpDetails details) {
     final tapPos = details.localPosition;
     if (_canvasStage == 1) {
-      // Step 0: Tapping Pin A, Pin B, or the midpoint length badge opens the Scale + Wall Thickness dialog
+      // Step 0: Reference Scale Calibration (Pin A & Pin B)
       if (_stage1SubStep == 0) {
+        // 1. If a pin is already selected, tapping a snap target teleports the pin directly to it!
+        if (_selectedPinForTap != null) {
+          final targetSnap = _findNearestTargetSnapPoint(tapPos, maxDistance: 45.0);
+          if (targetSnap != null) {
+            setState(() {
+              if (_selectedPinForTap == 1) {
+                _pinA = targetSnap;
+              } else if (_selectedPinForTap == 2) {
+                _pinB = targetSnap;
+              }
+              _selectedPinForTap = null;
+            });
+            HapticFeedback.selectionClick();
+            return;
+          }
+        }
+
+        // 2. Tapping Pin A or Pin B directly toggles selection for tap-to-snap!
+        if ((_pinA - tapPos).distance <= 32.0) {
+          setState(() {
+            _selectedPinForTap = (_selectedPinForTap == 1) ? null : 1;
+            _selectedVertexForTap = null;
+          });
+          HapticFeedback.selectionClick();
+          return;
+        } else if ((_pinB - tapPos).distance <= 32.0) {
+          setState(() {
+            _selectedPinForTap = (_selectedPinForTap == 2) ? null : 2;
+            _selectedVertexForTap = null;
+          });
+          HapticFeedback.selectionClick();
+          return;
+        }
+
+        // 3. Tapping the midpoint length badge opens the Scale + Wall Thickness dialog
         final mid = Offset((_pinA.dx + _pinB.dx) / 2, (_pinA.dy + _pinB.dy) / 2);
-        if ((mid - tapPos).distance <= 44.0 || (_pinA - tapPos).distance <= 32.0 || (_pinB - tapPos).distance <= 32.0) {
+        if ((mid - tapPos).distance <= 44.0) {
           _showCalibrationDialog();
+          return;
+        }
+
+        // 4. Tapping empty space clears pin selection
+        if (_selectedPinForTap != null) {
+          setState(() => _selectedPinForTap = null);
         }
         return;
       }
@@ -1967,7 +2062,34 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
         final sp = spaces[idx];
         final poly = List<Offset>.from(_roomPolygons[sp.id] ?? _defaultCadPolygonForRoom(sp.name, idx));
 
-        // 1. Check if user tapped a Midpoint (+) Handle or Wall Segment Dimension Badge to insert a point or edit length!
+        // 1. If a corner vertex is selected for tap-to-snap, tapping near a snap point teleports the vertex!
+        if (_selectedVertexForTap != null && _selectedVertexForTap! < poly.length) {
+          final targetSnap = _findNearestTargetSnapPoint(tapPos, maxDistance: 45.0);
+          if (targetSnap != null) {
+            setState(() {
+              poly[_selectedVertexForTap!] = targetSnap;
+              _roomPolygons[sp.id] = poly;
+              _selectedVertexForTap = null;
+            });
+            _syncRoomSpacesFromBoxes(persist: true);
+            HapticFeedback.selectionClick();
+            return;
+          }
+        }
+
+        // 2. Check if user tapped a Corner Vertex (●) to select it for tap-to-target snap
+        for (int v = 0; v < poly.length; v++) {
+          if ((poly[v] - tapPos).distance <= 28.0) {
+            setState(() {
+              _selectedVertexForTap = (_selectedVertexForTap == v) ? null : v;
+              _selectedPinForTap = null;
+            });
+            HapticFeedback.selectionClick();
+            return;
+          }
+        }
+
+        // 3. Check if user tapped a Midpoint (+) Handle or Wall Segment Dimension Badge to insert a point or edit length!
         for (int v = 0; v < poly.length; v++) {
           final p1 = poly[v];
           final p2 = poly[(v + 1) % poly.length];
@@ -1979,11 +2101,16 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
           }
         }
 
-        // 2. Check if user tapped the Center Room Name/Area Badge -> Open Room ID/Name & Ceiling Height dialog
+        // 4. Check if user tapped the Center Room Name/Area Badge -> Open Room ID/Name & Ceiling Height dialog
         final rect = _boundingBoxOfPolygon(poly);
         if ((rect.center - tapPos).distance <= 55.0) {
           _showRenameSelectedRoomDialog();
           return;
+        }
+
+        // 5. Tapping empty canvas clears selected vertex
+        if (_selectedVertexForTap != null) {
+          setState(() => _selectedVertexForTap = null);
         }
         return;
       }
@@ -3273,6 +3400,8 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                                 isPerpendicularCornerSnapped: _isPerpendicularCornerSnapped,
                                 perpendicularSnapCornerPos: _perpendicularSnapCornerPos,
                                 activeSnapPoint: _activeSnapPoint,
+                                selectedPinForTap: _selectedPinForTap,
+                                selectedVertexForTap: _selectedVertexForTap,
                                 pixelsPerMeter: _pixelsPerMeter,
                                 activePolygonPoints: _activePolygonPoints,
                                 calibratedRoomPolygons: _calibratedRoomPolygons,
@@ -4639,6 +4768,8 @@ class CanvasPainter extends CustomPainter {
   final int? activeDraggingVertexIndex;
   final bool isPerpendicularCornerSnapped;
   final Offset? perpendicularSnapCornerPos;
+  final int? selectedPinForTap;
+  final int? selectedVertexForTap;
 
   CanvasPainter({
     required this.points,
@@ -4666,6 +4797,8 @@ class CanvasPainter extends CustomPainter {
     this.activeDraggingVertexIndex,
     this.isPerpendicularCornerSnapped = false,
     this.perpendicularSnapCornerPos,
+    this.selectedPinForTap,
+    this.selectedVertexForTap,
     this.activeSnapPoint,
     this.pixelsPerMeter = 30.0,
     this.activePolygonPoints = const [],
@@ -4869,17 +5002,24 @@ class CanvasPainter extends CustomPainter {
           segTp.paint(canvas, Offset(pillCenter.dx - segTp.width / 2, pillCenter.dy - segTp.height / 2));
         }
 
-        // 3. Draggable Corner Vertices with Perpendicular (90 deg) Snap Feedback
+        // 3. Draggable Corner Vertices with Perpendicular (90 deg) Snap Feedback & Tap Selection
         for (int vi = 0; vi < poly.length; vi++) {
           final cPos = poly[vi];
           final bool isSnappedPerp = isPerpendicularCornerSnapped &&
               (activeDraggingVertexIndex == vi || (perpendicularSnapCornerPos != null && (cPos - perpendicularSnapCornerPos!).distance < 2.0));
+          final bool isVertexSelectedForTap = selectedVertexForTap == vi;
 
-          canvas.drawCircle(cPos, isSnappedPerp ? 12.0 : 10.0, Paint()..color = const Color(0xFF11151E));
+          if (isVertexSelectedForTap) {
+            // Pulsing / Prominent Selection Halo
+            canvas.drawCircle(cPos, 19.0, Paint()..color = Colors.cyanAccent.withValues(alpha: 0.35));
+            canvas.drawCircle(cPos, 14.5, Paint()..color = Colors.cyanAccent..style = PaintingStyle.stroke..strokeWidth = 2.0);
+          }
+
+          canvas.drawCircle(cPos, (isSnappedPerp || isVertexSelectedForTap) ? 12.0 : 10.0, Paint()..color = const Color(0xFF11151E));
           canvas.drawCircle(
             cPos,
-            isSnappedPerp ? 9.5 : 8.2,
-            Paint()..color = isSnappedPerp ? Colors.greenAccent : BanaagTheme.primaryAmber,
+            (isSnappedPerp || isVertexSelectedForTap) ? 9.5 : 8.2,
+            Paint()..color = isSnappedPerp ? Colors.greenAccent : (isVertexSelectedForTap ? Colors.cyanAccent : BanaagTheme.primaryAmber),
           );
           canvas.drawCircle(cPos, 3.0, Paint()..color = Colors.black);
 
@@ -4924,7 +5064,12 @@ class CanvasPainter extends CustomPainter {
           }
         }
 
-        // 4. Active Magnetic Wall Snap Crosshair Indicator
+        // 4. Obvious Snap Target Rings on column centers and needles when vertex is selected or dragged
+        if (selectedVertexForTap != null || activeDraggingVertexIndex != null) {
+          _drawObviousSnapTargetRings(canvas);
+        }
+
+        // 5. Active Magnetic Wall Snap Crosshair Indicator
         if (activeSnapPoint != null) {
           final snapPaint = Paint()
             ..color = Colors.greenAccent
@@ -5550,12 +5695,17 @@ class CanvasPainter extends CustomPainter {
     tp.paint(canvas, Offset(center.dx - (tp.width / 2), center.dy - (tp.height / 2)));
 
     // 3. Pin A (Cyan Crosshair & Target Ring + Magnifier Loupe if dragged)
-    _drawPinTarget(canvas, pinA, 'A', Colors.cyanAccent, isDragging: activeDraggingPin == 1);
+    _drawPinTarget(canvas, pinA, 'A', Colors.cyanAccent, isDragging: activeDraggingPin == 1, isSelected: selectedPinForTap == 1);
 
     // 4. Pin B (Amber Crosshair & Target Ring + Magnifier Loupe if dragged)
-    _drawPinTarget(canvas, pinB, 'B', BanaagTheme.primaryAmber, isDragging: activeDraggingPin == 2);
+    _drawPinTarget(canvas, pinB, 'B', BanaagTheme.primaryAmber, isDragging: activeDraggingPin == 2, isSelected: selectedPinForTap == 2);
 
-    // 5. Magnetic Snap Indicator (Glowing Diamond)
+    // 5. Draw Obvious Snap Target Rings at Column Centers & Needles when a Pin is selected or dragged!
+    if (selectedPinForTap != null || activeDraggingPin != null) {
+      _drawObviousSnapTargetRings(canvas);
+    }
+
+    // 6. Magnetic Snap Indicator (Glowing Diamond)
     if (activeSnapPoint != null) {
       final snapP = Paint()
         ..color = Colors.cyanAccent
@@ -5574,7 +5724,61 @@ class CanvasPainter extends CustomPainter {
     }
   }
 
-  void _drawPinTarget(Canvas canvas, Offset pos, String label, Color color, {bool isDragging = false}) {
+  void _drawObviousSnapTargetRings(Canvas canvas) {
+    // 1. Structural Column Centers (Center ng Poste) — Prominent Emerald / Cyan Double Target Rings
+    final colOuterPaint = Paint()
+      ..color = Colors.cyanAccent.withValues(alpha: 0.35)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.2;
+
+    final colInnerPaint = Paint()
+      ..color = Colors.cyanAccent
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.8;
+
+    final colCenterPaint = Paint()
+      ..color = Colors.cyanAccent
+      ..style = PaintingStyle.fill;
+
+    const double crossArm = 7.0;
+    final crossPaint = Paint()
+      ..color = Colors.cyanAccent.withValues(alpha: 0.8)
+      ..strokeWidth = 1.0;
+
+    for (final gx in _PlanCanvasScreenState._cadSnapGridX) {
+      for (final gy in _PlanCanvasScreenState._cadSnapGridY) {
+        final pt = Offset(gx, gy);
+        // Outer halo ring
+        canvas.drawCircle(pt, 12.0, colOuterPaint);
+        // Inner crisp target ring
+        canvas.drawCircle(pt, 6.0, colInnerPaint);
+        // Micro center dot
+        canvas.drawCircle(pt, 2.0, colCenterPaint);
+        // Reticle ticks
+        canvas.drawLine(pt + const Offset(-crossArm, 0), pt + const Offset(crossArm, 0), crossPaint);
+        canvas.drawLine(pt + const Offset(0, -crossArm), pt + const Offset(0, crossArm), crossPaint);
+      }
+    }
+
+    // 2. Dimension Needle Ticks — Crisp Diamond / Diamond Rings
+    final needlePaint = Paint()
+      ..color = Colors.amberAccent.withValues(alpha: 0.75)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.4;
+
+    for (final nPt in _PlanCanvasScreenState._cadDimensionNeedles) {
+      canvas.drawCircle(nPt, 4.5, needlePaint);
+      canvas.drawCircle(nPt, 1.5, Paint()..color = Colors.amberAccent);
+    }
+  }
+
+  void _drawPinTarget(Canvas canvas, Offset pos, String label, Color color, {bool isDragging = false, bool isSelected = false}) {
+    // 0. If selected for tap-to-target snap, render a pulsing neon selection halo!
+    if (isSelected) {
+      canvas.drawCircle(pos, 28.0, Paint()..color = color.withValues(alpha: 0.28));
+      canvas.drawCircle(pos, 20.0, Paint()..color = color..style = PaintingStyle.stroke..strokeWidth = 2.4);
+    }
+
     // 1. If actively being dragged, render an elevated Precision Loupe Magnifier above the finger!
     if (isDragging) {
       final loupeCenter = Offset(pos.dx, pos.dy - 65.0);
