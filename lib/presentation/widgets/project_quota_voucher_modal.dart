@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../theme/banaag_theme.dart';
 import '../../domain/banaag_auth_service.dart';
+import 'gcash_payment_modal.dart';
 
 class ProjectQuotaVoucherModal extends StatefulWidget {
   final VoidCallback? onTopUpSuccess;
@@ -207,7 +208,7 @@ class _ProjectQuotaVoucherModalState extends State<ProjectQuotaVoucherModal> {
               ),
             ],
             const SizedBox(height: 16),
-            // Contact Admin / GCash Info Card
+            // Contact Admin / GCash Info Card & Direct Upload Button
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
@@ -218,14 +219,36 @@ class _ProjectQuotaVoucherModalState extends State<ProjectQuotaVoucherModal> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
+                  const Text(
                     'Need a ₱50 Project Top-Up Code?',
                     style: TextStyle(color: BanaagTheme.primaryAmber, fontWeight: FontWeight.bold, fontSize: 11),
                   ),
                   const SizedBox(height: 4),
                   const Text(
-                    'GCash ₱50 to 0912-345-6789 (ASV Solutions). Send screenshot to get your instant voucher code.',
+                    'GCash ₱50 to 0976 041 8794 (VINCENT A.). Submit your screenshot receipt for instant verification.',
                     style: TextStyle(color: Color(0xFF94A3B8), fontSize: 10, height: 1.3),
+                  ),
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: const Color(0xFF007DFE),
+                        side: const BorderSide(color: Color(0xFF007DFE)),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                      ),
+                      icon: const Icon(Icons.upload_file, size: 16),
+                      label: const Text('Pay via GCash & Upload Receipt', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                      onPressed: () {
+                        Navigator.of(context).pop();
+                        GcashPaymentModal.show(
+                          context,
+                          packageType: 'TOPUP_50',
+                          onPaymentSuccess: widget.onTopUpSuccess,
+                        );
+                      },
+                    ),
                   ),
                 ],
               ),

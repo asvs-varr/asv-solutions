@@ -15,6 +15,8 @@ import '../widgets/project_management_dialogs.dart';
 import '../widgets/dev_ticket_modal.dart';
 import '../widgets/project_quota_voucher_modal.dart';
 import '../widgets/google_auth_modal.dart';
+import '../widgets/gcash_payment_modal.dart';
+import 'admin_verification_screen.dart';
 import '../../domain/banaag_auth_service.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -32,20 +34,35 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Row(
-          children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: Image.asset(
-                'assets/icon/app_icon.png',
-                width: 32,
-                height: 32,
-                fit: BoxFit.cover,
+        title: InkWell(
+          onLongPress: () {
+            final email = BanaagAuthService.instance.currentUser?.email.toLowerCase() ?? '';
+            if (email == 'vincentjamitoarrogante@gmail.com' || email == 'mr.arvin03@gmail.com') {
+              Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminVerificationScreen()));
+            } else {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('🔒 Master Admin panel is locked to authorized administrators.'),
+                  duration: Duration(seconds: 1),
+                ),
+              );
+            }
+          },
+          child: Row(
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Image.asset(
+                  'assets/icon/app_icon.png',
+                  width: 32,
+                  height: 32,
+                  fit: BoxFit.cover,
+                ),
               ),
-            ),
-            const SizedBox(width: 10),
-            const Text('BANAAG', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1.2)),
-          ],
+              const SizedBox(width: 10),
+              const Text('BANAAG', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1.2)),
+            ],
+          ),
         ),
         actions: [
           IconButton(
@@ -429,7 +446,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       final remaining = (quota['remaining'] as num?)?.toInt() ?? 1;
       if (remaining <= 0) {
         if (!context.mounted) return;
-        ProjectQuotaVoucherModal.show(context, onTopUpSuccess: () {
+        // Prompt GCash Base Pack or Top-Up modal directly
+        GcashPaymentModal.show(context, packageType: 'TOPUP_50', onPaymentSuccess: () {
           _showNewProjectDialog(context);
         });
         return;
