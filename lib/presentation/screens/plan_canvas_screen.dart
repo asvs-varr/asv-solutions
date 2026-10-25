@@ -500,8 +500,8 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
 
   /// Magnetic Wall & Corner Snapping for Step 1 Polygon Vertices
   Offset _snapPolygonVertex(Offset rawPos, List<Offset> activePoly, int activeVertexIdx) {
-    double sx = rawPos.dx.clamp(20.0, 980.0);
-    double sy = rawPos.dy.clamp(20.0, 1200.0);
+    double sx = rawPos.dx.clamp(20.0, _cadCanvasWidth - 20.0);
+    double sy = rawPos.dy.clamp(20.0, _cadCanvasHeight - 20.0);
     Offset? snapTarget;
     const double snapTol = 16.0;
 
@@ -1547,9 +1547,9 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
         double clampDx = 0.0;
         double clampDy = 0.0;
         if (rect.left < 20.0) clampDx = 20.0 - rect.left;
-        if (rect.right > 980.0) clampDx = 980.0 - rect.right;
+        if (rect.right > _cadCanvasWidth - 20.0) clampDx = (_cadCanvasWidth - 20.0) - rect.right;
         if (rect.top < 20.0) clampDy = 20.0 - rect.top;
-        if (rect.bottom > 1200.0) clampDy = 1200.0 - rect.bottom;
+        if (rect.bottom > _cadCanvasHeight - 20.0) clampDy = (_cadCanvasHeight - 20.0) - rect.bottom;
 
         if (clampDx != 0.0 || clampDy != 0.0) {
           for (int i = 0; i < poly.length; i++) {
@@ -1570,8 +1570,8 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
       setState(() {
         final snappedX = (newPos.dx / 4.0).round() * 4.0;
         final snappedY = (newPos.dy / 4.0).round() * 4.0;
-        _draggedPoint!.x = snappedX.clamp(20.0, 980.0);
-        _draggedPoint!.y = snappedY.clamp(20.0, 1200.0);
+        _draggedPoint!.x = snappedX.clamp(20.0, _cadCanvasWidth - 20.0);
+        _draggedPoint!.y = snappedY.clamp(20.0, _cadCanvasHeight - 20.0);
         _recalculateAllRouteLengths();
       });
     }
@@ -3728,8 +3728,8 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                 final Offset unit = Offset(vec.dx / dist, vec.dy / dist);
                 final double targetPx = newLenM * ppm;
                 poly[nextIdx] = Offset(
-                  (p1.dx + unit.dx * targetPx).clamp(20.0, 980.0),
-                  (p1.dy + unit.dy * targetPx).clamp(20.0, 1200.0),
+                  (p1.dx + unit.dx * targetPx).clamp(20.0, _cadCanvasWidth - 20.0),
+                  (p1.dy + unit.dy * targetPx).clamp(20.0, _cadCanvasHeight - 20.0),
                 );
                 setState(() {
                   _roomPolygons[sp.id] = poly;
@@ -3890,8 +3890,8 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
       if (gy <= tapPos.dy && gy > topWall) topWall = gy;
       if (gy > tapPos.dy && gy < bottomWall) bottomWall = gy;
     }
-    if ((rightWall - leftWall) < 60.0) rightWall = (leftWall + 148.0).clamp(100.0, 960.0);
-    if ((bottomWall - topWall) < 60.0) bottomWall = (topWall + 130.0).clamp(100.0, 1180.0);
+    if ((rightWall - leftWall) < 60.0) rightWall = (leftWall + 148.0).clamp(100.0, _cadCanvasWidth - 40.0);
+    if ((bottomWall - topWall) < 60.0) bottomWall = (topWall + 130.0).clamp(100.0, _cadCanvasHeight - 40.0);
 
     final List<Offset> detectedPoly = [
       Offset(leftWall, topWall),
