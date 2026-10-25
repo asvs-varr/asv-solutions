@@ -847,8 +847,32 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
 
     _roomPolygons.clear();
     _roomBoxes.clear();
+    final Set<String> seenIds = {};
     for (int i = 0; i < proj.spaces.length; i++) {
-      final sp = proj.spaces[i];
+      var sp = proj.spaces[i];
+      // Auto-heal duplicate IDs from legacy scans
+      if (seenIds.contains(sp.id) || sp.id == 'sp-scan-') {
+        final uniqueId = 'sp-${DateTime.now().millisecondsSinceEpoch}-$i';
+        sp = RoomSpace(
+          id: uniqueId,
+          name: sp.name,
+          areaSqm: sp.areaSqm,
+          ceilingHeight: sp.ceilingHeight,
+          shapeType: sp.shapeType,
+          cutoutDepth: sp.cutoutDepth,
+          cutoutWidth: sp.cutoutWidth,
+          canvasX: sp.canvasX,
+          canvasY: sp.canvasY,
+          canvasWidth: sp.canvasWidth,
+          canvasHeight: sp.canvasHeight,
+          perimeterMeters: sp.perimeterMeters,
+          rcrValue: sp.rcrValue,
+          polygonVertices: sp.polygonVertices,
+        );
+        proj.spaces[i] = sp;
+      }
+      seenIds.add(sp.id);
+
       List<Offset> poly;
       if (sp.polygonVertices != null && sp.polygonVertices!.length >= 3) {
         poly = sp.polygonVertices!
@@ -888,7 +912,7 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
           for (int i = 0; i < scanResult.rooms.length; i++) {
             final scanned = scanResult.rooms[i];
             final roomSpace = RoomSpace(
-              id: 'sp-scan-',
+              id: 'sp-scan-${DateTime.now().millisecondsSinceEpoch}-$i',
               name: scanned.name,
               areaSqm: scanned.areaSqm > 0 ? scanned.areaSqm : 15.0,
               ceilingHeight: LightingEngine.suggestDefaultCeilingHeight(scanned.name),
@@ -3179,48 +3203,51 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                       ],
                     ),
                     const SizedBox(height: 6),
-                    Row(
-                      children: [
-                        GestureDetector(
-                          onTap: _showSingleRoomEditPickerDialog,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: Colors.cyanAccent.withValues(alpha: 0.16),
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: Colors.cyanAccent),
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          GestureDetector(
+                            onTap: _showSingleRoomEditPickerDialog,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: Colors.cyanAccent.withValues(alpha: 0.16),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(color: Colors.cyanAccent),
+                              ),
+                              child: const Text(
+                                '📐 Edit Room Dimension (1-by-1)',
+                                style: TextStyle(color: Colors.cyanAccent, fontSize: 10.5, fontWeight: FontWeight.bold),
+                              ),
                             ),
+                          ),
+                          const SizedBox(width: 8),
+                          GestureDetector(
+                            onTap: _showMissingSpaceCompletenessDialog,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: Colors.orangeAccent.withValues(alpha: 0.16),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(color: Colors.orangeAccent),
+                              ),
+                              child: Text(
+                                _highlightUnaccountedZones ? '🎯 Tap Unaccounted Zone on Plan' : '⚠️ May Kulang na Space?',
+                                style: const TextStyle(color: Colors.orangeAccent, fontSize: 10.5, fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          GestureDetector(
+                            onTap: () => setState(() => _stage1SubStep = 0),
                             child: const Text(
-                              '📐 Edit Room Dimension (1-by-1)',
-                              style: TextStyle(color: Colors.cyanAccent, fontSize: 10.5, fontWeight: FontWeight.bold),
+                              '📏 Scale',
+                              style: TextStyle(color: Colors.white70, fontSize: 10.5, decoration: TextDecoration.underline),
                             ),
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        GestureDetector(
-                          onTap: _showMissingSpaceCompletenessDialog,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: Colors.orangeAccent.withValues(alpha: 0.16),
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: Colors.orangeAccent),
-                            ),
-                            child: Text(
-                              _highlightUnaccountedZones ? '🎯 Tap Unaccounted Zone on Plan' : '⚠️ May Kulang na Space?',
-                              style: const TextStyle(color: Colors.orangeAccent, fontSize: 10.5, fontWeight: FontWeight.bold),
-                            ),
-                          ),
-                        ),
-                        const Spacer(),
-                        GestureDetector(
-                          onTap: () => setState(() => _stage1SubStep = 0),
-                          child: const Text(
-                            '📏 Scale',
-                            style: TextStyle(color: Colors.white70, fontSize: 10.5, decoration: TextDecoration.underline),
-                          ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ],
                 );

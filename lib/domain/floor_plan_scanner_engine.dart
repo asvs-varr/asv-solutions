@@ -321,7 +321,7 @@ class FloorPlanScannerEngine {
 
         if (!rooms.any((r) => r.name.toLowerCase() == formattedName.toLowerCase())) {
           rooms.add(RoomSpace(
-            id: 'sp-scan-',
+            id: 'sp-scan-${DateTime.now().millisecondsSinceEpoch}-${rooms.length + 1}',
             name: formattedName,
             areaSqm: double.parse(detectedArea.toStringAsFixed(2)),
             ceilingHeight: (matchedKw.contains('function') || matchedKw.contains('hall')) ? 3.2 : 2.7,
