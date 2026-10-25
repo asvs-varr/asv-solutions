@@ -210,6 +210,91 @@ class PaymentRepository {
     }
   }
 
+  /// Fetches all active Pro users with credited slots
+  Future<List<Map<String, dynamic>>> fetchActiveProUsers() async {
+    try {
+      final url = Uri.parse('$_supabaseUrl/rest/v1/project_vouchers?is_redeemed=eq.true&order=redeemed_at.desc');
+      final response = await http.get(
+        url,
+        headers: {
+          'apikey': _anonKey,
+          'Authorization': 'Bearer $_anonKey',
+        },
+      );
+      if (response.statusCode == 200) {
+        final List<dynamic> list = jsonDecode(response.body);
+        // Exclude internal proof submissions, group by user email
+        final activeList = list.where((v) {
+          final code = (v['code'] as String? ?? '');
+          return !code.startsWith('PROOF|') && !code.startsWith('PROOF_V2|');
+        }).toList();
+
+        final Map<String, Map<String, dynamic>> userMap = {};
+        for (var item in activeList) {
+          final email = (item['redeemed_by_email'] as String? ?? '').trim().toLowerCase();
+          if (email.isEmpty) continue;
+          if (!userMap.containsKey(email)) {
+            userMap[email] = {
+              'email': email,
+              'total_slots': 0,
+              'vouchers': <String>[],
+              'last_active': item['redeemed_at'] ?? item['created_at'],
+            };
+          }
+          userMap[email]!['total_slots'] = (userMap[email]!['total_slots'] as int) + 1;
+          (userMap[email]!['vouchers'] as List<String>).add(item['code'] as String? ?? 'SLOT');
+        }
+        return userMap.values.toList();
+      }
+    } catch (_) {}
+    return [];
+  }
+
+  /// Revokes a user's license by deleting or invalidating all active vouchers credited to their email
+  Future<Map<String, dynamic>> revokeUserAccess({required String userEmail}) async {
+    final sanitizedEmail = userEmail.trim().toLowerCase();
+    try {
+      // 1. Invalidate or delete all credited project_vouchers for this email in Supabase
+      final url = Uri.parse('$_supabaseUrl/rest/v1/project_vouchers?redeemed_by_email=eq.$sanitizedEmail');
+      await http.delete(
+        url,
+        headers: {
+          'apikey': _anonKey,
+          'Authorization': 'Bearer $_anonKey',
+        },
+      );
+
+      // 2. Also ensure licensed_buyers status is marked REVOKED if table exists
+      try {
+        final urlLicensed = Uri.parse('$_supabaseUrl/rest/v1/licensed_buyers?email=eq.$sanitizedEmail');
+        await http.patch(
+          urlLicensed,
+          headers: {
+            'apikey': _anonKey,
+            'Authorization': 'Bearer $_anonKey',
+            'Content-Type': 'application/json',
+          },
+          body: jsonEncode({'status': 'REVOKED'}),
+        );
+      } catch (_) {}
+
+      // 3. Update local cache
+      await getSubmissions();
+      _cached.removeWhere((s) => s.email == sanitizedEmail);
+      await _persist();
+
+      return {
+        'success': true,
+        'message': 'Successfully revoked all active slots for $sanitizedEmail.',
+      };
+    } catch (e) {
+      return {
+        'success': false,
+        'message': 'Error revoking user access: $e',
+      };
+    }
+  }
+
   Future<void> _persist() async {
     final prefs = await SharedPreferences.getInstance();
     final list = _cached.map((t) => t.toJson()).toList();
