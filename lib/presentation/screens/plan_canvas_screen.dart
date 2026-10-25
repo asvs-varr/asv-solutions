@@ -337,6 +337,43 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
   static const double _planOriginX = 140.0;
   static const double _planOriginY = 120.0;
 
+  /// Automatically positions Pin A and Pin B onto the primary dimension needles
+  /// or exterior wall corners of the active blueprint, locking calibration to real drawing geometry!
+  void _autoPositionScalePinsToNeedles({bool recomputePpm = false}) {
+    if (_isResidentialPlan) {
+      // 28'-0" (8.534m) Top Dimension Needles of residential plan:
+      _pinA = const Offset(124.0, 125.2);
+      _pinB = const Offset(1093.7, 125.2);
+      if (recomputePpm || (widget.project?.calibrationPixelsPerMeter == null || widget.project!.calibrationPixelsPerMeter! < 50.0)) {
+        // 969.7 px / 8.5344 m = ~113.62 px/m
+        const double resDistMeters = 28.0 * 0.3048; // 8.5344 m
+        _pixelsPerMeter = (_pinA - _pinB).distance / resDistMeters;
+        if (widget.project != null) {
+          widget.project!.calibrationPixelsPerMeter = _pixelsPerMeter;
+        }
+      }
+    } else if (_isCommercialCadPlan) {
+      // 15,500 mm (15.5m) Top Horizontal Dimension Needles of TESDA 3rd floor plan:
+      _pinA = const Offset(355.3, 289.2);
+      _pinB = const Offset(1129.5, 289.2);
+      if (recomputePpm || (widget.project?.calibrationPixelsPerMeter == null || (widget.project!.calibrationPixelsPerMeter! - 44.77).abs() < 1.0)) {
+        // 774.2 px / 15.5 m = 49.95 px/m
+        const double comDistMeters = 15.5;
+        _pixelsPerMeter = (_pinA - _pinB).distance / comDistMeters;
+        if (widget.project != null) {
+          widget.project!.calibrationPixelsPerMeter = _pixelsPerMeter;
+        }
+      }
+    } else {
+      // Generic plan fallback: Search first pair of dimension needles or corners
+      final needles = _activeDimensionNeedles;
+      if (needles.length >= 2) {
+        _pinA = needles[0];
+        _pinB = needles[1];
+      }
+    }
+  }
+
   void _fitSheetToViewport() {
     // Fit unconstrained CAD sheet with comfortable padding around outer dimension callouts
     const double fitScale = 0.26;
@@ -1189,6 +1226,7 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
         widget.project!.spaces.every((s) => s.canvasX != null && s.canvasWidth != null);
 
     _initRoomBoxesAndScale();
+    _autoPositionScalePinsToNeedles();
     _fitSheetToViewport();
 
     // Determine starting stage:
@@ -3029,6 +3067,42 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                             ),
                           ),
                           GestureDetector(
+                            onTap: () {
+                              setState(() {
+                                _autoPositionScalePinsToNeedles(recomputePpm: true);
+                              });
+                              HapticFeedback.selectionClick();
+                              ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  duration: Duration(milliseconds: 1400),
+                                  content: Text('🎯 Scale Pins snapped directly to Drawing Dimension Needles!'),
+                                  backgroundColor: BanaagTheme.primaryAmber,
+                                ),
+                              );
+                            },
+                            child: Container(
+                              margin: const EdgeInsets.only(right: 6),
+                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: BanaagTheme.primaryAmber.withValues(alpha: 0.18),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(color: BanaagTheme.primaryAmber.withValues(alpha: 0.6)),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: const [
+                                  Icon(Icons.gps_fixed, size: 12, color: BanaagTheme.primaryAmber),
+                                  SizedBox(width: 4),
+                                  Text(
+                                    'Auto-Pin',
+                                    style: TextStyle(color: BanaagTheme.primaryAmber, fontSize: 10.5, fontWeight: FontWeight.bold),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          GestureDetector(
                             onTap: _showCalibrationDialog,
                             child: Container(
                               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -4245,6 +4319,18 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                 Wrap(
                   spacing: 6,
                   children: [
+                    ActionChip(
+                      label: const Text('8534 mm (28\'-0")', style: TextStyle(fontSize: 10, color: Colors.cyanAccent)),
+                      onPressed: () => setDlgState(() {
+                        distCtrl.text = isMm ? '8534' : '8.534';
+                      }),
+                    ),
+                    ActionChip(
+                      label: const Text('9754 mm (32\'-0")', style: TextStyle(fontSize: 10, color: Colors.cyanAccent)),
+                      onPressed: () => setDlgState(() {
+                        distCtrl.text = isMm ? '9754' : '9.754';
+                      }),
+                    ),
                     ActionChip(
                       label: const Text('15500 mm (15.5m)', style: TextStyle(fontSize: 10, color: BanaagTheme.primaryAmber)),
                       onPressed: () => setDlgState(() {
