@@ -462,6 +462,7 @@ class Project {
   final DateTime createdAt;
   double? calibrationPixelsPerMeter;
   bool invertBlueprint;
+  bool isCommitted;
 
   Project({
     required this.id,
@@ -481,6 +482,7 @@ class Project {
     this.blueprintImagePath,
     this.calibrationPixelsPerMeter,
     this.invertBlueprint = false,
+    this.isCommitted = false,
     List<RoomSpace>? spaces,
     List<ApplianceItem>? applianceLoads,
     List<CanvasPoint>? canvasPoints,
@@ -523,6 +525,7 @@ class Project {
     'blueprintImagePath': blueprintImagePath,
     'calibrationPixelsPerMeter': calibrationPixelsPerMeter,
     'invertBlueprint': invertBlueprint,
+    'isCommitted': isCommitted,
     'spaces': spaces.map((s) => s.toJson()).toList(),
     'applianceLoads': applianceLoads.map((a) => a.toJson()).toList(),
     'canvasPoints': canvasPoints.map((c) => c.toJson()).toList(),
@@ -556,6 +559,7 @@ class Project {
     blueprintImagePath: json['blueprintImagePath'] as String?,
     calibrationPixelsPerMeter: (json['calibrationPixelsPerMeter'] as num?)?.toDouble(),
     invertBlueprint: json['invertBlueprint'] ?? false,
+    isCommitted: json['isCommitted'] ?? false,
     spaces: (json['spaces'] as List<dynamic>?)
             ?.map((s) => RoomSpace.fromJson(s as Map<String, dynamic>))
             .toList() ??

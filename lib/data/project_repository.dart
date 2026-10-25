@@ -148,6 +148,7 @@ class ProjectRepository {
         contractAmount: 385000.0,
         retentionPercent: 10.0,
         currentPhaseNumber: 4, // Rough-in
+        isCommitted: true,
         phases: p1Phases,
         createdAt: DateTime.now().subtract(const Duration(days: 22)),
       ),
@@ -171,6 +172,7 @@ class ProjectRepository {
         contractAmount: 640000.0,
         retentionPercent: 10.0,
         currentPhaseNumber: 2, // Permitting
+        isCommitted: true,
         phases: p2Phases,
         createdAt: DateTime.now().subtract(const Duration(days: 8)),
       ),

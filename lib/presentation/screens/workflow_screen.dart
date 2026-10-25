@@ -920,6 +920,34 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
   }
 
   Future<void> _openFloorPlanScanner() async {
+    final isSample = _project.id == 'prj-001' || _project.id == 'prj-002';
+    if (isSample || _project.isCommitted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: const Color(0xFFEF4444),
+          behavior: SnackBarBehavior.floating,
+          content: Row(
+            children: [
+              const Icon(Icons.lock, color: Colors.white, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  isSample
+                      ? '🔒 Sample Project: Blueprint replacement is disabled. Create a New Project to import your own floor plan.'
+                      : '🔒 Floor Plan Locked & Committed: Blueprint replacement is permanently disabled for this project.',
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+      if (_project.blueprintImagePath != null && _project.blueprintImagePath!.isNotEmpty) {
+        _launchFloorPlanModal(_project.blueprintImagePath!);
+      }
+      return;
+    }
+
     String? path = _project.blueprintImagePath;
     final hasExisting = path != null && path.isNotEmpty && File(path).existsSync();
 

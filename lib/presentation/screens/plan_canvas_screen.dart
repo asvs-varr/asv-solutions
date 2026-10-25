@@ -4291,12 +4291,64 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                           ),
                           onPressed: () {
                             if (_stage1SubStep == 0) {
-                              setState(() {
-                                _stage1SubStep = 1;
-                                _selectedRoomIndex = 0;
-                                _selectedTool = 'SELECT';
-                                _syncRoomSpacesFromBoxes(persist: true);
-                              });
+                              if (widget.project != null && !widget.project!.isCommitted) {
+                                showDialog<bool>(
+                                  context: context,
+                                  builder: (c) => AlertDialog(
+                                    backgroundColor: const Color(0xFF1E2430),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                    title: const Row(
+                                      children: [
+                                        Icon(Icons.warning_amber_rounded, color: BanaagTheme.primaryAmber, size: 24),
+                                        SizedBox(width: 8),
+                                        Expanded(
+                                          child: Text(
+                                            'Commit Floor Plan & Lock Slot?',
+                                            style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    content: const Text(
+                                      'Please double-check your floor plan and reference scale carefully.\n\nOnce committed, this floor plan will be permanently locked and cannot be replaced or re-uploaded for this project slot.\n\nAre you sure you want to proceed?',
+                                      style: TextStyle(color: Colors.white70, fontSize: 13, height: 1.4),
+                                    ),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () => Navigator.pop(c, false),
+                                        child: const Text('Review Again', style: TextStyle(color: Colors.white60)),
+                                      ),
+                                      ElevatedButton(
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: BanaagTheme.primaryAmber,
+                                          foregroundColor: Colors.black,
+                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                        ),
+                                        onPressed: () => Navigator.pop(c, true),
+                                        child: const Text('Yes, Commit & Proceed', style: TextStyle(fontWeight: FontWeight.bold)),
+                                      ),
+                                    ],
+                                  ),
+                                ).then((committed) {
+                                  if (committed == true && mounted) {
+                                    setState(() {
+                                      widget.project!.isCommitted = true;
+                                      ProjectRepository.instance.updateProject(widget.project!);
+                                      _stage1SubStep = 1;
+                                      _selectedRoomIndex = 0;
+                                      _selectedTool = 'SELECT';
+                                      _syncRoomSpacesFromBoxes(persist: true);
+                                    });
+                                  }
+                                });
+                              } else {
+                                setState(() {
+                                  _stage1SubStep = 1;
+                                  _selectedRoomIndex = 0;
+                                  _selectedTool = 'SELECT';
+                                  _syncRoomSpacesFromBoxes(persist: true);
+                                });
+                              }
                             } else if (_stage1SubStep == 1) {
                               setState(() {
                                 _syncRoomSpacesFromBoxes(persist: true);
@@ -5430,6 +5482,32 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
   }
 
   Future<void> _pickNewUnderlay() async {
+    final isSample = widget.project?.id == 'prj-001' || widget.project?.id == 'prj-002';
+    if (isSample || (widget.project?.isCommitted ?? false)) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: const Color(0xFFEF4444),
+            behavior: SnackBarBehavior.floating,
+            content: Row(
+              children: [
+                const Icon(Icons.lock, color: Colors.white, size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    isSample
+                        ? '🔒 Sample Project: Blueprint replacement is disabled. Create a New Project to import your own floor plan.'
+                        : '🔒 Floor Plan Locked & Committed: Blueprint replacement is permanently disabled for this project.',
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      }
+      return;
+    }
     try {
       final file = await FilePicker.pickFile(
         type: FileType.custom,

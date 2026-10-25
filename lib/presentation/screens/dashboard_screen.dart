@@ -1,3 +1,4 @@
+import '../widgets/confetti_celebration_dialog.dart';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -39,13 +40,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
             final email = BanaagAuthService.instance.currentUser?.email.toLowerCase() ?? '';
             if (email == 'vincentjamitoarrogante@gmail.com' || email == 'mr.arvin03@gmail.com') {
               Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminVerificationScreen()));
-            } else {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('🔒 Master Admin panel is locked to authorized administrators.'),
-                  duration: Duration(seconds: 1),
-                ),
-              );
             }
           },
           child: Row(
@@ -433,7 +427,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       if (bindResult == null || !auth.isAuthenticated) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('⚠️ Kailangang i-bind ang Google Account para makapag-create ng project.'),
+            content: Text('⚠️ Please link your Google Account before creating a project.'),
             backgroundColor: Colors.redAccent,
           ),
         );
@@ -444,24 +438,43 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (auth.isAuthenticated) {
       final quota = await auth.getProjectQuota();
       final isLicensed = quota['isLicensed'] == true;
-      final remaining = (quota['remaining'] as num?)?.toInt() ?? 0;
+      final totalCredits = (quota['total_credits'] as num?)?.toInt() ?? (isLicensed ? 1 : 0);
+      final email = auth.currentUser?.email.toLowerCase() ?? '';
+      final isMasterAdmin = email == 'vincentjamitoarrogante@gmail.com' || email == 'mr.arvin03@gmail.com';
 
-      if (!isLicensed) {
-        if (!context.mounted) return;
-        // Prompt ₱100 Base Pack for unlicensed accounts
-        GcashPaymentModal.show(context, packageType: 'BASE_PACK_100', onPaymentSuccess: () {
-          _showNewProjectDialog(context);
-        });
-        return;
-      }
+      // Count only custom (non-sample) projects
+      final customProjects = repo.allProjects.where((p) => p.id != 'prj-001' && p.id != 'prj-002').toList();
 
-      if (remaining <= 0) {
-        if (!context.mounted) return;
-        // Prompt ₱50 Top-Up for licensed accounts that consumed quota
-        GcashPaymentModal.show(context, packageType: 'TOPUP_50', onPaymentSuccess: () {
-          _showNewProjectDialog(context);
-        });
-        return;
+      if (!isMasterAdmin) {
+        if (!isLicensed) {
+          if (!context.mounted) return;
+          // Prompt ₱100 Base Pack for unlicensed accounts
+          GcashPaymentModal.show(context, packageType: 'BASE_PACK_100', onPaymentSuccess: () {
+            if (context.mounted) {
+              ConfettiCelebrationDialog.show(
+                context,
+                title: 'Pro Contractor Unlocked!',
+                message: 'Your ₱100 Base Pack is active! 1 Complete Project slot is credited to your account.',
+              );
+            }
+          });
+          return;
+        }
+
+        if (customProjects.length >= totalCredits) {
+          if (!context.mounted) return;
+          // Quota consumed: Prompt ₱50 Top-Up per additional project slot
+          GcashPaymentModal.show(context, packageType: 'TOPUP_50', onPaymentSuccess: () {
+            if (context.mounted) {
+              ConfettiCelebrationDialog.show(
+                context,
+                title: 'Slot Added!',
+                message: '₱50 Project Slot credited! You can now create your new project.',
+              );
+            }
+          });
+          return;
+        }
       }
     }
     if (!context.mounted) return;
