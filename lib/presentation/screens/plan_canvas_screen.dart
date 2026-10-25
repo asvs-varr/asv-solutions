@@ -121,13 +121,14 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
 
   // Exact Architectural Non-Column Wall Corners & L-Junctions (Center ng Pader turns)
   static const List<Offset> _cadArchitecturalCorners = [
-    // Stairs Landing intermediate wall turns & corners
-    Offset(703.5, 730.8),
-    Offset(703.5, 1090.7),
-    // Alcove wall turns & corners between Grid 3 and Office (Ticket TKT-1792929351058)
-    Offset(843.0, 638.0),
-    Offset(843.0, 674.5),
-    Offset(794.8, 674.5),
+    // Stairs Landing & Setback Wall 90-degree Turns (Exact Center ng Pader)
+    Offset(554.7, 823.4), // Grid E & Grid 6 Exterior Wall Turn
+    Offset(703.5, 823.4), // Grid 6 & Landing Wall Turn (Top-Left of Landing)
+    Offset(703.5, 1094.8), // Landing Bottom-Left Wall Turn
+    // D2 Office Entrance Alcove Wall Turns (Between Grid F and Office)
+    Offset(870.0, 644.5), // D2 Alcove Top-Right T-Junction at Row 3
+    Offset(870.0, 728.6), // D2 Alcove Bottom-Right 90-deg Corner
+    Offset(794.8, 728.6), // D2 Alcove Bottom-Left 90-deg Turn at Grid F
     // Void / Setback architectural boundary corners
     Offset(355.3, 1088.5),
     Offset(555.2, 1185.8),
@@ -877,7 +878,15 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
       }
     }
 
-    // 2. Orthogonal & Perpendicular Snap: Lock to 0 deg / 90 deg relative to neighboring vertices
+    // 2. Priority Snap to Floor Plan Structural Columns, Wall Corners (Center + Faces), & Needles!
+    final featSnapped = _snapToFloorPlanFeatures(rawPos, snapTol: 24.0);
+    if (_activeSnapPoint != null && (featSnapped - rawPos).distance <= 24.0) {
+      _isPerpendicularCornerSnapped = false;
+      _perpendicularSnapCornerPos = null;
+      return featSnapped;
+    }
+
+    // 3. Orthogonal & Perpendicular Snap: Lock to 0 deg / 90 deg relative to neighboring vertices
     bool isCornerPerpendicular = false;
     if (activePoly.length >= 3) {
       final prevV = activePoly[(activeVertexIdx - 1 + activePoly.length) % activePoly.length];
@@ -890,7 +899,7 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
 
       final double dist1 = (rawPos - cand1).distance;
       final double dist2 = (rawPos - cand2).distance;
-      const double perpSnapTol = 24.0;
+      const double perpSnapTol = 22.0;
 
       if (dist1 <= perpSnapTol || dist2 <= perpSnapTol) {
         final exactPerp = dist1 <= dist2 ? cand1 : cand2;
@@ -904,7 +913,7 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
         final anchor = distPrev <= distNext ? prevV : nextV;
         final double dX = (sx - anchor.dx).abs();
         final double dY = (sy - anchor.dy).abs();
-        if (dX <= 36.0 || dY <= 36.0) {
+        if (dX <= 28.0 || dY <= 28.0) {
           if (dX < dY) {
             sx = anchor.dx; // Vertical lock
           } else {
@@ -922,12 +931,10 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
     _isPerpendicularCornerSnapped = isCornerPerpendicular;
     _perpendicularSnapCornerPos = isCornerPerpendicular ? Offset(sx, sy) : null;
 
-    // 3. Snap to Structural Columns, Dimension Needles, & Shared Corners
-    final featSnapped = _snapToFloorPlanFeatures(Offset(sx, sy), snapTol: snapTol);
-    if ((featSnapped - Offset(sx, sy)).distance <= snapTol) {
-      sx = featSnapped.dx;
-      sy = featSnapped.dy;
-      snapTarget = featSnapped;
+    // 4. Secondary check: If ortho-adjusted position lands near a floor plan feature, snap to exact feature!
+    final postOrthoSnap = _snapToFloorPlanFeatures(Offset(sx, sy), snapTol: 20.0);
+    if (_activeSnapPoint != null && (postOrthoSnap - Offset(sx, sy)).distance <= 20.0) {
+      return postOrthoSnap;
     }
 
     if (snapTarget != null) {
@@ -935,8 +942,10 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
         HapticFeedback.selectionClick();
         _lastHapticSnappedPoint = snapTarget;
       }
+      _activeSnapPoint = snapTarget;
+      return snapTarget;
     }
-    _activeSnapPoint = snapTarget;
+    _activeSnapPoint = null;
     return Offset((sx / 2.0).round() * 2.0, (sy / 2.0).round() * 2.0);
   }
 
@@ -6568,21 +6577,24 @@ class CanvasPainter extends CustomPainter {
       }
     }
 
-    // 1.5 Architectural Non-Column Wall Corners & L-Junctions
+    // 1.5 Architectural Non-Column Wall Corners & L-Junctions — Prominent Target Reticle + Face Dots
     final cornerOuterPaint = Paint()
-      ..color = Colors.tealAccent.withValues(alpha: 0.40)
+      ..color = Colors.cyanAccent.withValues(alpha: 0.45)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.2;
+      ..strokeWidth = 1.3;
     for (final cpt in archCornersToDraw) {
-      canvas.drawCircle(cpt, 9.0, cornerOuterPaint);
-      canvas.drawCircle(cpt, 4.5, colInnerPaint);
-      canvas.drawCircle(cpt, 1.8, colCenterPaint);
+      canvas.drawCircle(cpt, 11.0, cornerOuterPaint);
+      canvas.drawCircle(cpt, 5.5, colInnerPaint);
+      canvas.drawCircle(cpt, 2.0, colCenterPaint);
+      canvas.drawLine(cpt + const Offset(-crossArm, 0), cpt + const Offset(crossArm, 0), crossPaint);
+      canvas.drawLine(cpt + const Offset(0, -crossArm), cpt + const Offset(0, crossArm), crossPaint);
 
       if (showFaceSnaps) {
         for (final ox in [-halfThickPx, halfThickPx]) {
           for (final oy in [-halfThickPx, halfThickPx]) {
             final fPt = Offset(cpt.dx + ox, cpt.dy + oy);
-            canvas.drawCircle(fPt, 2.0, innerFacePaint);
+            canvas.drawCircle(fPt, 2.2, ox < 0 ? innerFacePaint : outerFacePaint);
+            canvas.drawCircle(fPt, 2.2, faceStrokePaint);
           }
         }
       }
