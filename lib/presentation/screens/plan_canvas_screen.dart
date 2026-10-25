@@ -117,6 +117,16 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
     Offset(1129.5, 1290.9),
   ];
 
+  // Exact Architectural Non-Column Wall Corners & L-Junctions (Center ng Pader turns)
+  static const List<Offset> _cadArchitecturalCorners = [
+    // Stairs Landing intermediate wall turns & corners
+    Offset(703.5, 730.8),
+    Offset(703.5, 1090.7),
+    // Void / Setback architectural boundary corners
+    Offset(355.3, 1088.5),
+    Offset(555.2, 1185.8),
+  ];
+
   // Exact CAD Dimension Needles & Extension Line Tick Endpoints
   static const List<Offset> _cadDimensionNeedles = [
     // Top Horizontal Dimension Needles / Ticks (4000, 4800, 3400, 3300, 15500mm lines)
@@ -552,11 +562,46 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
 
     // 2. Snap to Column Intersections & Exact Column Centers (Center ng Poste)
     const double colTolerance = 24.0;
+    final double ppm = _pixelsPerMeter > 5.0 ? _pixelsPerMeter : 44.77;
+    final double wallThickPx = (_wallThicknessMm / 1000.0) * ppm;
+    final double halfThickPx = wallThickPx / 2.0;
+
     for (final colCenter in _cadStructuralColumns) {
+      // 2.1 Centerline of column
       final distCenter = (pos - colCenter).distance;
       if (distCenter <= colTolerance && distCenter < minDistance) {
         minDistance = distCenter;
         nearestSnap = colCenter;
+      }
+      // 2.2 Tri-Snap: Column Face / Edges (Loob at Labas ng Poste)
+      for (final ox in [-halfThickPx, halfThickPx]) {
+        for (final oy in [-halfThickPx, halfThickPx]) {
+          final facePt = Offset(colCenter.dx + ox, colCenter.dy + oy);
+          final distFace = (pos - facePt).distance;
+          if (distFace <= 14.0 && distFace < minDistance) {
+            minDistance = distFace;
+            nearestSnap = facePt;
+          }
+        }
+      }
+    }
+
+    // 2.5 Snap to Architectural Wall Corners & Turns (Tri-Snap: Gitna, Loob, Labas)
+    for (final wCorner in _cadArchitecturalCorners) {
+      final distCorner = (pos - wCorner).distance;
+      if (distCorner <= colTolerance && distCorner < minDistance) {
+        minDistance = distCorner;
+        nearestSnap = wCorner;
+      }
+      for (final ox in [-halfThickPx, halfThickPx]) {
+        for (final oy in [-halfThickPx, halfThickPx]) {
+          final facePt = Offset(wCorner.dx + ox, wCorner.dy + oy);
+          final distFace = (pos - facePt).distance;
+          if (distFace <= 14.0 && distFace < minDistance) {
+            minDistance = distFace;
+            nearestSnap = facePt;
+          }
+        }
       }
     }
 
@@ -605,12 +650,45 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
     Offset? nearest;
     double minD = maxDistance;
 
-    // 1. Check exact structural column centers (Center ng Poste)
+    // 1. Check exact structural column centers (Center ng Poste) and Tri-Snap faces
+    final double ppm = _pixelsPerMeter > 5.0 ? _pixelsPerMeter : 44.77;
+    final double wallThickPx = (_wallThicknessMm / 1000.0) * ppm;
+    final double halfThickPx = wallThickPx / 2.0;
+
     for (final colCenter in _cadStructuralColumns) {
       final d = (tapPos - colCenter).distance;
       if (d <= minD) {
         minD = d;
         nearest = colCenter;
+      }
+      for (final ox in [-halfThickPx, halfThickPx]) {
+        for (final oy in [-halfThickPx, halfThickPx]) {
+          final facePt = Offset(colCenter.dx + ox, colCenter.dy + oy);
+          final fd = (tapPos - facePt).distance;
+          if (fd <= minD) {
+            minD = fd;
+            nearest = facePt;
+          }
+        }
+      }
+    }
+
+    // 1.5 Check architectural wall corners (gitna, loob, labas)
+    for (final wCorner in _cadArchitecturalCorners) {
+      final d = (tapPos - wCorner).distance;
+      if (d <= minD) {
+        minD = d;
+        nearest = wCorner;
+      }
+      for (final ox in [-halfThickPx, halfThickPx]) {
+        for (final oy in [-halfThickPx, halfThickPx]) {
+          final facePt = Offset(wCorner.dx + ox, wCorner.dy + oy);
+          final fd = (tapPos - facePt).distance;
+          if (fd <= minD) {
+            minD = fd;
+            nearest = facePt;
+          }
+        }
       }
     }
 
@@ -3411,6 +3489,10 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                                 roomBoxes: _roomBoxes,
                                 roomPolygons: _roomPolygons,
                                 wallThicknessMm: _wallThicknessMm,
+                                currentZoom: _currentZoom,
+                                activeStructuralColumns: _cadStructuralColumns,
+                                activeArchitecturalCorners: _cadArchitecturalCorners,
+                                activeDimensionNeedles: _cadDimensionNeedles,
                                 highlightUnaccountedZones: _highlightUnaccountedZones,
                                 selectedRoomIndex: _selectedRoomIndex,
                                 isHeatmap: _isHeatmapVisible,
@@ -4797,6 +4879,11 @@ class CanvasPainter extends CustomPainter {
   final int? selectedPinForTap;
   final int? selectedVertexForTap;
 
+  final double currentZoom;
+  final List<Offset> activeStructuralColumns;
+  final List<Offset> activeArchitecturalCorners;
+  final List<Offset> activeDimensionNeedles;
+
   CanvasPainter({
     required this.points,
     required this.routes,
@@ -4807,6 +4894,10 @@ class CanvasPainter extends CustomPainter {
     this.roomBoxes = const {},
     this.roomPolygons = const {},
     this.wallThicknessMm = 150.0,
+    this.currentZoom = 1.0,
+    this.activeStructuralColumns = const [],
+    this.activeArchitecturalCorners = const [],
+    this.activeDimensionNeedles = const [],
     this.highlightUnaccountedZones = false,
     this.selectedRoomIndex = 0,
     this.isHeatmap = false,
@@ -5771,8 +5862,37 @@ class CanvasPainter extends CustomPainter {
       ..color = Colors.cyanAccent.withValues(alpha: 0.8)
       ..strokeWidth = 1.0;
 
+    final columnsToDraw = activeStructuralColumns.isNotEmpty
+        ? activeStructuralColumns
+        : _PlanCanvasScreenState._cadStructuralColumns;
+
+    final archCornersToDraw = activeArchitecturalCorners.isNotEmpty
+        ? activeArchitecturalCorners
+        : _PlanCanvasScreenState._cadArchitecturalCorners;
+
+    final needlesToDraw = activeDimensionNeedles.isNotEmpty
+        ? activeDimensionNeedles
+        : _PlanCanvasScreenState._cadDimensionNeedles;
+
+    final double ppm = pixelsPerMeter > 5.0 ? pixelsPerMeter : 44.77;
+    final double wallThickPx = (wallThicknessMm / 1000.0) * ppm;
+    final double halfThickPx = wallThickPx / 2.0;
+
+    // Paint for Tri-Snap (Inner Face & Outer Face) at Zoom >= 3.0x
+    final bool showFaceSnaps = currentZoom >= 3.0;
+    final innerFacePaint = Paint()
+      ..color = Colors.greenAccent.withValues(alpha: 0.85)
+      ..style = PaintingStyle.fill;
+    final outerFacePaint = Paint()
+      ..color = Colors.lightBlueAccent.withValues(alpha: 0.85)
+      ..style = PaintingStyle.fill;
+    final faceStrokePaint = Paint()
+      ..color = Colors.white70
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 0.8;
+
     // 1. Exact Column Centers (Center ng Poste) — Halo Rings + Target Reticle
-    for (final pt in _PlanCanvasScreenState._cadStructuralColumns) {
+    for (final pt in columnsToDraw) {
       // Outer halo ring
       canvas.drawCircle(pt, 12.0, colOuterPaint);
       // Inner crisp target ring
@@ -5782,6 +5902,37 @@ class CanvasPainter extends CustomPainter {
       // Reticle ticks
       canvas.drawLine(pt + const Offset(-crossArm, 0), pt + const Offset(crossArm, 0), crossPaint);
       canvas.drawLine(pt + const Offset(0, -crossArm), pt + const Offset(0, crossArm), crossPaint);
+
+      // Tri-Snap: When Zoom >= 3.0x, display subtle inner/outer face dots
+      if (showFaceSnaps) {
+        for (final ox in [-halfThickPx, halfThickPx]) {
+          for (final oy in [-halfThickPx, halfThickPx]) {
+            final fPt = Offset(pt.dx + ox, pt.dy + oy);
+            canvas.drawCircle(fPt, 2.2, ox < 0 ? innerFacePaint : outerFacePaint);
+            canvas.drawCircle(fPt, 2.2, faceStrokePaint);
+          }
+        }
+      }
+    }
+
+    // 1.5 Architectural Non-Column Wall Corners & L-Junctions
+    final cornerOuterPaint = Paint()
+      ..color = Colors.tealAccent.withValues(alpha: 0.40)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.2;
+    for (final cpt in archCornersToDraw) {
+      canvas.drawCircle(cpt, 9.0, cornerOuterPaint);
+      canvas.drawCircle(cpt, 4.5, colInnerPaint);
+      canvas.drawCircle(cpt, 1.8, colCenterPaint);
+
+      if (showFaceSnaps) {
+        for (final ox in [-halfThickPx, halfThickPx]) {
+          for (final oy in [-halfThickPx, halfThickPx]) {
+            final fPt = Offset(cpt.dx + ox, cpt.dy + oy);
+            canvas.drawCircle(fPt, 2.0, innerFacePaint);
+          }
+        }
+      }
     }
 
     // 2. Dimension Needle Ticks — Crisp Diamond / Diamond Rings
@@ -5790,7 +5941,7 @@ class CanvasPainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.4;
 
-    for (final nPt in _PlanCanvasScreenState._cadDimensionNeedles) {
+    for (final nPt in needlesToDraw) {
       canvas.drawCircle(nPt, 4.5, needlePaint);
       canvas.drawCircle(nPt, 1.5, Paint()..color = Colors.amberAccent);
     }
