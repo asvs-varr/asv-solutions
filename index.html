@@ -154,6 +154,11 @@
       border-bottom: 1px solid #2e2119;
       padding: 5rem 1.5rem;
     }
+    .plusfocus-showcase {
+      background: radial-gradient(circle at center, #0f1c2e 0%, #0a0c10 70%);
+      border-bottom: 1px solid #1a2a44;
+      padding: 5rem 1.5rem;
+    }
     .showcase-container {
       max-width: 1100px;
       margin: 0 auto;
@@ -161,6 +166,9 @@
       align-items: center;
       gap: 3.5rem;
       flex-wrap: wrap;
+    }
+    .showcase-container.reverse-row {
+      flex-direction: row-reverse;
     }
     .showcase-text { flex: 1; min-width: 320px; }
     .showcase-text .tag {
@@ -174,6 +182,11 @@
       display: inline-block;
       margin-bottom: 1rem;
       letter-spacing: 0.5px;
+    }
+    .showcase-text .tag.cyan-tag {
+      background: rgba(0, 229, 255, 0.15);
+      border: 1px solid var(--primary-cyan);
+      color: var(--primary-cyan);
     }
     .showcase-text h2 {
       font-size: 2.3rem;
@@ -209,6 +222,9 @@
       line-height: 1.4;
       flex-shrink: 0;
     }
+    .feature-icon.cyan-icon {
+      color: #00e5ff;
+    }
 
     .banaag-cta-group {
       display: flex;
@@ -235,6 +251,25 @@
     .btn-download-banaag:hover {
       transform: translateY(-2px);
       box-shadow: 0 0 35px rgba(245, 158, 11, 0.65);
+    }
+    .btn-download-plusfocus {
+      background: linear-gradient(135deg, #00e5ff 0%, #0091ea 100%);
+      color: #000 !important;
+      font-weight: 800;
+      padding: 0.95rem 1.8rem;
+      border-radius: 10px;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      font-size: 1rem;
+      box-shadow: 0 0 25px rgba(0, 229, 255, 0.45);
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .btn-download-plusfocus:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 0 35px rgba(0, 229, 255, 0.65);
     }
     .btn-specs-banaag {
       background: rgba(255, 255, 255, 0.08);
@@ -266,6 +301,10 @@
       border-radius: 24px;
       box-shadow: 0 20px 40px rgba(0,0,0,0.8), 0 0 50px rgba(255, 179, 0, 0.15);
       border: 2px solid #2e2119;
+    }
+    .showcase-img.plusfocus-frame img {
+      box-shadow: 0 20px 40px rgba(0,0,0,0.8), 0 0 50px rgba(0, 229, 255, 0.18);
+      border: 2px solid #1a2a44;
     }
 
     /* Verification Section */
@@ -374,7 +413,7 @@
         width: 100%;
         gap: 12px;
       }
-      .btn-download-banaag, .btn-specs-banaag {
+      .btn-download-banaag, .btn-download-plusfocus, .btn-specs-banaag {
         width: 100%;
         text-align: center;
         box-sizing: border-box;
@@ -484,6 +523,51 @@
 
       <div class="showcase-img">
         <img src="banaag_screen.png" alt="BANAAG Mobile App - Obsidian Theme">
+      </div>
+    </div>
+  </section>
+
+  <!-- Software Showcase: PLUS FOCUS -->
+  <section class="plusfocus-showcase">
+    <div class="showcase-container reverse-row">
+      <div class="showcase-text">
+        <div class="tag cyan-tag">PRODUCTIVITY & ROUTINE ENGINE</div>
+        <h2>PlusFocus: Deep Work & Routine Director</h2>
+        <p>A precision-engineered, time-bound agenda manager designed for zero-distraction deep work, Pomodoro task execution, and automated transition buffering. Built to eliminate cognitive friction with military-grade offline native alarm clocks and full-screen transition modals.</p>
+        
+        <ul class="feature-list">
+          <li>
+            <span class="feature-icon cyan-icon">&#10003;</span>
+            <div><strong>Autonomous Native Clock Alarms</strong>: High-priority full-screen wake alarms that trigger reliably even during Deep Sleep and aggressive OEM battery optimizations.</div>
+          </li>
+          <li>
+            <span class="feature-icon cyan-icon">&#10003;</span>
+            <div><strong>Passing the Baton (Transition Buffers)</strong>: Dedicated countdown modals that smoothly guide mindsets between adjacent deep-work blocks and habit routines.</div>
+          </li>
+          <li>
+            <span class="feature-icon cyan-icon">&#10003;</span>
+            <div><strong>Integrated Focus & Pomodoro Engine</strong>: Customizable intervals with subtask checklists, dynamic time-gap rescheduling, and instant session commitments.</div>
+          </li>
+          <li>
+            <span class="feature-icon cyan-icon">&#10003;</span>
+            <div><strong>Multi-Tier Agenda & Habit Tracking</strong>: Day and continuous timeline views, automated recurring habits, and granular project area categorizations.</div>
+          </li>
+          <li>
+            <span class="feature-icon cyan-icon">&#10003;</span>
+            <div><strong>100% Local-First & Zero Bloat</strong>: Fully functional offline with persistent encrypted storage, zero telemetry tracking, and minimal battery overhead.</div>
+          </li>
+        </ul>
+
+        <div class="banaag-cta-group">
+          <a href="plusfocus.apk" class="btn-download-plusfocus" download>
+            <span>📥</span> Download PlusFocus APK (v1.0.3)
+          </a>
+          <a href="#verification" class="btn-specs-banaag">Privacy & Specifications</a>
+        </div>
+      </div>
+
+      <div class="showcase-img plusfocus-frame">
+        <img src="plusfocus_screen.png" alt="PlusFocus Mobile App - Dark Obsidian Theme">
       </div>
     </div>
   </section>
