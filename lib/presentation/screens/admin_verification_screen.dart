@@ -1,12 +1,14 @@
 // BANAAG Master Admin Verification Screen
-// Dual-Tab Management:
+// Triple-Tab Management:
 // Tab 1: Pending GCash Proofs (Image inspection with 1-tap Approve & Reject)
 // Tab 2: Active Pro Users (Overview of active slots with 1-tap Soft Revoke)
+// Tab 3: User Tickets & Bug Reports (Live feedback & tickets with screenshots)
 
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../theme/banaag_theme.dart';
 import '../../data/payment_repository.dart';
+import '../../data/dev_ticket_repository.dart';
 
 class AdminVerificationScreen extends StatefulWidget {
   const AdminVerificationScreen({super.key});
@@ -17,16 +19,18 @@ class AdminVerificationScreen extends StatefulWidget {
 
 class _AdminVerificationScreenState extends State<AdminVerificationScreen>
     with SingleTickerProviderStateMixin {
-  final _repo = PaymentRepository.instance;
+  final _paymentRepo = PaymentRepository.instance;
+  final _ticketRepo = DevTicketRepository.instance;
   late TabController _tabController;
   bool _isLoading = true;
   List<Map<String, dynamic>> _cloudSubmissions = [];
   List<Map<String, dynamic>> _activeProUsers = [];
+  List<Map<String, dynamic>> _cloudTickets = [];
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
     _loadAll();
   }
 
@@ -38,12 +42,14 @@ class _AdminVerificationScreenState extends State<AdminVerificationScreen>
 
   Future<void> _loadAll() async {
     setState(() => _isLoading = true);
-    final subs = await _repo.fetchCloudSubmissions();
-    final pros = await _repo.fetchActiveProUsers();
+    final subs = await _paymentRepo.fetchCloudSubmissions();
+    final pros = await _paymentRepo.fetchActiveProUsers();
+    final tickets = await _ticketRepo.fetchCloudTickets();
     if (mounted) {
       setState(() {
         _cloudSubmissions = subs;
         _activeProUsers = pros;
+        _cloudTickets = tickets;
         _isLoading = false;
       });
     }
@@ -56,7 +62,7 @@ class _AdminVerificationScreenState extends State<AdminVerificationScreen>
     final userEmail = parts.length > 1 ? parts[1] : (item['redeemed_by_email'] ?? '');
 
     setState(() => _isLoading = true);
-    final res = await _repo.approveSubmission(
+    final res = await _paymentRepo.approveSubmission(
       cloudVoucherId: cloudId,
       userEmail: userEmail,
     );
@@ -79,7 +85,7 @@ class _AdminVerificationScreenState extends State<AdminVerificationScreen>
     final userEmail = parts.length > 1 ? parts[1] : (item['redeemed_by_email'] ?? '');
 
     setState(() => _isLoading = true);
-    await _repo.rejectSubmission(
+    await _paymentRepo.rejectSubmission(
       cloudVoucherId: cloudId,
       userEmail: userEmail,
     );
@@ -89,6 +95,20 @@ class _AdminVerificationScreenState extends State<AdminVerificationScreen>
         const SnackBar(
           content: Text('Payment rejected and submission removed.'),
           backgroundColor: Colors.redAccent,
+        ),
+      );
+      _loadAll();
+    }
+  }
+
+  Future<void> _handleResolveTicket(String cloudId) async {
+    setState(() => _isLoading = true);
+    final ok = await _ticketRepo.resolveCloudTicket(cloudId);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(ok ? 'Ticket marked as resolved!' : 'Failed to update ticket.'),
+          backgroundColor: ok ? const Color(0xFF10B981) : Colors.orangeAccent,
         ),
       );
       _loadAll();
@@ -140,7 +160,7 @@ class _AdminVerificationScreenState extends State<AdminVerificationScreen>
 
     if (confirm == true && mounted) {
       setState(() => _isLoading = true);
-      final res = await _repo.revokeUserAccess(userEmail: email);
+      final res = await _paymentRepo.revokeUserAccess(userEmail: email);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -153,7 +173,7 @@ class _AdminVerificationScreenState extends State<AdminVerificationScreen>
     }
   }
 
-  void _showFullReceipt(BuildContext context, ImageProvider imageProvider, String email) {
+  void _showZoomableImage(BuildContext context, ImageProvider imageProvider, String title) {
     showDialog(
       context: context,
       builder: (_) => Dialog(
@@ -173,7 +193,7 @@ class _AdminVerificationScreenState extends State<AdminVerificationScreen>
                 children: [
                   Expanded(
                     child: Text(
-                      'GCash Receipt: $email',
+                      title,
                       style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -207,6 +227,8 @@ class _AdminVerificationScreenState extends State<AdminVerificationScreen>
 
   @override
   Widget build(BuildContext context) {
+    final openTicketsCount = _cloudTickets.where((t) => t['is_redeemed'] != true).length;
+
     return Scaffold(
       backgroundColor: const Color(0xFF0F1218),
       appBar: AppBar(
@@ -225,24 +247,24 @@ class _AdminVerificationScreenState extends State<AdminVerificationScreen>
           indicatorWeight: 3,
           labelColor: BanaagTheme.primaryAmber,
           unselectedLabelColor: Colors.white60,
-          labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+          labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
           tabs: [
             Tab(
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Text('Pending Proofs'),
+                  const Text('GCash Proofs'),
                   if (_cloudSubmissions.isNotEmpty) ...[
-                    const SizedBox(width: 6),
+                    const SizedBox(width: 4),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
                       decoration: BoxDecoration(
                         color: Colors.orange,
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: Text(
                         '${_cloudSubmissions.length}',
-                        style: const TextStyle(color: Colors.black, fontSize: 10, fontWeight: FontWeight.bold),
+                        style: const TextStyle(color: Colors.black, fontSize: 9, fontWeight: FontWeight.bold),
                       ),
                     ),
                   ],
@@ -253,18 +275,40 @@ class _AdminVerificationScreenState extends State<AdminVerificationScreen>
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Text('Active Pro Users'),
+                  const Text('Active Pro'),
                   if (_activeProUsers.isNotEmpty) ...[
-                    const SizedBox(width: 6),
+                    const SizedBox(width: 4),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
                       decoration: BoxDecoration(
                         color: const Color(0xFF10B981),
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: Text(
                         '${_activeProUsers.length}',
-                        style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                        style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            Tab(
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Text('User Tickets'),
+                  if (openTicketsCount > 0) ...[
+                    const SizedBox(width: 4),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.redAccent,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        '$openTicketsCount',
+                        style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
                       ),
                     ),
                   ],
@@ -281,6 +325,7 @@ class _AdminVerificationScreenState extends State<AdminVerificationScreen>
               children: [
                 _buildPendingProofsTab(),
                 _buildActiveProUsersTab(),
+                _buildUserTicketsTab(),
               ],
             ),
     );
@@ -392,7 +437,7 @@ class _AdminVerificationScreenState extends State<AdminVerificationScreen>
                 const SizedBox(height: 12),
                 if (receiptImage != null)
                   GestureDetector(
-                    onTap: () => _showFullReceipt(context, receiptImage!, email),
+                    onTap: () => _showZoomableImage(context, receiptImage!, 'GCash Receipt: $email'),
                     child: Container(
                       height: 160,
                       width: double.infinity,
@@ -420,21 +465,6 @@ class _AdminVerificationScreenState extends State<AdminVerificationScreen>
                           ),
                         ],
                       ),
-                    ),
-                  )
-                else
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.05),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Row(
-                      children: [
-                        Icon(Icons.info_outline, size: 16, color: Colors.white60),
-                        SizedBox(width: 8),
-                        Text('Screenshot not attached in legacy payload', style: TextStyle(color: Colors.white60, fontSize: 11)),
-                      ],
                     ),
                   ),
                 const SizedBox(height: 14),
@@ -579,6 +609,213 @@ class _AdminVerificationScreenState extends State<AdminVerificationScreen>
                     label: const Text('Revoke Pro License', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                   ),
                 ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildUserTicketsTab() {
+    if (_cloudTickets.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.inbox_outlined, color: Colors.grey.withValues(alpha: 0.5), size: 64),
+            const SizedBox(height: 12),
+            const Text('Zero incoming tickets or bug reports.', style: TextStyle(color: Colors.white70, fontSize: 14)),
+            const SizedBox(height: 4),
+            const Text('Contractor support requests will appear here in real time.', style: TextStyle(color: Colors.grey, fontSize: 12)),
+          ],
+        ),
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: _cloudTickets.length,
+      itemBuilder: (ctx, i) {
+        final ticketRow = _cloudTickets[i];
+        final cloudId = ticketRow['id'] as String;
+        final isResolved = ticketRow['is_redeemed'] == true;
+        final payloadRaw = ticketRow['redeemed_by_email'] as String? ?? '{}';
+        
+        Map<String, dynamic> payload = {};
+        try {
+          payload = jsonDecode(payloadRaw);
+        } catch (_) {}
+
+        final title = payload['title'] as String? ?? 'Support Ticket';
+        final description = payload['description'] as String? ?? '';
+        final type = (payload['type'] as String? ?? 'fix').toUpperCase();
+        final priority = (payload['priority'] as String? ?? 'medium').toUpperCase();
+        final userEmail = payload['userEmail'] as String? ?? 'Anonymous';
+        final projectContext = payload['projectContext'] as String?;
+        final base64Image = payload['image'] as String? ?? '';
+
+        ImageProvider? screenshot;
+        if (base64Image.isNotEmpty) {
+          try {
+            screenshot = MemoryImage(base64Decode(base64Image));
+          } catch (_) {}
+        }
+
+        return Card(
+          color: const Color(0xFF1E2638),
+          margin: const EdgeInsets.only(bottom: 14),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+            side: BorderSide(
+              color: isResolved ? Colors.green.withValues(alpha: 0.3) : const Color(0xFF2A364F),
+            ),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: type == 'BUG'
+                                ? Colors.redAccent.withValues(alpha: 0.2)
+                                : type == 'FEATURE'
+                                    ? Colors.tealAccent.withValues(alpha: 0.2)
+                                    : Colors.orangeAccent.withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            type,
+                            style: TextStyle(
+                              color: type == 'BUG'
+                                  ? Colors.redAccent
+                                  : type == 'FEATURE'
+                                      ? Colors.tealAccent
+                                      : Colors.orangeAccent,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 10,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.white10,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            '$priority PRIORITY',
+                            style: TextStyle(
+                              color: priority == 'HIGH' ? Colors.redAccent : Colors.white70,
+                              fontSize: 9,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    Text(
+                      isResolved ? '✓ RESOLVED' : '⏳ OPEN',
+                      style: TextStyle(
+                        color: isResolved ? const Color(0xFF10B981) : Colors.orangeAccent,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  title,
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
+                ),
+                if (description.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    description,
+                    style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12.5, height: 1.4),
+                  ),
+                ],
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    const Icon(Icons.alternate_email, size: 14, color: BanaagTheme.primaryAmber),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        userEmail,
+                        style: const TextStyle(color: Colors.white70, fontSize: 12),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+                if (projectContext != null && projectContext.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    'Context: $projectContext',
+                    style: const TextStyle(color: Colors.white38, fontSize: 11),
+                  ),
+                ],
+                if (screenshot != null) ...[
+                  const SizedBox(height: 12),
+                  GestureDetector(
+                    onTap: () => _showZoomableImage(context, screenshot!, 'Ticket Screenshot: $title'),
+                    child: Container(
+                      height: 140,
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                        color: Colors.black45,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.white12),
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          Image(image: screenshot, fit: BoxFit.cover, width: double.infinity, height: double.infinity),
+                          Container(
+                            color: Colors.black38,
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.zoom_in, color: Colors.white, size: 16),
+                                SizedBox(width: 4),
+                                Text('Tap to zoom attachment', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+                if (!isResolved) ...[
+                  const SizedBox(height: 14),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 38,
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF10B981),
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                      onPressed: () => _handleResolveTicket(cloudId),
+                      icon: const Icon(Icons.check_circle_outline, size: 16),
+                      label: const Text('Mark as Resolved', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
