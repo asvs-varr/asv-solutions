@@ -13,6 +13,7 @@ import '../../domain/takeoff_engine.dart';
 import '../../domain/institutional_building_presets.dart';
 import '../../domain/bom_excel_exporter.dart';
 import '../../domain/blueprint_pdf_exporter.dart';
+import '../../domain/security_engine.dart';
 import '../../data/project_repository.dart';
 import '../theme/banaag_theme.dart';
 import 'client_needs_analysis_screen.dart';
@@ -912,10 +913,12 @@ class _SingleLineDiagramScreenState extends State<SingleLineDiagramScreen> with 
         routes: widget.project.conduitRoutes,
       );
 
+      final isPro = SecurityEngine.instance.isProEntitled();
       final bytes = BomExcelExporter.generateWorkbook(
         project: widget.project,
         sldData: _sldData,
         takeoff: takeoff,
+        isPro: isPro,
       );
 
       final tempDir = await getTemporaryDirectory();
@@ -957,11 +960,13 @@ class _SingleLineDiagramScreenState extends State<SingleLineDiagramScreen> with 
 
   Future<void> _executeBlueprintPdfExport() async {
     try {
+      final isPro = SecurityEngine.instance.isProEntitled();
       final bytes = await BlueprintPdfExporter.generateBlueprintPdf(
         project: widget.project,
         sldData: _sldData,
         sheetNumber: 'E-1',
         sheetTitle: 'SINGLE-LINE DIAGRAM & SCHEDULE OF LOADS',
+        isPro: isPro,
       );
 
       final tempDir = await getTemporaryDirectory();

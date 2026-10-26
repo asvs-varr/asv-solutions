@@ -4,6 +4,7 @@
 
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class LicenseToken {
   final String userId;
@@ -46,10 +47,29 @@ class SecurityEngine {
   // Root public verification key salt (Obfuscated in AOT binary)
   // In pure production, asymmetric Ed25519 public key is used.
   static const String _banaagSalt = "BANAAG-PH-PEC2017-ZERO-TRUST-SEC-V1";
+  static const String _leaseStorageKey = 'banaag_offline_lease_token_v1';
 
   LicenseToken? _activeToken;
 
   LicenseToken? get activeToken => _activeToken;
+
+  /// Restores saved offline lease from persistent device storage
+  Future<void> initialize() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final jsonStr = prefs.getString(_leaseStorageKey);
+      if (jsonStr != null && jsonStr.isNotEmpty) {
+        final token = LicenseToken.fromJson(jsonDecode(jsonStr));
+        if (verifyToken(token)) {
+          _activeToken = token;
+        } else {
+          _activeToken = null;
+        }
+      }
+    } catch (_) {
+      _activeToken = null;
+    }
+  }
 
   /// Generates a signed 30-day offline lease token
   /// (Simulates server-side generation upon verified Google Play / B2B purchase)
@@ -73,6 +93,11 @@ class SecurityEngine {
       expiresAt: expiresAt,
       signature: signature,
     );
+
+    // Save to persistent storage asynchronously
+    SharedPreferences.getInstance().then((prefs) {
+      prefs.setString(_leaseStorageKey, jsonEncode(_activeToken!.toJson()));
+    }).catchError((_) {});
 
     return _activeToken!;
   }
@@ -99,5 +124,8 @@ class SecurityEngine {
   /// Revokes active license
   void revokeLicense() {
     _activeToken = null;
+    SharedPreferences.getInstance().then((prefs) {
+      prefs.remove(_leaseStorageKey);
+    }).catchError((_) {});
   }
 }

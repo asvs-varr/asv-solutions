@@ -15,6 +15,7 @@ class DxfCadEngine {
     required List<ConduitRoute> routes,
     RoomGeometry? roomGeometry,
     InstitutionalBuildingPreset? preset,
+    bool isPro = false,
   }) {
     final buffer = StringBuffer();
 
@@ -41,7 +42,12 @@ class DxfCadEngine {
     _drawInstitutionalElectricalPlan(buffer, activePreset);
 
     // Draw Professional Title Block
-    _drawTitleBlock(buffer, projectName);
+    _drawTitleBlock(buffer, projectName, isPro: isPro);
+
+    // HRZ-024: Free-Tier CAD Billboard Watermark & Attribution Layers
+    if (!isPro) {
+      _drawPromoWatermark(buffer);
+    }
 
     buffer.writeln('0');
     buffer.writeln('ENDSEC'); // End ENTITIES
@@ -93,6 +99,7 @@ class DxfCadEngine {
     _writeLayerDef(b, 'E-PANL', 1); // Red (MDP, LP-1, LP-2 Panels)
     _writeLayerDef(b, 'E-CIRC', 50); // Amber (Curved Conduit Runs)
     _writeLayerDef(b, 'E-TEXT', 6); // Magenta (Circuit & Room Tags)
+    _writeLayerDef(b, 'BANAAG_PROMO', 50); // Amber/Yellow (Free Tier Billboard Watermark)
 
     b.writeln('0');
     b.writeln('ENDTAB');
@@ -412,7 +419,14 @@ class DxfCadEngine {
   }
 
   /// Professional Engineering Title Block (Border & Seal Box)
-  static void _drawTitleBlock(StringBuffer b, String projectName) {
+  static void _drawPromoWatermark(StringBuffer b) {
+    // Large diagonal watermark banner across CAD drawing model space
+    _writeText(b, 'BANAAG_PROMO', '*** CREATED WITH BANAAG ELECTRICAL CAD (FREE TIER) - AS-BUILT ESTIMATION ONLY ***', 1.0, 9.5, 0.55);
+    _writeText(b, 'BANAAG_PROMO', '*** VISIT BANAAG.PH TO UNLOCK PRO WHITE-LABEL FOR FORMAL PERMIT SUBMISSIONS ***', 1.0, 8.5, 0.45);
+    _writeText(b, 'BANAAG_PROMO', '*** ELECTRICAL DESIGN SUITE - PHILIPPINE ELECTRICAL CODE (PEC 2017 PART 1) ***', 1.0, -0.5, 0.35);
+  }
+
+  static void _drawTitleBlock(StringBuffer b, String projectName, {bool isPro = false}) {
     const double bx = 0.0;
     const double by = -6.0;
     const double bw = 21.6;
@@ -434,7 +448,7 @@ class DxfCadEngine {
     _writeText(b, 'A-WALL', 'DISTRIBUTION: 230V, 1-PHASE, 2-WIRE + GROUND, 60HZ (CANORECO)', bx + 0.5, by + 1.0, 0.26);
 
     // Professional Seal & Sign Block (Right Side)
-    _writeText(b, 'A-WALL', 'DESIGNED & COMPUTED BY: BANAAG AI REE ENGINE', bx + 13.5, by + 4.2, 0.28);
+    _writeText(b, 'A-WALL', isPro ? 'DESIGNED & COMPUTED BY: CONTRACTOR PRO SUITE' : 'DESIGNED BY: BANAAG FREE TIER (banaag.ph)', bx + 13.5, by + 4.2, 0.28);
     _writeText(b, 'A-WALL', 'SEAL: REGISTERED ELECTRICAL ENGINEER (REE)', bx + 13.5, by + 3.4, 0.26);
     _writeText(b, 'A-WALL', 'PRC LICENSE NO.: [FOR REE SEAL & SIGNATURE]', bx + 13.5, by + 2.8, 0.24);
     _writeText(b, 'A-WALL', 'SCALE: 1:100 METRIC (CAD MODEL SPACE 1:1)', bx + 13.5, by + 1.6, 0.28);

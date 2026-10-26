@@ -24,14 +24,7 @@ class _BanaagProScreenState extends State<BanaagProScreen> {
   @override
   void initState() {
     super.initState();
-    // Initialize or restore active cryptographic lease token
-    if (_securityEngine.activeToken == null) {
-      _securityEngine.issueOfflineLease(
-        userId: 'contractor-ph-dev',
-        tier: 'PRO_CONTRACTOR',
-        validityDays: 30,
-      );
-    }
+    // Restore active cryptographic lease token if previously issued/verified
     _isProActive = _securityEngine.isProEntitled();
   }
 

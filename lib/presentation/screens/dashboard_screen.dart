@@ -1,4 +1,3 @@
-import '../widgets/confetti_celebration_dialog.dart';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -16,7 +15,6 @@ import '../widgets/project_management_dialogs.dart';
 import '../widgets/dev_ticket_modal.dart';
 import '../widgets/project_quota_voucher_modal.dart';
 import '../widgets/google_auth_modal.dart';
-import '../widgets/gcash_payment_modal.dart';
 import 'admin_verification_screen.dart';
 import '../../domain/banaag_auth_service.dart';
 
@@ -435,48 +433,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
       }
     }
 
-    if (auth.isAuthenticated) {
-      final quota = await auth.getProjectQuota();
-      final isLicensed = quota['isLicensed'] == true;
-      final totalCredits = (quota['total_credits'] as num?)?.toInt() ?? (isLicensed ? 1 : 0);
-      final email = auth.currentUser?.email.toLowerCase() ?? '';
-      final isMasterAdmin = email == 'vincentjamitoarrogante@gmail.com' || email == 'mr.arvin03@gmail.com';
-
-      // Count only custom (non-sample) projects
-      final customProjects = repo.allProjects.where((p) => p.id != 'prj-001' && p.id != 'prj-002').toList();
-
-      if (!isMasterAdmin) {
-        if (!isLicensed) {
-          if (!context.mounted) return;
-          // Prompt ₱100 Base Pack for unlicensed accounts
-          GcashPaymentModal.show(context, packageType: 'BASE_PACK_100', onPaymentSuccess: () {
-            if (context.mounted) {
-              ConfettiCelebrationDialog.show(
-                context,
-                title: 'Pro Contractor Unlocked!',
-                message: 'Your ₱100 Base Pack is active! 1 Complete Project slot is credited to your account.',
-              );
-            }
-          });
-          return;
-        }
-
-        if (customProjects.length >= totalCredits) {
-          if (!context.mounted) return;
-          // Quota consumed: Prompt ₱50 Top-Up per additional project slot
-          GcashPaymentModal.show(context, packageType: 'TOPUP_50', onPaymentSuccess: () {
-            if (context.mounted) {
-              ConfettiCelebrationDialog.show(
-                context,
-                title: 'Slot Added!',
-                message: '₱50 Project Slot credited! You can now create your new project.',
-              );
-            }
-          });
-          return;
-        }
-      }
-    }
+    // HRZ-024: Free unlimited project creation for all contractors.
+    // Exports on the Free Tier include the BANAAG Billboard Watermark.
+    // Contractors can unlock PRO White-Label anytime to export clean blueprints.
     if (!context.mounted) return;
     final titleController = TextEditingController();
     final clientController = TextEditingController();

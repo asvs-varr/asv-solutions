@@ -12,6 +12,7 @@ import '../../domain/lighting_engine.dart';
 import '../../domain/pec_safety_auditor.dart';
 import '../../domain/sld_engine.dart';
 import '../../domain/dxf_cad_engine.dart';
+import '../../domain/security_engine.dart';
 import '../../domain/floor_plan_scanner_engine.dart';
 import '../../domain/institutional_building_presets.dart';
 import '../../domain/pdf_blueprint_engine.dart';
@@ -2821,12 +2822,14 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                 }
                 try {
                   final preset = InstitutionalBuildingPreset.sanLorenzoRuizCollege();
+                  final isPro = SecurityEngine.instance.isProEntitled();
                   final dxfString = DxfCadEngine.generateDxf(
                     projectName: widget.project?.title ?? 'Takeoff Electrical Plan',
                     points: _points,
                     routes: _routes,
                     roomGeometry: _roomGeometry,
                     preset: preset,
+                    isPro: isPro,
                   );
 
                   final tempDir = await getTemporaryDirectory();

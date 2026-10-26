@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 // BANAAG Core Domain: Professional Blueprint Vector PDF Generator (Sheet E-1)
 // Generates standard 20"x30" or ISO A1 Blueprint PDF with Title Block, PEE Seal Box,
 // Full-Width Schedule of Loads, 1:1 Vector CAD SLD Schematic (Vertical Riser matching Phone screen),
@@ -29,6 +30,7 @@ class BlueprintPdfExporter {
     required SingleLineDiagramData sldData,
     String sheetNumber = 'E-1',
     String sheetTitle = 'SINGLE LINE DIAGRAM & SCHEDULE OF LOADS',
+    bool isPro = false,
   }) async {
     final pdf = pw.Document(
       title: '${project.title} - Electrical Sheet $sheetNumber',
@@ -44,7 +46,7 @@ class BlueprintPdfExporter {
         pageFormat: pageFormat,
         orientation: pw.PageOrientation.landscape,
         build: (pw.Context context) {
-          return pw.Container(
+          final content = pw.Container(
             decoration: pw.BoxDecoration(
               color: cadWhite,
               border: pw.Border.all(color: cadBlack, width: 3.0),
@@ -226,10 +228,59 @@ class BlueprintPdfExporter {
                 // -------------------------------------------------------------
                 pw.Expanded(
                   flex: 18,
-                  child: _buildTitleBlock(project, sldData, sheetNumber, sheetTitle),
+                  child: _buildTitleBlock(project, sldData, sheetNumber, sheetTitle, isPro: isPro),
                 ),
               ],
             ),
+          );
+
+          if (isPro) {
+            return content;
+          }
+
+          // HRZ-024: Billboard Watermark for Free Tier Exports
+          return pw.Stack(
+            children: [
+              content,
+              pw.Positioned.fill(
+                child: pw.Center(
+                  child: pw.Transform.rotateBox(
+                    angle: -math.pi / 7,
+                    child: pw.Column(
+                      mainAxisSize: pw.MainAxisSize.min,
+                      children: [
+                        pw.Text(
+                          'CREATED WITH BANAAG ELECTRICAL CAD',
+                          style: pw.TextStyle(
+                            fontSize: 78,
+                            fontWeight: pw.FontWeight.bold,
+                            color: const PdfColor(0.85, 0.47, 0.02, 0.16),
+                          ),
+                        ),
+                        pw.SizedBox(height: 16),
+                        pw.Text(
+                          'FREE TIER - FOR REVIEW & AS-BUILT ESTIMATION ONLY',
+                          style: pw.TextStyle(
+                            fontSize: 34,
+                            fontWeight: pw.FontWeight.bold,
+                            color: const PdfColor(0.2, 0.2, 0.2, 0.18),
+                          ),
+                        ),
+                        pw.SizedBox(height: 10),
+                        pw.Text(
+                          'UPGRADE TO PRO WHITE-LABEL AT BANAAG.PH TO REMOVE WATERMARK',
+                          style: pw.TextStyle(
+                            fontSize: 24,
+                            fontWeight: pw.FontWeight.bold,
+                            color: const PdfColor(0.85, 0.47, 0.02, 0.20),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
           );
         },
       ),
@@ -1054,8 +1105,9 @@ class BlueprintPdfExporter {
     Project project,
     SingleLineDiagramData sldData,
     String sheetNumber,
-    String sheetTitle,
-  ) {
+    String sheetTitle, {
+    bool isPro = false,
+  }) {
     return pw.Container(
       decoration: pw.BoxDecoration(
         border: pw.Border.all(color: cadBlack, width: 2.0),
@@ -1115,9 +1167,11 @@ class BlueprintPdfExporter {
           _titleBlockRow('PROJECT:', project.title),
           _titleBlockRow('LOCATION:', project.siteAddress),
           _titleBlockRow('OWNER / CLIENT:', project.clientName),
-          _titleBlockRow('DESIGNER:', 'BANAAG CAD Engine V14'),
+          _titleBlockRow('DESIGNER:', isPro ? 'Contractor Pro Design Suite' : 'BANAAG CAD (Free Tier - banaag.ph)'),
           _titleBlockRow('CHECKED BY:', 'Engr. Roberto Dela Rosa, PEE'),
           _titleBlockRow('DATE / REVISION:', '${DateTime.now().year}-${DateTime.now().month.toString().padLeft(2, '0')}-${DateTime.now().day.toString().padLeft(2, '0')} (REV 0)'),
+          if (!isPro)
+            _titleBlockRow('LICENSE STATUS:', 'FREE WATERMARKED - UNLOCK PRO FOR FORMAL FILING'),
 
           pw.Spacer(),
 

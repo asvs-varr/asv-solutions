@@ -13,6 +13,7 @@ class BomExcelExporter {
     required Project project,
     required SingleLineDiagramData sldData,
     required TakeoffResult takeoff,
+    bool isPro = false,
   }) {
     final excel = Excel.createExcel();
 
@@ -30,7 +31,7 @@ class BomExcelExporter {
       excel.delete(defaultSheet);
     }
 
-    _populateSummarySheet(sheetSummary, project, sldData, takeoff);
+    _populateSummarySheet(sheetSummary, project, sldData, takeoff, isPro: isPro);
 
     // -------------------------------------------------------------
     // TAB 2: SCHEDULE OF LOADS & VOLTAGE DROP
@@ -42,7 +43,7 @@ class BomExcelExporter {
     // TAB 3: BILL OF MATERIALS (BOM) & LABOR ESTIMATE
     // -------------------------------------------------------------
     final sheetBom = excel['Bill of Materials'];
-    _populateBomSheet(sheetBom, takeoff, sldData);
+    _populateBomSheet(sheetBom, takeoff, sldData, isPro: isPro);
 
     final fileBytes = excel.save();
     return Uint8List.fromList(fileBytes ?? []);
@@ -52,11 +53,17 @@ class BomExcelExporter {
     Sheet sheet,
     Project project,
     SingleLineDiagramData sldData,
-    TakeoffResult takeoff,
-  ) {
+    TakeoffResult takeoff, {
+    bool isPro = false,
+  }) {
     // Title Banner
-    sheet.cell(CellIndex.indexByString('A1')).value = TextCellValue('BANAAG ELECTRICAL DESIGN SUITE - EXECUTIVE PROJECT SUMMARY');
-    sheet.cell(CellIndex.indexByString('A2')).value = TextCellValue('Compliant with Philippine Electrical Code (PEC 2017) Part 1');
+    if (isPro) {
+      sheet.cell(CellIndex.indexByString('A1')).value = TextCellValue('CONTRACTOR PRO EXECUTIVE PROJECT SUMMARY');
+      sheet.cell(CellIndex.indexByString('A2')).value = TextCellValue('Compliant with Philippine Electrical Code (PEC 2017) Part 1');
+    } else {
+      sheet.cell(CellIndex.indexByString('A1')).value = TextCellValue('⚡ CREATED WITH BANAAG ELECTRICAL CAD (FREE TIER) - VISIT BANAAG.PH TO UPGRADE ⚡');
+      sheet.cell(CellIndex.indexByString('A2')).value = TextCellValue('Philippine Electrical Code (PEC 2017) Compliant Takeoff • Unofficial Estimation Draft');
+    }
 
     // Project Info
     sheet.cell(CellIndex.indexByString('A4')).value = TextCellValue('Project Title:');
@@ -185,9 +192,14 @@ class BomExcelExporter {
     sheet.cell(CellIndex.indexByColumnRow(columnIndex: 8, rowIndex: rowIndex)).value = TextCellValue(sldData.feeder.conduitDescription);
   }
 
-  static void _populateBomSheet(Sheet sheet, TakeoffResult takeoff, SingleLineDiagramData sldData) {
-    sheet.cell(CellIndex.indexByString('A1')).value = TextCellValue('BILL OF MATERIALS (BOM) & DETAILED COST ESTIMATE');
-    sheet.cell(CellIndex.indexByString('A2')).value = TextCellValue('Accurate Material Breakdown with 3D Vertical Drops & PEC Splice Allowances');
+  static void _populateBomSheet(Sheet sheet, TakeoffResult takeoff, SingleLineDiagramData sldData, {bool isPro = false}) {
+    if (isPro) {
+      sheet.cell(CellIndex.indexByString('A1')).value = TextCellValue('BILL OF MATERIALS (BOM) & DETAILED COST ESTIMATE');
+      sheet.cell(CellIndex.indexByString('A2')).value = TextCellValue('Accurate Material Breakdown with 3D Vertical Drops & PEC Splice Allowances');
+    } else {
+      sheet.cell(CellIndex.indexByString('A1')).value = TextCellValue('⚡ BANAAG FREE TIER ESTIMATION - UPGRADE AT BANAAG.PH FOR PRO WHITE-LABEL ⚡');
+      sheet.cell(CellIndex.indexByString('A2')).value = TextCellValue('Official BOM & Direct Labor Estimate (PH Rates) • Watermarked Draft');
+    }
 
     final headers = [
       'Item No.',
