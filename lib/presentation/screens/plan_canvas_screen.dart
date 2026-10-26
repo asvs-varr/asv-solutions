@@ -1345,24 +1345,10 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
       widget.project!.conduitRoutes = _routes;
       ProjectRepository.instance.updateProject(widget.project!);
     } else {
-      // Manual default: Keep canvas clean with MDP panel placed at central structural wall
-      _points = [
-        CanvasPoint(id: 'pt-panel', type: 'PANEL', label: 'MDP', x: 585.0, y: 535.0, circuitNumber: 0),
-      ];
+      // Manual default: Keep canvas completely clean (Zero auto-spawned devices)
+      // Follows Step 1 Guided Placement workflow: MDP is guided or placed at corridor wall
+      _points = [];
       _routes = [];
-      _points = [
-        CanvasPoint(id: 'pt-1', type: 'PANEL', label: 'MDP', x: 585, y: 535),
-        CanvasPoint(id: 'pt-2', type: 'SWITCH_1G', label: 'S1-1', x: 645, y: 290),
-        CanvasPoint(id: 'pt-3', type: 'LIGHT', label: 'L-1', x: 675, y: 345),
-        CanvasPoint(id: 'pt-4', type: 'OUTLET_DUPLEX', label: 'CO-1', x: 604, y: 355),
-        CanvasPoint(id: 'pt-5', type: 'ACU', label: 'ACU-1', x: 882, y: 435),
-      ];
-      _routes = [
-        ConduitRoute(id: 'rt-1', fromPointId: 'pt-1', toPointId: 'pt-2', measuredLengthMeters: 4.5),
-        ConduitRoute(id: 'rt-2', fromPointId: 'pt-2', toPointId: 'pt-3', measuredLengthMeters: 3.2),
-        ConduitRoute(id: 'rt-3', fromPointId: 'pt-1', toPointId: 'pt-4', measuredLengthMeters: 5.0),
-        ConduitRoute(id: 'rt-4', fromPointId: 'pt-1', toPointId: 'pt-5', measuredLengthMeters: 6.5),
-      ];
     }
     if (_blueprintPath != null && PdfBlueprintEngine.isPdf(_blueprintPath)) {
       _loadPdfBlueprint();
@@ -7325,53 +7311,60 @@ class CanvasPainter extends CustomPainter {
       final bool isPanel = pt.type == 'PANEL';
 
       if (isPanel) {
-        // Standard Philippine / ANSI Architectural CAD Distribution Panelboard Symbol:
-        // Flush/Surface Rectangular Enclosure with Half-Solid Fill & Double Border
-        const double pw = 28.0;
-        const double ph = 14.0;
+        // Official DPWH / PEC 2017 CAD Standard Panelboard Symbol:
+        // Slender Wall-Mounted Enclosure (aspect ratio ~ 3.5:1, e.g. 30 x 9 px)
+        // Solid Black Hatching / Diagonal CAD Hatch with bold NEMA boundary and MDP Callout
+        const double pw = 30.0;
+        const double ph = 9.0;
         final panelRect = Rect.fromCenter(center: Offset(pt.x, pt.y), width: pw, height: ph);
 
         // Selection halo for Panel
         if (isSel) {
           canvas.drawRRect(
-            RRect.fromRectAndRadius(panelRect.inflate(4.0), const Radius.circular(3)),
+            RRect.fromRectAndRadius(panelRect.inflate(5.0), const Radius.circular(3)),
             Paint()
               ..color = BanaagTheme.primaryAmber.withValues(alpha: 0.35)
               ..style = PaintingStyle.fill,
           );
         }
 
-        // 1. Enclosure background (Dark Slate)
+        // 1. Enclosure background (Dark Slate Foundation)
         canvas.drawRect(panelRect, Paint()..color = const Color(0xFF141923));
 
-        // 2. Right half solid fill (Classic CAD Panelboard representation)
-        final halfFillRect = Rect.fromLTWH(panelRect.left + pw / 2, panelRect.top, pw / 2, ph);
-        canvas.drawRect(halfFillRect, Paint()..color = Colors.redAccent);
+        // 2. Solid Hatch Fill (DPWH Standard: Solid Black/Red Filled Rectangle)
+        // Authentic DPWH symbol uses solid filled interior with high contrast
+        final fillPaint = Paint()
+          ..color = isSel ? BanaagTheme.primaryAmber : const Color(0xFFF87171) // Crisp coral red for electrical visibility
+          ..style = PaintingStyle.fill;
+        canvas.drawRect(panelRect.deflate(1.2), fillPaint);
 
-        // 3. Crisp Enclosure Outer Border & Center Divider
+        // 3. Crisp Enclosure Outer Rim & Interior CAD Cross Hatching
         final borderPaint = Paint()
           ..color = isSel ? BanaagTheme.primaryAmber : Colors.white
           ..style = PaintingStyle.stroke
           ..strokeWidth = isSel ? 2.0 : 1.4;
         canvas.drawRect(panelRect, borderPaint);
-        canvas.drawLine(
-          Offset(panelRect.center.dx, panelRect.top),
-          Offset(panelRect.center.dx, panelRect.bottom),
-          borderPaint,
-        );
+
+        // Diagonal CAD slash for authentic architectural blueprint rendering
+        final slashPaint = Paint()
+          ..color = Colors.black.withValues(alpha: 0.6)
+          ..strokeWidth = 1.2
+          ..style = PaintingStyle.stroke;
+        canvas.drawLine(panelRect.topLeft, panelRect.bottomRight, slashPaint);
+        canvas.drawLine(panelRect.bottomLeft, panelRect.topRight, slashPaint);
 
         // 4. Panel Header Tag Label (e.g. "MDP" or "LP-1")
         final panelTagSpan = TextSpan(
           text: pt.label,
           style: TextStyle(
             color: isSel ? BanaagTheme.primaryAmber : Colors.white,
-            fontSize: 9.0,
+            fontSize: 9.5,
             fontWeight: FontWeight.w900,
-            letterSpacing: 0.5,
+            letterSpacing: 0.6,
           ),
         );
         final tagTp = TextPainter(text: panelTagSpan, textDirection: TextDirection.ltr)..layout();
-        tagTp.paint(canvas, Offset(pt.x - tagTp.width / 2, panelRect.top - tagTp.height - 3.0));
+        tagTp.paint(canvas, Offset(pt.x - tagTp.width / 2, panelRect.top - tagTp.height - 3.5));
       } else {
         final double radius = isSel ? 10.5 : 7.5;
         final pointPaint = Paint()..color = getColorForType(pt.type);
