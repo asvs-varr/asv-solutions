@@ -1263,22 +1263,18 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
       setState(() {
         _canvasStage = 3;
         _selectedTool = 'SELECT';
-        // Manual by default: Do NOT auto-populate all rooms globally.
-        // Ensure baseline MDP exists if points are empty.
-        if (_points.isEmpty) {
-          _points = [
-            CanvasPoint(id: 'pt-panel', type: 'PANEL', label: 'MDP', x: 585.0, y: 535.0, circuitNumber: 0),
-          ];
-          _routes = [];
-        }
+        // Bidirectional non-destructive persistence:
+        // Do NOT overwrite or clear existing placed devices! Keep whatever user placed.
         _recalculateAllRouteLengths();
-        widget.project!.canvasPoints = _points;
-        widget.project!.conduitRoutes = _routes;
-        ProjectRepository.instance.updateProject(widget.project!);
-        // Ticket TKT-1793014772146: Auto-focus on Room 1 immediately upon entering canvas!
-        _selectedRoomIndex = 0;
-        if (widget.project!.spaces.isNotEmpty) {
-          _zoomToRoom(0);
+        if (widget.project != null) {
+          widget.project!.canvasPoints = _points;
+          widget.project!.conduitRoutes = _routes;
+          ProjectRepository.instance.updateProject(widget.project!);
+        }
+        // Auto-focus on active room if valid
+        if (widget.project != null && widget.project!.spaces.isNotEmpty) {
+          final safeIdx = _selectedRoomIndex.clamp(0, widget.project!.spaces.length - 1);
+          _zoomToRoom(safeIdx);
         } else {
           _fitSheetToViewport();
         }
@@ -1287,7 +1283,7 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              '⚡ Stage 3 Active: ${_points.length} fixtures placed inside confirmed rooms & 3D wire lengths calculated!',
+              '⚡ Stage 3 Active: ${_points.length} fixtures preserved & updated from Space Loads!',
             ),
             backgroundColor: BanaagTheme.successGreen,
           ),
@@ -2825,6 +2821,24 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
     final spaces = widget.project?.spaces ?? [];
     final safeRoomIdx = _selectedRoomIndex.clamp(0, spaces.isNotEmpty ? spaces.length - 1 : 0);
 
+    // Smart Snapping: If user tapped near a guided spot (within 24px radius), snap exactly to it!
+    Offset placePos = details.localPosition;
+    final guidedSpots = PecPlacementAdvisor.computeGuidedSpots(
+      activeTool: _selectedTool,
+      spaces: spaces,
+      roomPolygons: _roomPolygons,
+      pixelsPerMeter: _pixelsPerMeter,
+      activeRoomIndex: safeRoomIdx,
+    );
+    for (final spot in guidedSpots) {
+      if (spot.isProhibited) continue;
+      if ((spot.position - details.localPosition).distance <= 26.0) {
+        placePos = spot.position;
+        HapticFeedback.mediumImpact();
+        break;
+      }
+    }
+
     // Detect circuit number based on active room's load assignments
     int assignedCkt = 1;
     if (_selectedTool == 'LIGHT' || _selectedTool.startsWith('SWITCH')) {
@@ -2842,8 +2856,8 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
         id: 'pt-$ptIdx-${DateTime.now().millisecondsSinceEpoch}',
         type: _selectedTool,
         label: compactLabel,
-        x: details.localPosition.dx,
-        y: details.localPosition.dy,
+        x: placePos.dx,
+        y: placePos.dy,
         circuitNumber: assignedCkt,
       );
       _points.add(newPt);
@@ -3217,8 +3231,15 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                     title: '① Scale & Rooms',
                     subtitle: 'Blank Plan',
                     isActive: _canvasStage == 1,
-                    isDone: _canvasStage > 1,
+                    isDone: (widget.project?.spaces.isNotEmpty ?? false),
                     onTap: () {
+                      // Seamless Bidirectional Persistence: Save Stage 3 work before navigating to Stage 1
+                      _syncRoomSpacesFromBoxes(persist: true);
+                      if (widget.project != null) {
+                        widget.project!.canvasPoints = _points;
+                        widget.project!.conduitRoutes = _routes;
+                        ProjectRepository.instance.updateProject(widget.project!);
+                      }
                       setState(() {
                         _canvasStage = 1;
                         _selectedTool = 'SELECT';
@@ -3237,7 +3258,16 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                     subtitle: 'PEC Suggest',
                     isActive: false,
                     isDone: (widget.project?.applianceLoads.isNotEmpty ?? false),
-                    onTap: _confirmStage1AndOpenStage2Loads,
+                    onTap: () {
+                      // Seamless Bidirectional Persistence: Save Stage 3 work before opening Stage 2 Loads
+                      _syncRoomSpacesFromBoxes(persist: true);
+                      if (widget.project != null) {
+                        widget.project!.canvasPoints = _points;
+                        widget.project!.conduitRoutes = _routes;
+                        ProjectRepository.instance.updateProject(widget.project!);
+                      }
+                      _confirmStage1AndOpenStage2Loads();
+                    },
                   ),
                 ),
                 const Padding(
@@ -3250,19 +3280,17 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                     title: '③ Wire Takeoff',
                     subtitle: 'Layout & BOM',
                     isActive: _canvasStage == 3,
-                    isDone: false,
+                    isDone: _points.isNotEmpty,
                     onTap: () {
+                      _syncRoomSpacesFromBoxes(persist: true);
                       setState(() {
-                        _syncRoomSpacesFromBoxes(persist: true);
                         _canvasStage = 3;
-                        // Manual by default: preserve current placed points without auto-populating
-                        if (_points.isEmpty) {
-                          _points = [
-                            CanvasPoint(id: 'pt-panel', type: 'PANEL', label: 'MDP', x: 585.0, y: 535.0, circuitNumber: 0),
-                          ];
-                          _routes = [];
-                        }
                         _recalculateAllRouteLengths();
+                        if (widget.project != null) {
+                          widget.project!.canvasPoints = _points;
+                          widget.project!.conduitRoutes = _routes;
+                          ProjectRepository.instance.updateProject(widget.project!);
+                        }
                       });
                     },
                   ),
@@ -4298,6 +4326,14 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                                 pixelsPerMeter: _pixelsPerMeter,
                                 activePolygonPoints: _activePolygonPoints,
                                 calibratedRoomPolygons: _calibratedRoomPolygons,
+                                activeTool: _selectedTool,
+                                guidedSpots: PecPlacementAdvisor.computeGuidedSpots(
+                                  activeTool: _selectedTool,
+                                  spaces: widget.project?.spaces ?? [],
+                                  roomPolygons: _roomPolygons,
+                                  pixelsPerMeter: _pixelsPerMeter,
+                                  activeRoomIndex: _selectedRoomIndex,
+                                ),
                               ),
                             ),
                           ],
@@ -6417,23 +6453,21 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                       ),
                       GestureDetector(
                         onTap: () {
-                          final tappedRoom = activeRoom;
                           HapticFeedback.heavyImpact();
-                          final poly = _roomPolygons[tappedRoom.id] ?? _defaultCadPolygonForRoom(tappedRoom.name, safeRoomIdx);
-                          _points.removeWhere((p) => _isPointInPolygon(Offset(p.x, p.y), poly));
-                          final remainingIds = _points.map((p) => p.id).toSet();
-                          _routes.removeWhere((r) => !remainingIds.contains(r.fromPointId) || !remainingIds.contains(r.toPointId));
+                          // Non-destructive calibration edit:
+                          // Keep existing electrical points and homeruns intact!
+                          _syncRoomSpacesFromBoxes(persist: true);
+                          if (widget.project != null) {
+                            widget.project!.canvasPoints = _points;
+                            widget.project!.conduitRoutes = _routes;
+                            ProjectRepository.instance.updateProject(widget.project!);
+                          }
 
                           setState(() {
                             _canvasStage = 1;
                             _stage1SubStep = 3;
                             _selectedRoomIndex = safeRoomIdx;
                             _selectedTool = 'SELECT';
-                            if (widget.project != null) {
-                              widget.project!.canvasPoints = _points;
-                              widget.project!.conduitRoutes = _routes;
-                              ProjectRepository.instance.updateProject(widget.project!);
-                            }
                           });
                         },
                         child: Container(
@@ -6685,6 +6719,8 @@ class CanvasPainter extends CustomPainter {
   final double pixelsPerMeter;
   final List<Offset> activePolygonPoints;
   final Map<String, List<Offset>> calibratedRoomPolygons;
+  final String activeTool;
+  final List<GuidedSnapSpot> guidedSpots;
 
   final int? activeDraggingPin;
   final int? activeDraggingWallIndex;
@@ -6735,6 +6771,8 @@ class CanvasPainter extends CustomPainter {
     this.pixelsPerMeter = 30.0,
     this.activePolygonPoints = const [],
     this.calibratedRoomPolygons = const {},
+    this.activeTool = 'SELECT',
+    this.guidedSpots = const [],
   });
 
   void _drawDashedPath(Canvas canvas, Path path, Paint paint) {
@@ -7301,6 +7339,100 @@ class CanvasPainter extends CustomPainter {
 
         final bool isPowerRun = p2.type == 'OUTLET_DUPLEX' || p2.type == 'ACU';
         canvas.drawPath(path, isPowerRun ? powerRoutePaint : lightingRoutePaint);
+      }
+    }
+
+    // DRAW GUIDED SNAPPING SPOTS (GHOST ANCHORS / TARGET RINGS)
+    if (canvasStage == 3 && activeTool != 'SELECT' && activeTool != 'HOMERUN') {
+      for (final spot in guidedSpots) {
+        if (spot.isProhibited) {
+          // Prohibited Area indicator (e.g. Panel in bathroom per PEC 2.40.2.5)
+          final badPaint = Paint()
+            ..color = Colors.redAccent.withValues(alpha: 0.22)
+            ..style = PaintingStyle.fill;
+          canvas.drawCircle(spot.position, spot.radius, badPaint);
+
+          final badBorder = Paint()
+            ..color = Colors.redAccent.withValues(alpha: 0.85)
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 1.6;
+          canvas.drawCircle(spot.position, spot.radius, badBorder);
+
+          // Draw "NO" Slash (🚫)
+          canvas.drawLine(
+            Offset(spot.position.dx - spot.radius * 0.7, spot.position.dy - spot.radius * 0.7),
+            Offset(spot.position.dx + spot.radius * 0.7, spot.position.dy + spot.radius * 0.7),
+            badBorder,
+          );
+
+          final span = TextSpan(
+            text: '🚫 ${spot.label}',
+            style: const TextStyle(
+              color: Colors.redAccent,
+              fontSize: 8.5,
+              fontWeight: FontWeight.w900,
+              backgroundColor: Color(0xD811151E),
+            ),
+          );
+          final tp = TextPainter(text: span, textDirection: TextDirection.ltr)..layout();
+          tp.paint(canvas, Offset(spot.position.dx - tp.width / 2, spot.position.dy + spot.radius + 3.0));
+        } else {
+          // Legal & Ideal Target Spot (Ghost Anchor / Pulsing Ring)
+          final targetColor = (activeTool == 'PANEL')
+              ? BanaagTheme.successGreen
+              : (activeTool == 'LIGHT')
+                  ? BanaagTheme.primaryAmber
+                  : (activeTool.startsWith('SWITCH'))
+                      ? Colors.cyanAccent
+                      : Colors.lightGreenAccent;
+
+          // Outer halo
+          canvas.drawCircle(
+            spot.position,
+            spot.radius + 4.0,
+            Paint()
+              ..color = targetColor.withValues(alpha: 0.15)
+              ..style = PaintingStyle.fill,
+          );
+
+          // Dashed / Crisp target circle
+          canvas.drawCircle(
+            spot.position,
+            spot.radius,
+            Paint()
+              ..color = targetColor.withValues(alpha: 0.85)
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = 1.5,
+          );
+
+          // Center crosshair
+          final crossPaint = Paint()
+            ..color = targetColor
+            ..strokeWidth = 1.4;
+          canvas.drawLine(
+            Offset(spot.position.dx - 4.0, spot.position.dy),
+            Offset(spot.position.dx + 4.0, spot.position.dy),
+            crossPaint,
+          );
+          canvas.drawLine(
+            Offset(spot.position.dx, spot.position.dy - 4.0),
+            Offset(spot.position.dx, spot.position.dy + 4.0),
+            crossPaint,
+          );
+
+          // Label Badge
+          final span = TextSpan(
+            text: '🎯 ${spot.label}',
+            style: TextStyle(
+              color: targetColor,
+              fontSize: 8.0,
+              fontWeight: FontWeight.w800,
+              backgroundColor: const Color(0xE011151E),
+            ),
+          );
+          final tp = TextPainter(text: span, textDirection: TextDirection.ltr)..layout();
+          tp.paint(canvas, Offset(spot.position.dx - tp.width / 2, spot.position.dy - spot.radius - tp.height - 2.0));
+        }
       }
     }
 
