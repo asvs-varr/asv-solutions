@@ -1,3 +1,4 @@
+import '../../domain/pec_placement_advisor.dart';
 import 'dart:io';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
@@ -4375,25 +4376,7 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
               }),
             )
           else
-            Container(
-              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
-              color: BanaagTheme.surfaceCard,
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: [
-                    _symbolButton('SELECT', Icons.near_me, 'Select / Move'),
-                    _symbolButton('CALIBRATE', Icons.straighten, 'Scale (mm)'),
-                    _symbolButton('PANEL', Icons.dashboard, 'Panel'),
-                    _symbolButton('SWITCH_1G', Icons.toggle_on, '1G Switch'),
-                    _symbolButton('LIGHT', Icons.lightbulb, 'Light'),
-                    _symbolButton('OUTLET_DUPLEX', Icons.power, 'Duplex CO'),
-                    _symbolButton('ACU', Icons.ac_unit, 'Aircon'),
-                    _symbolButton('FAN', Icons.toys_outlined, 'Electric Fan'),
-                  ],
-                ),
-              ),
-            ),
+            _buildRoomLoadPlacementTray(),
         ],
       ),
     );
@@ -5463,6 +5446,229 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
         Text(value, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 14)),
         Text(sub, style: const TextStyle(color: BanaagTheme.textMuted, fontSize: 9)),
       ],
+    );
+  }
+
+  Widget _buildRoomLoadPlacementTray() {
+    if (widget.project == null || widget.project!.spaces.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+        color: BanaagTheme.surfaceCard,
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              _symbolButton('SELECT', Icons.near_me, 'Select / Move'),
+              _symbolButton('CALIBRATE', Icons.straighten, 'Scale (mm)'),
+              _symbolButton('PANEL', Icons.dashboard, 'Panel'),
+              _symbolButton('SWITCH_1G', Icons.toggle_on, '1G Switch'),
+              _symbolButton('LIGHT', Icons.lightbulb, 'Light'),
+              _symbolButton('OUTLET_DUPLEX', Icons.power, 'Duplex CO'),
+              _symbolButton('ACU', Icons.ac_unit, 'Aircon'),
+              _symbolButton('FAN', Icons.toys_outlined, 'Electric Fan'),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final spaces = widget.project!.spaces;
+    final safeRoomIdx = _selectedRoomIndex.clamp(0, spaces.length - 1);
+    final activeRoom = spaces[safeRoomIdx];
+    final roomName = activeRoom.name;
+    final lowerRoom = roomName.toLowerCase();
+
+    // Get assigned appliance loads for this room
+    final List<ApplianceItem> assignedLoads = widget.project!.applianceLoads.where((a) {
+      final cat = a.roomCategory.toLowerCase();
+      if (lowerRoom.contains('hall') || lowerRoom.contains('event')) {
+        return cat.contains('hall') || cat.contains('event');
+      }
+      if (lowerRoom.contains('staff')) return cat.contains('staff');
+      if (lowerRoom.contains('office')) return cat.contains('office');
+      if (lowerRoom.contains('storage') || lowerRoom.contains('store')) {
+        return cat.contains('storage') || cat.contains('store');
+      }
+      if (lowerRoom.contains('landing') || lowerRoom.contains('stair')) {
+        return cat.contains('landing') || cat.contains('stair');
+      }
+      return cat == lowerRoom;
+    }).toList();
+
+    // Find room polygon to evaluate bounding box and points inside
+    final poly = _roomPolygons[activeRoom.id] ?? [];
+    double minX = 0, maxX = 9999, minY = 0, maxY = 9999;
+    if (poly.length >= 3) {
+      minX = poly.map((p) => p.dx).reduce(math.min);
+      maxX = poly.map((p) => p.dx).reduce(math.max);
+      minY = poly.map((p) => p.dy).reduce(math.min);
+      maxY = poly.map((p) => p.dy).reduce(math.max);
+    }
+
+    final roomPts = _points.where((p) {
+      return p.x >= minX - 10 && p.x <= maxX + 10 && p.y >= minY - 10 && p.y <= maxY + 10;
+    }).toList();
+
+    // PEC Advisory Warnings check
+    final warnings = PecPlacementAdvisor.evaluateRoomPlacement(
+      room: activeRoom,
+      polygon: poly,
+      roomPoints: roomPts,
+      pixelsPerMeter: _pixelsPerMeter,
+    );
+
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF161A22),
+        border: Border(top: BorderSide(color: Colors.white.withValues(alpha: 0.1))),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // PEC Advisory Warning Banner if warnings exist
+          if (warnings.isNotEmpty)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+              color: Colors.orange.withValues(alpha: 0.15),
+              child: Row(
+                children: [
+                  const Icon(Icons.warning_amber_rounded, size: 16, color: Colors.orangeAccent),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      warnings.first,
+                      style: const TextStyle(color: Colors.orangeAccent, fontSize: 11, fontWeight: FontWeight.w600),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+          // Room Selector Bar
+          Container(
+            height: 38,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            color: const Color(0xFF1E2430),
+            child: Row(
+              children: [
+                const Icon(Icons.meeting_room, size: 15, color: BanaagTheme.primaryAmber),
+                const SizedBox(width: 6),
+                const Text('ROOM: ', style: TextStyle(color: Colors.white60, fontSize: 10.5, fontWeight: FontWeight.bold)),
+                Expanded(
+                  child: ListView.builder(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: spaces.length,
+                    itemBuilder: (ctx, idx) {
+                      final s = spaces[idx];
+                      final isSel = idx == safeRoomIdx;
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 6, top: 4, bottom: 4),
+                        child: ChoiceChip(
+                          selectedColor: BanaagTheme.primaryAmber,
+                          backgroundColor: const Color(0xFF141822),
+                          labelPadding: const EdgeInsets.symmetric(horizontal: 4),
+                          label: Text(
+                            s.name,
+                            style: TextStyle(
+                              color: isSel ? Colors.black : Colors.white70,
+                              fontWeight: isSel ? FontWeight.bold : FontWeight.normal,
+                              fontSize: 10.5,
+                            ),
+                          ),
+                          selected: isSel,
+                          onSelected: (_) => setState(() => _selectedRoomIndex = idx),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // Load-Synced Placement Toolbox
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  _symbolButton('SELECT', Icons.near_me, 'Select / Move'),
+                  _symbolButton('PANEL', Icons.dashboard, 'Main Panel'),
+                  if (assignedLoads.isEmpty) ...[
+                    _symbolButton('LIGHT', Icons.lightbulb, 'Light'),
+                    _symbolButton('SWITCH_1G', Icons.toggle_on, 'Switch'),
+                    _symbolButton('OUTLET_DUPLEX', Icons.power, 'Duplex Outlet'),
+                  ] else ...[
+                    for (final app in assignedLoads) ...[
+                      _buildLoadSyncedButton(app, roomPts),
+                    ],
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLoadSyncedButton(ApplianceItem app, List<CanvasPoint> roomPts) {
+    String pType = 'OUTLET_DUPLEX';
+    IconData icon = Icons.power;
+    final nm = app.name.toLowerCase();
+
+    if (nm.contains('aircon') || nm.contains('acu')) {
+      pType = 'ACU';
+      icon = Icons.ac_unit;
+    } else if (nm.contains('light') || nm.contains('led') || nm.contains('pinlight') || nm.contains('luminaire')) {
+      pType = 'LIGHT';
+      icon = Icons.lightbulb;
+    } else if (nm.contains('switch')) {
+      pType = 'SWITCH_1G';
+      icon = Icons.toggle_on;
+    } else if (nm.contains('fan')) {
+      pType = 'FAN';
+      icon = Icons.toys_outlined;
+    }
+
+    final isSelected = _selectedTool == pType;
+    final placedCount = roomPts.where((p) => p.type == pType).length;
+    final remaining = (app.quantity - placedCount).clamp(0, 99);
+
+    return Padding(
+      padding: const EdgeInsets.only(right: 8.0),
+      child: ChoiceChip(
+        selectedColor: BanaagTheme.primaryAmber,
+        backgroundColor: const Color(0xFF262C38),
+        avatar: Icon(icon, size: 16, color: isSelected ? Colors.black : BanaagTheme.primaryAmber),
+        label: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(app.name, style: TextStyle(color: isSelected ? Colors.black : Colors.white, fontSize: 11.5)),
+            const SizedBox(width: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+              decoration: BoxDecoration(
+                color: remaining == 0 ? Colors.green.withValues(alpha: 0.3) : Colors.white12,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                remaining == 0 ? 'âœ“' : '$remaining left',
+                style: TextStyle(
+                  color: remaining == 0 ? const Color(0xFF10B981) : Colors.amberAccent,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 9.5,
+                ),
+              ),
+            ),
+          ],
+        ),
+        selected: isSelected,
+        onSelected: (_) => setState(() => _selectedTool = pType),
+      ),
     );
   }
 
