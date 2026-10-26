@@ -1223,8 +1223,13 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
       setState(() {
         _canvasStage = 3;
         _selectedTool = 'SELECT';
-        if (widget.project!.applianceLoads.isNotEmpty) {
-          _autoGenerateFromAppliances(widget.project!.applianceLoads);
+        // Manual by default: Do NOT auto-populate all rooms globally.
+        // Ensure baseline MDP exists if points are empty.
+        if (_points.isEmpty) {
+          _points = [
+            CanvasPoint(id: 'pt-panel', type: 'PANEL', label: 'MDP', x: 585.0, y: 535.0, circuitNumber: 0),
+          ];
+          _routes = [];
         }
         _recalculateAllRouteLengths();
         widget.project!.canvasPoints = _points;
@@ -2658,26 +2663,54 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
       }
     }
 
+    final spaces = widget.project?.spaces ?? [];
+    final safeRoomIdx = _selectedRoomIndex.clamp(0, spaces.isNotEmpty ? spaces.length - 1 : 0);
+
+    // Detect circuit number based on active room's load assignments
+    int assignedCkt = 1;
+    if (_selectedTool == 'LIGHT' || _selectedTool.startsWith('SWITCH')) {
+      assignedCkt = (safeRoomIdx < 2) ? 1 : 2;
+    } else if (_selectedTool == 'OUTLET_DUPLEX') {
+      assignedCkt = 3 + (safeRoomIdx % 3);
+    } else if (_selectedTool == 'ACU') {
+      assignedCkt = 6 + safeRoomIdx;
+    }
+
     setState(() {
-      final newId = 'pt-${_points.length + 1}';
-      final compactLabel = _getShorthandLabel(_selectedTool, _selectedTool, _points.length + 1);
+      final ptIdx = _points.length + 1;
+      final compactLabel = _getShorthandLabel(_selectedTool, _selectedTool, ptIdx);
       final newPt = CanvasPoint(
-        id: newId,
+        id: 'pt-$ptIdx-${DateTime.now().millisecondsSinceEpoch}',
         type: _selectedTool,
         label: compactLabel,
         x: details.localPosition.dx,
         y: details.localPosition.dy,
+        circuitNumber: assignedCkt,
       );
       _points.add(newPt);
       _selectedPoint = newPt;
 
-      // Auto-route from last point of compatible type
-      if (_points.length > 1) {
+      // Connect to previous compatible point in SAME room/circuit, or Homerun to MDP
+      final mdpPt = _points.firstWhere((p) => p.type == 'PANEL', orElse: () => _points.first);
+      final sameCktPts = _points.where((p) => p.circuitNumber == assignedCkt && p.id != newPt.id).toList();
+
+      if (sameCktPts.isNotEmpty) {
+        final lastSameCkt = sameCktPts.last;
         _routes.add(ConduitRoute(
           id: 'rt-${_routes.length + 1}',
-          fromPointId: _points[_points.length - 2].id,
-          toPointId: newId,
-          measuredLengthMeters: 3.5, // Standard estimated run
+          fromPointId: lastSameCkt.id,
+          toPointId: newPt.id,
+          conductorCount: _selectedTool == 'LIGHT' ? 2 : 3,
+          measuredLengthMeters: (Offset(lastSameCkt.x, lastSameCkt.y) - Offset(newPt.x, newPt.y)).distance / _pixelsPerMeter,
+        ));
+      } else if (newPt.type != 'PANEL') {
+        // First device in circuit gets dedicated homerun from MDP
+        _routes.add(ConduitRoute(
+          id: 'rt-hr-${_routes.length + 1}',
+          fromPointId: mdpPt.id,
+          toPointId: newPt.id,
+          conductorCount: _selectedTool == 'LIGHT' ? 2 : 3,
+          measuredLengthMeters: (Offset(mdpPt.x, mdpPt.y) - Offset(newPt.x, newPt.y)).distance / _pixelsPerMeter,
         ));
       }
 
@@ -2816,6 +2849,26 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                 }
               } else if (val == 'dxf_guide') {
                 DxfExportGuideDialog.show(context);
+              } else if (val == 'reset_to_clean_manual') {
+                setState(() {
+                  _points = [
+                    CanvasPoint(id: 'pt-panel', type: 'PANEL', label: 'MDP', x: 585.0, y: 535.0, circuitNumber: 0),
+                  ];
+                  _routes = [];
+                  _selectedPoint = null;
+                  if (widget.project != null) {
+                    widget.project!.canvasPoints = _points;
+                    widget.project!.conduitRoutes = _routes;
+                    ProjectRepository.instance.updateProject(widget.project!);
+                  }
+                });
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('✨ Canvas cleared to Manual Mode! Only MDP panel placed. Tap items to place or use Auto-Fill per room.'),
+                    backgroundColor: BanaagTheme.primaryAmber,
+                    duration: Duration(seconds: 3),
+                  ),
+                );
               } else if (val == 'auto_fit_reset') {
                 setState(() {
                   if (widget.project != null && widget.project!.applianceLoads.isNotEmpty) {
@@ -2858,6 +2911,16 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
               }
             },
             itemBuilder: (ctx) => [
+              PopupMenuItem(
+                value: 'reset_to_clean_manual',
+                child: Row(
+                  children: const [
+                    Icon(Icons.cleaning_services_outlined, color: Colors.orangeAccent, size: 18),
+                    SizedBox(width: 10),
+                    Text('Clear Plan to Manual Mode', style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
+                  ],
+                ),
+              ),
               PopupMenuItem(
                 value: 'auto_fit_reset',
                 child: Row(
@@ -3041,8 +3104,12 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                       setState(() {
                         _syncRoomSpacesFromBoxes(persist: true);
                         _canvasStage = 3;
-                        if (widget.project != null && widget.project!.applianceLoads.isNotEmpty) {
-                          _autoGenerateFromAppliances(widget.project!.applianceLoads);
+                        // Manual by default: preserve current placed points without auto-populating
+                        if (_points.isEmpty) {
+                          _points = [
+                            CanvasPoint(id: 'pt-panel', type: 'PANEL', label: 'MDP', x: 585.0, y: 535.0, circuitNumber: 0),
+                          ];
+                          _routes = [];
                         }
                         _recalculateAllRouteLengths();
                       });
@@ -5522,20 +5589,32 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
   }
 
 
-  void _autoLayoutActiveRoom(RoomSpace room) {
+  void _autoLayoutActiveRoom(RoomSpace activeRoom) {
     if (widget.project == null) return;
-    final lowerRoom = room.name.toLowerCase();
-    final poly = _roomPolygons[room.id] ?? _defaultCadPolygonForRoom(room.name, _selectedRoomIndex);
+    final poly = _roomPolygons[activeRoom.id] ?? [];
     if (poly.length < 3) return;
+
     final rect = _boundingBoxOfPolygon(poly);
+    final lowerRoom = activeRoom.name.toLowerCase();
 
-    // Get assigned loads for this room
-    final roomLoads = widget.project!.applianceLoads.where(
-      (a) => a.roomCategory.trim().toLowerCase() == lowerRoom ||
-             (lowerRoom.contains('hall') && a.roomCategory.toLowerCase().contains('hall'))
-    ).toList();
+    // Find assigned loads for active room
+    final roomLoads = widget.project!.applianceLoads.where((a) {
+      final cat = a.roomCategory.toLowerCase();
+      if (lowerRoom.contains('hall') || lowerRoom.contains('event')) {
+        return cat.contains('hall') || cat.contains('event');
+      }
+      if (lowerRoom.contains('staff')) return cat.contains('staff');
+      if (lowerRoom.contains('office')) return cat.contains('office');
+      if (lowerRoom.contains('storage') || lowerRoom.contains('store')) {
+        return cat.contains('storage') || cat.contains('store');
+      }
+      if (lowerRoom.contains('landing') || lowerRoom.contains('stair')) {
+        return cat.contains('landing') || cat.contains('stair');
+      }
+      return cat == lowerRoom;
+    }).toList();
 
-    // Check which items are already manually placed
+    // Check which items are already manually placed inside room
     final existingRoomPts = _points.where((p) => _isPointInPolygon(Offset(p.x, p.y), poly)).toList();
 
     int existingLights = existingRoomPts.where((p) => p.type == 'LIGHT').length;
@@ -5543,7 +5622,7 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
     int existingAcus = existingRoomPts.where((p) => p.type == 'ACU').length;
     int existingSwitches = existingRoomPts.where((p) => p.type.startsWith('SWITCH')).length;
 
-    // Tally target requirements
+    // Tally target requirements with pack multipliers
     int targetLights = 0;
     int targetOutlets = 0;
     int targetAcus = 0;
@@ -5575,15 +5654,16 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
 
     final addedPoints = <CanvasPoint>[];
     final addedRoutes = <ConduitRoute>[];
+    final timeSeed = DateTime.now().millisecondsSinceEpoch;
 
     // 1. Add Switch at door/corner if missing
     CanvasPoint? switchPt;
     if (needSwitch) {
       final swPos = Offset(rect.left + 22.0, rect.bottom - 22.0);
       switchPt = CanvasPoint(
-        id: 'pt-sw-',
+        id: 'pt-sw-${activeRoom.id}-$timeSeed',
         type: 'SWITCH_1G',
-        label: 'S1-',
+        label: 'S1',
         x: swPos.dx,
         y: swPos.dy,
         circuitNumber: lightCkt,
@@ -5606,10 +5686,11 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
         for (int c = 1; c <= cols && placedCount < lightsToAdd; c++) {
           final cand = Offset(rect.left + c * stepX, rect.top + r * stepY);
           if (_isPointInPolygon(cand, poly)) {
+            final ptIdx = _points.length + addedPoints.length + 1;
             final pt = CanvasPoint(
-              id: 'pt-lt--',
+              id: 'pt-lt-${activeRoom.id}-$ptIdx-$timeSeed',
               type: 'LIGHT',
-              label: 'L-',
+              label: 'L-$ptIdx',
               x: cand.dx,
               y: cand.dy,
               circuitNumber: lightCkt,
@@ -5625,11 +5706,12 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
       CanvasPoint? prev = switchPt;
       for (final lt in newLights) {
         if (prev != null) {
+          final rIdx = _routes.length + addedRoutes.length + 1;
           addedRoutes.add(ConduitRoute(
-            id: 'rt--',
+            id: 'rt-${activeRoom.id}-$rIdx-$timeSeed',
             fromPointId: prev.id,
             toPointId: lt.id,
-            circuitNumber: lightCkt,
+            conductorCount: 2,
             measuredLengthMeters: (Offset(prev.x, prev.y) - Offset(lt.x, lt.y)).distance / _pixelsPerMeter,
           ));
         }
@@ -5642,10 +5724,11 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
       for (int a = 0; a < acusToAdd; a++) {
         final acuX = rect.left + (rect.width / (acusToAdd + 1)) * (a + 1);
         final acuY = rect.top + 16.0;
+        final ptIdx = _points.length + addedPoints.length + 1;
         final acuPt = CanvasPoint(
-          id: 'pt-acu--',
+          id: 'pt-acu-${activeRoom.id}-$ptIdx-$timeSeed',
           type: 'ACU',
-          label: 'ACU-',
+          label: 'ACU-$ptIdx',
           x: acuX,
           y: acuY,
           circuitNumber: nextDedicatedCkt + a,
@@ -5659,10 +5742,11 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
       for (int o = 0; o < outletsToAdd; o++) {
         final outX = rect.left + 18.0;
         final outY = rect.top + (rect.height / (outletsToAdd + 1)) * (o + 1);
+        final ptIdx = _points.length + addedPoints.length + 1;
         final outPt = CanvasPoint(
-          id: 'pt-co--',
+          id: 'pt-co-${activeRoom.id}-$ptIdx-$timeSeed',
           type: 'OUTLET_DUPLEX',
-          label: 'CO-',
+          label: 'CO-$ptIdx',
           x: outX,
           y: outY,
           circuitNumber: outletCkt,
@@ -5677,11 +5761,12 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
     for (final ckt in circuitsInRoom) {
       if (ckt <= 0) continue;
       final firstPtInCkt = addedPoints.firstWhere((p) => p.circuitNumber == ckt);
+      final hrIdx = _routes.length + addedRoutes.length + 1;
       addedRoutes.add(ConduitRoute(
-        id: 'rt-hr--',
+        id: 'rt-hr-${activeRoom.id}-$ckt-$hrIdx',
         fromPointId: mdpPt.id,
         toPointId: firstPtInCkt.id,
-        circuitNumber: ckt,
+        conductorCount: 3,
         measuredLengthMeters: (Offset(mdpPt.x, mdpPt.y) - Offset(firstPtInCkt.x, firstPtInCkt.y)).distance / _pixelsPerMeter,
       ));
     }
@@ -5698,7 +5783,7 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('⚡ Auto-assisted:  remaining devices placed in !'),
+        content: Text('⚡ Auto-assisted: ${addedPoints.length} remaining devices placed in ${activeRoom.name}!'),
         backgroundColor: BanaagTheme.successGreen,
         duration: const Duration(seconds: 2),
       ),
@@ -5833,6 +5918,47 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                     ),
                   ),
                 ),
+                // Clear active room points button
+                GestureDetector(
+                  onTap: () {
+                    final poly = _roomPolygons[activeRoom.id] ?? [];
+                    if (poly.isEmpty) return;
+                    setState(() {
+                      _points.removeWhere((p) => p.type != 'PANEL' && _isPointInPolygon(Offset(p.x, p.y), poly));
+                      final remainingIds = _points.map((p) => p.id).toSet();
+                      _routes.removeWhere((r) => !remainingIds.contains(r.fromPointId) || !remainingIds.contains(r.toPointId));
+                      if (widget.project != null) {
+                        widget.project!.canvasPoints = _points;
+                        widget.project!.conduitRoutes = _routes;
+                        ProjectRepository.instance.updateProject(widget.project!);
+                      }
+                    });
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('🗑️ Cleared devices in ${activeRoom.name}. Ready for manual placement!'),
+                        backgroundColor: Colors.orangeAccent,
+                        duration: const Duration(seconds: 2),
+                      ),
+                    );
+                  },
+                  child: Container(
+                    margin: const EdgeInsets.only(right: 6),
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: Colors.redAccent.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: Colors.redAccent.withValues(alpha: 0.6), width: 0.8),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.delete_sweep_outlined, size: 12, color: Colors.redAccent),
+                        SizedBox(width: 2),
+                        Text('Clear Room', style: TextStyle(color: Colors.redAccent, fontSize: 9.5, fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                  ),
+                ),
                 // Quick shortcut button to edit active room bounds directly
                 GestureDetector(
                   onTap: () {
@@ -5952,8 +6078,11 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
     }
 
     final isSelected = _selectedTool == pType;
+    final pcsMatch = RegExp(r'(?:x|\()\s*(\d+)\s*pcs', caseSensitive: false).firstMatch(app.name);
+    final int packMult = pcsMatch != null ? (int.tryParse(pcsMatch.group(1)!) ?? 1) : 1;
+    final int targetPcs = app.quantity * packMult;
     final placedCount = roomPts.where((p) => p.type == pType).length;
-    final remaining = (app.quantity - placedCount).clamp(0, 99);
+    final remaining = (targetPcs - placedCount).clamp(0, 999);
 
     return Padding(
       padding: const EdgeInsets.only(right: 8.0),
