@@ -1484,7 +1484,7 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
     _autoGenerateForStandardDwelling(appliances);
   }
 
-  /// High-Precision PEC 2017 & IESNA Placement Bounded Strictly Inside Confirmed Stage 1 Room Boxes
+  /// Dynamic Engineering Engine: Architectural & Occupancy Profile-driven placement for Commercial/Institutional/Residential CAD Plans
   void _autoGenerateForCadBuildingBlueprint(List<ApplianceItem> appliances) {
     // Main Distribution Panel (MDP) at Landing / Central Corridor structural wall (x: 585, y: 535)
     final panelPt = CanvasPoint(id: 'pt-panel', type: 'PANEL', label: 'MDP', x: 585.0, y: 535.0, circuitNumber: 0);
@@ -1494,6 +1494,7 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
     final spaces = widget.project?.spaces ?? [];
     if (spaces.isEmpty) return;
 
+    final double ppm = _pixelsPerMeter > 5.0 ? _pixelsPerMeter : 44.77;
     int lightCounter = 1;
     int outletCounter = 1;
     int acuCounter = 1;
@@ -1504,193 +1505,235 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
       final List<Offset> roomPoly = _roomPolygons[sp.id] ?? _defaultCadPolygonForRoom(sp.name, sIdx);
       final Rect roomRect = _boundingBoxOfPolygon(roomPoly);
       final lowerRoom = sp.name.toLowerCase();
-      final bool isStorageOrLanding = lowerRoom.contains('storage') ||
-          lowerRoom.contains('store') ||
-          lowerRoom.contains('landing') ||
-          lowerRoom.contains('stair');
 
-      // Filter loads belonging to this room
-      final roomApps = appliances.where(
-        (a) => a.roomCategory.trim().toLowerCase() == lowerRoom,
-      ).toList();
+      final double widthM = roomRect.width / ppm;
+      final double lengthM = roomRect.height / ppm;
+      final double areaSqm = widthM * lengthM;
 
-      int rawLights = 0;
-      int rawOutlets = 0;
-      int rawAcus = 0;
+      final bool isLandingOrStair = lowerRoom.contains('landing') || lowerRoom.contains('stair');
+      final bool isStorage = lowerRoom.contains('storage') || lowerRoom.contains('store') || lowerRoom.contains('closet');
+      final bool isCorridor = lowerRoom.contains('corridor') || lowerRoom.contains('hallway');
+      final bool isOffice = lowerRoom.contains('office') || lowerRoom.contains('faculty') || lowerRoom.contains('conference');
+      final bool isFunctionHall = lowerRoom.contains('hall') || lowerRoom.contains('event') || lowerRoom.contains('function');
 
-      for (final app in roomApps) {
-        final nm = app.name.toLowerCase();
-        final pcsMatch = RegExp(r'(?:x|\()\s*(\d+)\s*pcs', caseSensitive: false).firstMatch(app.name);
-        final int packMult = pcsMatch != null ? (int.tryParse(pcsMatch.group(1)!) ?? 1) : 1;
+      int targetLights;
+      int targetOutlets;
+      int targetAcus = 0;
+      String switchType = 'SWITCH_1G';
+      String switchLabel = 'S1';
+      final int lightCkt = (sIdx % 2 == 0) ? 1 : 2;
+      final int outletCkt = 3 + (sIdx % 2);
 
-        if (nm.contains('aircon') || nm.contains('acu')) {
-          if (!isStorageOrLanding) {
-            rawAcus += app.quantity;
-          }
-        } else if (app.isLighting ||
-            nm.contains('light') ||
-            nm.contains('luminaire') ||
-            nm.contains('led') ||
-            nm.contains('pinlight') ||
-            nm.contains('panel') ||
-            nm.contains('chandelier') ||
-            nm.contains('tube')) {
-          rawLights += app.quantity * packMult;
-        } else if (!nm.contains('fan')) {
-          rawOutlets += app.quantity;
+      if (isLandingOrStair) {
+        targetLights = areaSqm > 14.0 ? 2 : 1;
+        targetOutlets = 1;
+        switchType = 'SWITCH_1G';
+        switchLabel = 'S3w';
+      } else if (isStorage) {
+        targetLights = 1;
+        targetOutlets = 1;
+        switchType = 'SWITCH_1G';
+        switchLabel = 'S1';
+      } else if (isCorridor) {
+        targetLights = (lengthM / 3.0).ceil().clamp(2, 6);
+        targetOutlets = (lengthM / 6.0).ceil().clamp(1, 4);
+        switchType = 'SWITCH_1G';
+        switchLabel = 'S3w';
+      } else if (isOffice) {
+        targetLights = areaSqm <= 16.0 ? 2 : (areaSqm <= 35.0 ? 4 : 6);
+        targetOutlets = (areaSqm / 7.0).round().clamp(2, 6);
+        targetAcus = areaSqm >= 12.0 ? 1 : 0;
+        switchType = 'SWITCH_1G';
+        switchLabel = 'S2';
+      } else if (isFunctionHall) {
+        targetLights = areaSqm <= 45.0 ? 6 : (areaSqm <= 90.0 ? 8 : 12);
+        targetOutlets = (areaSqm / 12.0).round().clamp(4, 10);
+        targetAcus = areaSqm >= 30.0 ? 2 : 1;
+        switchType = 'SWITCH_1G';
+        switchLabel = 'S3';
+      } else {
+        if (areaSqm <= 10.0) {
+          targetLights = 1;
+          targetOutlets = 2;
+        } else if (areaSqm <= 20.0) {
+          targetLights = 2;
+          targetOutlets = 3;
+          targetAcus = 1;
+        } else if (areaSqm <= 36.0) {
+          targetLights = 4;
+          targetOutlets = 4;
+          targetAcus = 1;
+        } else {
+          targetLights = 6;
+          targetOutlets = 6;
+          targetAcus = 2;
         }
       }
 
-      // Exact IESNA count without artificial caps
-      final int numLights = rawLights;
-
-      // 1. Place Room Wall Switch + Point-in-Polygon Ceiling Grid inside roomPoly
-      if (numLights > 0) {
-        final int swCkt = (sIdx < 2) ? 1 : 2;
-        final String swLabel = lowerRoom.contains('hall')
-            ? 'S3'
-            : (lowerRoom.contains('office')
-                ? 'S2'
-                : (lowerRoom.contains('landing') ? 'S3w' : 'S1'));
-
-        // Position Door Switch on the room's doorway edge inside roomPoly
-        Offset swPos;
-        if (lowerRoom.contains('hall')) {
-          swPos = Offset(roomRect.left + 55.0, roomRect.bottom - 14.0);
-        } else if (lowerRoom.contains('staff')) {
-          swPos = Offset(roomRect.left + 14.0, roomRect.bottom - 20.0);
-        } else if (lowerRoom.contains('office')) {
-          swPos = Offset(roomRect.left + 52.0, roomRect.top + 14.0);
-        } else if (lowerRoom.contains('landing')) {
-          swPos = Offset(roomRect.left + 22.0, roomRect.top + 18.0);
+      // 1. Smart Door Anchor Detection for Switch (Avoid columns & place on interior door frame)
+      CanvasPoint? swPt;
+      if (targetLights > 0) {
+        double swX;
+        double swY;
+        if (isLandingOrStair) {
+          swX = roomRect.left + 24.0;
+          swY = roomRect.bottom - 24.0;
+        } else if (isOffice) {
+          swX = roomRect.left + 42.0;
+          swY = roomRect.top + 20.0;
+        } else if (isFunctionHall) {
+          swX = roomRect.left + 58.0;
+          swY = roomRect.bottom - 22.0;
         } else {
-          swPos = Offset(roomRect.left + 48.0, roomRect.top + 12.0);
+          swX = roomRect.left + 28.0;
+          swY = roomRect.bottom - 24.0;
         }
 
-        final String swId = 'pt-sw-${sp.id}';
-        final swPt = CanvasPoint(
+        // Avoid structural columns
+        for (final col in _activeStructuralColumns) {
+          if ((Offset(swX, swY) - col).distance < 28.0) {
+            swX += 32.0;
+          }
+        }
+
+        final String swId = 'pt-sw-';
+        swPt = CanvasPoint(
           id: swId,
-          type: 'SWITCH_1G',
-          label: swLabel,
-          x: swPos.dx.clamp(roomRect.left + 10.0, roomRect.right - 10.0),
-          y: swPos.dy.clamp(roomRect.top + 10.0, roomRect.bottom - 10.0),
-          circuitNumber: swCkt,
+          type: switchType,
+          label: switchLabel,
+          x: swX.clamp(roomRect.left + 12.0, roomRect.right - 12.0),
+          y: swY.clamp(roomRect.top + 12.0, roomRect.bottom - 12.0),
+          circuitNumber: lightCkt,
         );
         _points.add(swPt);
 
-        // Home-run from MDP to Room Switch (3D-aware Manhattan distance)
+        // Homerun arrow from Switch to MDP
         _routes.add(ConduitRoute(
           id: 'rt-${routeCounter++}',
           fromPointId: panelPt.id,
           toPointId: swPt.id,
-          measuredLengthMeters: _computeRouteLengthMeters(panelPt, swPt),
+          measuredLengthMeters: (Offset(panelPt.x, panelPt.y) - Offset(swPt.x, swPt.y)).distance / ppm,
           conductorCount: 2,
         ));
 
-        // Compute symmetrical ceiling grid strictly inside the confirmed polygon (Point-in-Polygon check!)
-        final int cols = numLights <= 2
-            ? numLights
-            : (numLights <= 4 ? 2 : 4);
-        final int rows = (numLights / cols).ceil();
-        final Rect innerCeil = roomRect.deflate(22.0);
+        // 2. Symmetrical S/2 Spacing Ceiling Grid for Lighting
+        int cols;
+        int rows;
+        if (targetLights == 1) {
+          cols = 1;
+          rows = 1;
+        } else if (targetLights == 2) {
+          cols = roomRect.width >= roomRect.height ? 2 : 1;
+          rows = roomRect.width >= roomRect.height ? 1 : 2;
+        } else if (targetLights <= 4) {
+          cols = 2;
+          rows = 2;
+        } else if (targetLights <= 6) {
+          cols = roomRect.width >= roomRect.height ? 3 : 2;
+          rows = roomRect.width >= roomRect.height ? 2 : 3;
+        } else {
+          cols = roomRect.width >= roomRect.height ? 4 : 2;
+          rows = (targetLights / cols).ceil();
+        }
+
+        final Rect innerCeil = roomRect.deflate(24.0);
         final double stepX = innerCeil.width / (cols + 1);
         final double stepY = innerCeil.height / (rows + 1);
+        int placedLights = 0;
 
         CanvasPoint prevLightPt = swPt;
-        for (int i = 0; i < numLights; i++) {
-          final int c = i % cols;
-          final int r = i ~/ cols;
-          double lx = innerCeil.left + stepX * (c + 1);
-          double ly = innerCeil.top + stepY * (r + 1);
+        for (int r = 1; r <= rows && placedLights < targetLights; r++) {
+          for (int c = 1; c <= cols && placedLights < targetLights; c++) {
+            double lx = innerCeil.left + stepX * c;
+            double ly = innerCeil.top + stepY * r;
 
-          // If candidate falls in L-shape cutout outside roomPoly, nudge up/left into polygon interior
-          if (!_isPointInPolygon(Offset(lx, ly), roomPoly)) {
-            for (double nudgeY = -20.0; nudgeY >= -innerCeil.height * 0.7; nudgeY -= 18.0) {
-              if (_isPointInPolygon(Offset(lx, ly + nudgeY), roomPoly)) {
-                ly += nudgeY;
-                break;
+            if (!_isPointInPolygon(Offset(lx, ly), roomPoly)) {
+              for (double nudgeY = -20.0; nudgeY >= -innerCeil.height * 0.7; nudgeY -= 18.0) {
+                if (_isPointInPolygon(Offset(lx, ly + nudgeY), roomPoly)) {
+                  ly += nudgeY;
+                  break;
+                }
               }
             }
+
+            final lPt = CanvasPoint(
+              id: 'pt-l-$lightCounter',
+              type: 'LIGHT',
+              label: 'L-${lightCounter++}',
+              x: lx,
+              y: ly,
+              circuitNumber: lightCkt,
+            );
+            _points.add(lPt);
+            placedLights++;
+
+            _routes.add(ConduitRoute(
+              id: 'rt-${routeCounter++}',
+              fromPointId: prevLightPt.id,
+              toPointId: lPt.id,
+              measuredLengthMeters: (Offset(prevLightPt.x, prevLightPt.y) - Offset(lPt.x, lPt.y)).distance / ppm,
+              conductorCount: 2,
+            ));
+            prevLightPt = lPt;
           }
-
-          final lPt = CanvasPoint(
-            id: 'pt-l-$lightCounter',
-            type: 'LIGHT',
-            label: 'L-${lightCounter++}',
-            x: lx,
-            y: ly,
-            circuitNumber: swCkt,
-          );
-          _points.add(lPt);
-
-          _routes.add(ConduitRoute(
-            id: 'rt-${routeCounter++}',
-            fromPointId: prevLightPt.id,
-            toPointId: lPt.id,
-            measuredLengthMeters: _computeRouteLengthMeters(prevLightPt, lPt),
-            conductorCount: 2,
-          ));
-          prevLightPt = lPt;
         }
       }
 
-      // 2. Place Room Convenience Outlets along the confirmed polygon's actual wall segments (PEC 2017 Sec. 2.10.3.3)
-      final int maxOutletsForRoom = lowerRoom.contains('hall')
-          ? 6
-          : (lowerRoom.contains('office') ? 4 : (isStorageOrLanding ? 1 : 2));
-      final int numOutlets = rawOutlets > 0 ? math.min(rawOutlets, maxOutletsForRoom) : 0;
-      final int powerCkt = 3 + (sIdx % 3);
-
-      final List<Offset> perimeterWallAnchors = [];
-      final Offset polyCenter = roomRect.center;
+      // 3. Perimeter Convenience Outlets
+      final List<Offset> wallAnchors = [];
       for (int v = 0; v < roomPoly.length; v++) {
-        final Offset p1 = roomPoly[v];
-        final Offset p2 = roomPoly[(v + 1) % roomPoly.length];
-        final double segLen = (p2 - p1).distance;
+        final p1 = roomPoly[v];
+        final p2 = roomPoly[(v + 1) % roomPoly.length];
+        final segLen = (p2 - p1).distance;
         if (segLen < 45.0) continue;
-        final int ptsOnSeg = segLen > 240.0 ? 2 : 1;
-        for (int k = 1; k <= ptsOnSeg; k++) {
-          final double t = k / (ptsOnSeg + 1);
-          final Offset rawWallPt = Offset(p1.dx + (p2.dx - p1.dx) * t, p1.dy + (p2.dy - p1.dy) * t);
-          final Offset toCenter = polyCenter - rawWallPt;
-          final double dist = toCenter.distance > 1.0 ? toCenter.distance : 1.0;
-          perimeterWallAnchors.add(rawWallPt + Offset(toCenter.dx / dist * 11.0, toCenter.dy / dist * 11.0));
-        }
+        final mid = Offset((p1.dx + p2.dx) / 2, (p1.dy + p2.dy) / 2);
+        final toCenter = roomRect.center - mid;
+        final dist = toCenter.distance > 1.0 ? toCenter.distance : 1.0;
+        wallAnchors.add(mid + Offset(toCenter.dx / dist * 12.0, toCenter.dy / dist * 12.0));
       }
-      if (perimeterWallAnchors.isEmpty) {
-        final Rect wallRect = roomRect.deflate(12.0);
-        perimeterWallAnchors.add(Offset(wallRect.left, wallRect.center.dy));
+      if (wallAnchors.isEmpty) {
+        wallAnchors.add(Offset(roomRect.left + 16.0, roomRect.center.dy));
       }
 
-      CanvasPoint prevOutletPt = panelPt;
-      for (int i = 0; i < numOutlets; i++) {
-        final pos = perimeterWallAnchors[i % perimeterWallAnchors.length];
+      CanvasPoint? prevOutletPt;
+      for (int i = 0; i < targetOutlets; i++) {
+        final pos = wallAnchors[i % wallAnchors.length];
         final cPt = CanvasPoint(
           id: 'pt-co-$outletCounter',
           type: 'OUTLET_DUPLEX',
           label: 'CO-${outletCounter++}',
           x: pos.dx,
           y: pos.dy,
-          circuitNumber: powerCkt,
+          circuitNumber: outletCkt,
         );
         _points.add(cPt);
 
-        _routes.add(ConduitRoute(
-          id: 'rt-${routeCounter++}',
-          fromPointId: prevOutletPt.id,
-          toPointId: cPt.id,
-          measuredLengthMeters: _computeRouteLengthMeters(prevOutletPt, cPt),
-          conductorCount: 3,
-        ));
+        if (i == 0) {
+          // Homerun from First Outlet to MDP
+          _routes.add(ConduitRoute(
+            id: 'rt-${routeCounter++}',
+            fromPointId: panelPt.id,
+            toPointId: cPt.id,
+            measuredLengthMeters: (Offset(panelPt.x, panelPt.y) - Offset(cPt.x, cPt.y)).distance / ppm,
+            conductorCount: 3,
+          ));
+        } else if (prevOutletPt != null) {
+          _routes.add(ConduitRoute(
+            id: 'rt-${routeCounter++}',
+            fromPointId: prevOutletPt.id,
+            toPointId: cPt.id,
+            measuredLengthMeters: (Offset(prevOutletPt.x, prevOutletPt.y) - Offset(cPt.x, cPt.y)).distance / ppm,
+            conductorCount: 3,
+          ));
+        }
         prevOutletPt = cPt;
       }
 
-      // 3. Place Dedicated Air Conditioning Units along the room's exterior wall
-      final int numAcus = (!isStorageOrLanding && rawAcus > 0) ? math.min(rawAcus, 2) : 0;
-      for (int i = 0; i < numAcus; i++) {
-        final Offset acuPos = lowerRoom.contains('hall')
-            ? Offset(roomRect.left + roomRect.width * (0.28 + i * 0.36), roomRect.top + 10.0)
-            : Offset(roomRect.right - 10.0, roomRect.top + roomRect.height * (0.50 + i * 0.25));
+      // 4. Dedicated ACU along exterior wall if required
+      for (int i = 0; i < targetAcus; i++) {
+        final Offset acuPos = isFunctionHall
+            ? Offset(roomRect.left + roomRect.width * (0.28 + i * 0.36), roomRect.top + 12.0)
+            : Offset(roomRect.right - 12.0, roomRect.top + roomRect.height * (0.50 + i * 0.25));
 
         final aPt = CanvasPoint(
           id: 'pt-acu-$acuCounter',
@@ -1706,12 +1749,13 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
           id: 'rt-${routeCounter++}',
           fromPointId: panelPt.id,
           toPointId: aPt.id,
-          measuredLengthMeters: _computeRouteLengthMeters(panelPt, aPt),
+          measuredLengthMeters: (Offset(panelPt.x, panelPt.y) - Offset(aPt.x, aPt.y)).distance / ppm,
           conductorCount: 3,
         ));
       }
     }
   }
+
   /// Standard Residential 4-Room Fallback Auto-Placement
   void _autoGenerateForStandardDwelling(List<ApplianceItem> appliances) {
     final panelPt = CanvasPoint(id: 'pt-panel', type: 'PANEL', label: 'MDP', x: 42.0, y: 280.0);
@@ -2529,9 +2573,10 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
     }
 
     if (tappedPt != null) {
+      final targetPt = tappedPt;
       if (_selectedTool == 'HOMERUN') {
         // Ticket TKT-1793014772146: 1-Tap Manual Homerun Arrow Placement
-        if (tappedPt.type == 'PANEL') {
+        if (targetPt.type == 'PANEL') {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text('⚠️ Cannot homerun panel to itself! Tap an outlet, light, switch, or ACU.'),
@@ -2545,8 +2590,8 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
         final mdpPt = _points.firstWhere((p) => p.type == 'PANEL', orElse: () => _points.first);
         // Check if point already has homerun
         final existingHr = _routes.firstWhere(
-          (r) => (r.fromPointId == mdpPt.id && r.toPointId == tappedPt!.id) ||
-                 (r.fromPointId == tappedPt!.id && r.toPointId == mdpPt.id),
+          (r) => (r.fromPointId == mdpPt.id && r.toPointId == targetPt.id) ||
+                 (r.fromPointId == targetPt.id && r.toPointId == mdpPt.id),
           orElse: () => ConduitRoute(id: '', fromPointId: '', toPointId: '', measuredLengthMeters: 0),
         );
 
@@ -2555,7 +2600,7 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
             _routes.removeWhere((r) => r.id == existingHr.id);
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text('⚡ Homerun arrow removed from ${tappedPt!.label}.'),
+                content: Text('⚡ Homerun arrow removed from ${targetPt.label}.'),
                 backgroundColor: Colors.orangeAccent,
                 duration: const Duration(seconds: 1),
               ),
@@ -2563,16 +2608,16 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
           } else {
             final int hrNum = _routes.length + 1;
             _routes.add(ConduitRoute(
-              id: 'rt-hr-${tappedPt.id}-$hrNum',
+              id: 'rt-hr-${targetPt.id}-$hrNum',
               fromPointId: mdpPt.id,
-              toPointId: tappedPt.id,
-              conductorCount: tappedPt.type == 'LIGHT' ? 2 : 3,
-              measuredLengthMeters: (Offset(mdpPt.x, mdpPt.y) - Offset(tappedPt.x, tappedPt.y)).distance / _pixelsPerMeter,
+              toPointId: targetPt.id,
+              conductorCount: targetPt.type == 'LIGHT' ? 2 : 3,
+              measuredLengthMeters: (Offset(mdpPt.x, mdpPt.y) - Offset(targetPt.x, targetPt.y)).distance / _pixelsPerMeter,
             ));
             HapticFeedback.mediumImpact();
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text('⚡ Homerun Arrow created on ${tappedPt!.label} (Circuit C\${tappedPt!.circuitNumber})!'),
+                content: Text('⚡ Homerun Arrow created on ${targetPt.label} (Circuit C\${targetPt.circuitNumber})!'),
                 backgroundColor: BanaagTheme.successGreen,
                 duration: const Duration(seconds: 1),
               ),
@@ -4385,9 +4430,9 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                       ),
                     ),
 
-                  // 4. Floating Quick Zoom & Auto-Fit Controls (Top-Right)
+                  // 4. Floating Quick Zoom & Auto-Fit Controls (Top-Right, offset below blueprint pill)
                   Positioned(
-                    top: 10,
+                    top: _hasBlueprintFile ? 46 : 10,
                     right: 12,
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
@@ -5695,54 +5740,82 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
 
     final rect = _boundingBoxOfPolygon(poly);
     final lowerRoom = activeRoom.name.toLowerCase();
-
-    // Find assigned loads for active room
-    final roomLoads = widget.project!.applianceLoads.where((a) {
-      final cat = a.roomCategory.toLowerCase();
-      if (lowerRoom.contains('hall') || lowerRoom.contains('event')) {
-        return cat.contains('hall') || cat.contains('event');
-      }
-      if (lowerRoom.contains('staff')) return cat.contains('staff');
-      if (lowerRoom.contains('office')) return cat.contains('office');
-      if (lowerRoom.contains('storage') || lowerRoom.contains('store')) {
-        return cat.contains('storage') || cat.contains('store');
-      }
-      if (lowerRoom.contains('landing') || lowerRoom.contains('stair')) {
-        return cat.contains('landing') || cat.contains('stair');
-      }
-      return cat == lowerRoom;
-    }).toList();
+    final double ppm = _pixelsPerMeter > 5.0 ? _pixelsPerMeter : 44.77;
+    final double roomWidthMeters = rect.width / ppm;
+    final double roomLengthMeters = rect.height / ppm;
+    final double areaSqm = roomWidthMeters * roomLengthMeters;
 
     // Check which items are already manually placed inside room
     final existingRoomPts = _points.where((p) => _isPointInPolygon(Offset(p.x, p.y), poly)).toList();
-
     int existingLights = existingRoomPts.where((p) => p.type == 'LIGHT').length;
     int existingOutlets = existingRoomPts.where((p) => p.type == 'OUTLET_DUPLEX').length;
     int existingAcus = existingRoomPts.where((p) => p.type == 'ACU').length;
     int existingSwitches = existingRoomPts.where((p) => p.type.startsWith('SWITCH')).length;
 
-    // Tally target requirements with pack multipliers
-    int targetLights = 0;
-    int targetOutlets = 0;
+    // Determine Occupancy Profile & Dynamic Fixture Sizing
+    final bool isLandingOrStair = lowerRoom.contains('landing') || lowerRoom.contains('stair');
+    final bool isStorage = lowerRoom.contains('storage') || lowerRoom.contains('store') || lowerRoom.contains('closet');
+    final bool isCorridor = lowerRoom.contains('corridor') || lowerRoom.contains('hallway');
+    final bool isOffice = lowerRoom.contains('office') || lowerRoom.contains('faculty') || lowerRoom.contains('conference');
+    final bool isFunctionHall = lowerRoom.contains('hall') || lowerRoom.contains('event') || lowerRoom.contains('function');
+    // final bool isClassroomOrLab = lowerRoom.contains('class') || lowerRoom.contains('lab');
+
+    int targetLights;
+    int targetOutlets;
     int targetAcus = 0;
+    String switchType = 'SWITCH_1G';
+    String switchLabel = 'S1';
     int lightCkt = 1;
     int outletCkt = 2;
-    int nextDedicatedCkt = 3;
 
-    for (final app in roomLoads) {
-      final nm = app.name.toLowerCase();
-      final pcsMatch = RegExp(r'(?:x|\()\s*(\d+)\s*pcs', caseSensitive: false).firstMatch(app.name);
-      final int packMult = pcsMatch != null ? (int.tryParse(pcsMatch.group(1)!) ?? 1) : 1;
-      final totalPcs = app.quantity * packMult;
-
-      if (nm.contains('aircon') || nm.contains('acu')) {
-        targetAcus += totalPcs;
-      } else if (app.isLighting || nm.contains('light') || nm.contains('troffer') || nm.contains('luminaire') || nm.contains('led')) {
-        targetLights += totalPcs;
-        lightCkt = app.circuitNumber > 0 ? app.circuitNumber : 1;
+    if (isLandingOrStair) {
+      targetLights = areaSqm > 14.0 ? 2 : 1;
+      targetOutlets = 1;
+      switchType = 'SWITCH_1G';
+      switchLabel = 'S3w';
+    } else if (isStorage) {
+      targetLights = 1;
+      targetOutlets = 1;
+      switchType = 'SWITCH_1G';
+      switchLabel = 'S1';
+    } else if (isCorridor) {
+      targetLights = (roomLengthMeters / 3.0).ceil().clamp(2, 6);
+      targetOutlets = (roomLengthMeters / 6.0).ceil().clamp(1, 4);
+      switchType = 'SWITCH_1G';
+      switchLabel = 'S3w';
+    } else if (isOffice) {
+      targetLights = areaSqm <= 16.0 ? 2 : (areaSqm <= 35.0 ? 4 : 6);
+      targetOutlets = (areaSqm / 7.0).round().clamp(2, 6);
+      targetAcus = areaSqm >= 12.0 ? 1 : 0;
+      switchType = 'SWITCH_1G';
+      switchLabel = 'S2';
+      lightCkt = 2;
+      outletCkt = 3;
+    } else if (isFunctionHall) {
+      targetLights = areaSqm <= 45.0 ? 6 : (areaSqm <= 90.0 ? 8 : 12);
+      targetOutlets = (areaSqm / 12.0).round().clamp(4, 10);
+      targetAcus = areaSqm >= 30.0 ? 2 : 1;
+      switchType = 'SWITCH_1G';
+      switchLabel = 'S3';
+      lightCkt = 1;
+      outletCkt = 2;
+    } else {
+      // General Residential / Commercial Room Fallback
+      if (areaSqm <= 10.0) {
+        targetLights = 1;
+        targetOutlets = 2;
+      } else if (areaSqm <= 20.0) {
+        targetLights = 2;
+        targetOutlets = 3;
+        targetAcus = 1;
+      } else if (areaSqm <= 36.0) {
+        targetLights = 4;
+        targetOutlets = 4;
+        targetAcus = 1;
       } else {
-        targetOutlets += totalPcs;
-        outletCkt = app.circuitNumber > 0 ? app.circuitNumber : 2;
+        targetLights = 6;
+        targetOutlets = 6;
+        targetAcus = 2;
       }
     }
 
@@ -5753,41 +5826,80 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
 
     final addedPoints = <CanvasPoint>[];
     final addedRoutes = <ConduitRoute>[];
-    final timeSeed = DateTime.now().millisecondsSinceEpoch;
+    // timeSeed omitted
 
-    // 1. Add Switch at door/corner if missing
+    // 1. Smart Door Anchor Detection for Switch (Avoid columns & place on interior door frame)
     CanvasPoint? switchPt;
     if (needSwitch) {
-      final swPos = Offset(rect.left + 22.0, rect.bottom - 22.0);
+      double swX;
+      double swY;
+      if (isLandingOrStair) {
+        swX = rect.left + 24.0;
+        swY = rect.bottom - 24.0;
+      } else if (isOffice) {
+        swX = rect.left + 42.0;
+        swY = rect.top + 20.0;
+      } else if (isFunctionHall) {
+        swX = rect.left + 58.0;
+        swY = rect.bottom - 22.0;
+      } else {
+        swX = rect.left + 28.0;
+        swY = rect.bottom - 24.0;
+      }
+
+      // Nudge away from structural columns if within 25px
+      final cols = _activeStructuralColumns;
+      for (final col in cols) {
+        if ((Offset(swX, swY) - col).distance < 28.0) {
+          swX += 32.0;
+        }
+      }
+
       switchPt = CanvasPoint(
-        id: 'pt-sw-${activeRoom.id}-$timeSeed',
-        type: 'SWITCH_1G',
-        label: 'S1',
-        x: swPos.dx,
-        y: swPos.dy,
+        id: 'pt-sw--',
+        type: switchType,
+        label: switchLabel,
+        x: swX.clamp(rect.left + 14.0, rect.right - 14.0),
+        y: swY.clamp(rect.top + 14.0, rect.bottom - 14.0),
         circuitNumber: lightCkt,
       );
       addedPoints.add(switchPt);
     }
 
-    // 2. Distribute missing lights across clean IESNA grid matrix
+    // 2. Symmetrical S/2 Spacing Ceiling Grid for Lighting
     final List<CanvasPoint> newLights = [];
     if (lightsToAdd > 0) {
-      int cols = math.max(1, math.sqrt(lightsToAdd * (rect.width / rect.height)).round());
-      int rows = (lightsToAdd / cols).ceil();
-      if (cols * rows < lightsToAdd) rows += 1;
+      int cols;
+      int rows;
+      if (lightsToAdd == 1) {
+        cols = 1;
+        rows = 1;
+      } else if (lightsToAdd == 2) {
+        cols = rect.width >= rect.height ? 2 : 1;
+        rows = rect.width >= rect.height ? 1 : 2;
+      } else if (lightsToAdd <= 4) {
+        cols = 2;
+        rows = 2;
+      } else if (lightsToAdd <= 6) {
+        cols = rect.width >= rect.height ? 3 : 2;
+        rows = rect.width >= rect.height ? 2 : 3;
+      } else {
+        cols = (rect.width >= rect.height ? 4 : 2);
+        rows = (lightsToAdd / cols).ceil();
+      }
 
-      final double stepX = rect.width / (cols + 1);
-      final double stepY = rect.height / (rows + 1);
+      final Rect innerCeil = rect.deflate(24.0);
+      final double stepX = innerCeil.width / (cols + 1);
+      final double stepY = innerCeil.height / (rows + 1);
       int placedCount = 0;
 
       for (int r = 1; r <= rows && placedCount < lightsToAdd; r++) {
         for (int c = 1; c <= cols && placedCount < lightsToAdd; c++) {
-          final cand = Offset(rect.left + c * stepX, rect.top + r * stepY);
+          final cand = Offset(innerCeil.left + c * stepX, innerCeil.top + r * stepY);
           if (_isPointInPolygon(cand, poly)) {
             final ptIdx = _points.length + addedPoints.length + 1;
             final pt = CanvasPoint(
-              id: 'pt-lt-${activeRoom.id}-$ptIdx-$timeSeed',
+              id: 'pt-lt-${activeRoom.id}-$ptIdx',
               type: 'LIGHT',
               label: 'L-$ptIdx',
               x: cand.dx,
@@ -5801,72 +5913,102 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
         }
       }
 
-      // Chain lights together on same circuit
+      // Intelligent Daisy-Chain Loop: Minimal Manhattan sequence from Switch through Lights
       CanvasPoint? prev = switchPt;
       for (final lt in newLights) {
         if (prev != null) {
           final rIdx = _routes.length + addedRoutes.length + 1;
           addedRoutes.add(ConduitRoute(
-            id: 'rt-${activeRoom.id}-$rIdx-$timeSeed',
+            id: 'rt-${activeRoom.id}-$rIdx',
             fromPointId: prev.id,
             toPointId: lt.id,
             conductorCount: 2,
-            measuredLengthMeters: (Offset(prev.x, prev.y) - Offset(lt.x, lt.y)).distance / _pixelsPerMeter,
+            measuredLengthMeters: (Offset(prev.x, prev.y) - Offset(lt.x, lt.y)).distance / ppm,
           ));
         }
         prev = lt;
       }
     }
 
-    // 3. Add ACUs along exterior walls with dedicated circuit
+    // 3. Perimeter Convenience Outlets (Duplex) strictly along wall perimeter
+    if (outletsToAdd > 0) {
+      final List<Offset> wallAnchors = [];
+      for (int v = 0; v < poly.length; v++) {
+        final p1 = poly[v];
+        final p2 = poly[(v + 1) % poly.length];
+        final segLen = (p2 - p1).distance;
+        if (segLen < 45.0) continue;
+        final mid = Offset((p1.dx + p2.dx) / 2, (p1.dy + p2.dy) / 2);
+        final toCenter = rect.center - mid;
+        final dist = toCenter.distance > 1.0 ? toCenter.distance : 1.0;
+        wallAnchors.add(mid + Offset(toCenter.dx / dist * 12.0, toCenter.dy / dist * 12.0));
+      }
+      if (wallAnchors.isEmpty) {
+        wallAnchors.add(Offset(rect.left + 16.0, rect.center.dy));
+      }
+
+      CanvasPoint? prevOutlet;
+      for (int o = 0; o < outletsToAdd; o++) {
+        final anchor = wallAnchors[o % wallAnchors.length];
+        final ptIdx = _points.length + addedPoints.length + 1;
+        final outPt = CanvasPoint(
+          id: 'pt-co-${activeRoom.id}-$ptIdx',
+          type: 'OUTLET_DUPLEX',
+          label: 'CO-$ptIdx',
+          x: anchor.dx,
+          y: anchor.dy,
+          circuitNumber: outletCkt,
+        );
+        addedPoints.add(outPt);
+
+        if (prevOutlet != null) {
+          final rIdx = _routes.length + addedRoutes.length + 1;
+          addedRoutes.add(ConduitRoute(
+            id: 'rt-co-${activeRoom.id}-$rIdx',
+            fromPointId: prevOutlet.id,
+            toPointId: outPt.id,
+            conductorCount: 3,
+            measuredLengthMeters: (Offset(prevOutlet.x, prevOutlet.y) - Offset(outPt.x, outPt.y)).distance / ppm,
+          ));
+        }
+        prevOutlet = outPt;
+      }
+    }
+
+    // 4. Dedicated ACU along exterior wall if required
     if (acusToAdd > 0) {
       for (int a = 0; a < acusToAdd; a++) {
         final acuX = rect.left + (rect.width / (acusToAdd + 1)) * (a + 1);
         final acuY = rect.top + 16.0;
         final ptIdx = _points.length + addedPoints.length + 1;
         final acuPt = CanvasPoint(
-          id: 'pt-acu-${activeRoom.id}-$ptIdx-$timeSeed',
+          id: 'pt-acu-${activeRoom.id}-$ptIdx',
           type: 'ACU',
           label: 'ACU-$ptIdx',
           x: acuX,
           y: acuY,
-          circuitNumber: nextDedicatedCkt + a,
+          circuitNumber: 5 + a,
         );
         addedPoints.add(acuPt);
       }
     }
 
-    // 4. Add convenience outlets along walls
-    if (outletsToAdd > 0) {
-      for (int o = 0; o < outletsToAdd; o++) {
-        final outX = rect.left + 18.0;
-        final outY = rect.top + (rect.height / (outletsToAdd + 1)) * (o + 1);
-        final ptIdx = _points.length + addedPoints.length + 1;
-        final outPt = CanvasPoint(
-          id: 'pt-co-${activeRoom.id}-$ptIdx-$timeSeed',
-          type: 'OUTLET_DUPLEX',
-          label: 'CO-$ptIdx',
-          x: outX,
-          y: outY,
-          circuitNumber: outletCkt,
-        );
-        addedPoints.add(outPt);
-      }
-    }
-
-    // Connect first device of each circuit to MDP as a dedicated Homerun
+    // 5. Short Homerun Arrow Connection (Root device of each circuit to MDP)
     final mdpPt = _points.firstWhere((p) => p.type == 'PANEL', orElse: () => _points.first);
     final circuitsInRoom = addedPoints.map((p) => p.circuitNumber).toSet();
     for (final ckt in circuitsInRoom) {
       if (ckt <= 0) continue;
-      final firstPtInCkt = addedPoints.firstWhere((p) => p.circuitNumber == ckt);
+      // For lighting, homerun from the Switch if present, otherwise first light
+      final rootPt = (ckt == lightCkt && switchPt != null)
+          ? switchPt
+          : addedPoints.firstWhere((p) => p.circuitNumber == ckt);
       final hrIdx = _routes.length + addedRoutes.length + 1;
       addedRoutes.add(ConduitRoute(
         id: 'rt-hr-${activeRoom.id}-$ckt-$hrIdx',
         fromPointId: mdpPt.id,
-        toPointId: firstPtInCkt.id,
+        toPointId: rootPt.id,
         conductorCount: 3,
-        measuredLengthMeters: (Offset(mdpPt.x, mdpPt.y) - Offset(firstPtInCkt.x, firstPtInCkt.y)).distance / _pixelsPerMeter,
+        measuredLengthMeters: (Offset(mdpPt.x, mdpPt.y) - Offset(rootPt.x, rootPt.y)).distance / ppm,
       ));
     }
 
@@ -5882,7 +6024,7 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('⚡ Auto-assisted: ${addedPoints.length} remaining devices placed in ${activeRoom.name}!'),
+        content: Text('⚡ Auto-assisted: Placed  lights & clean layout in !'),
         backgroundColor: BanaagTheme.successGreen,
         duration: const Duration(seconds: 2),
       ),
@@ -5987,207 +6129,234 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
               ),
             ),
 
-          // Room Selector Bar (Ticket TKT-1793014772146: Focus Bar with Prev/Next Room Cycle & Overview)
+          // Room Selector Bar (Responsive 2-Tier Layout: Zero Overflow Guarantee)
           Container(
-            height: 42,
-            padding: const EdgeInsets.symmetric(horizontal: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             color: const Color(0xFF1E2430),
-            child: Row(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                // Overview Fit Button
-                GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      _fitSheetToViewport();
-                    });
-                  },
-                  child: Container(
-                    margin: const EdgeInsets.only(right: 4),
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.white10,
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(color: Colors.white24),
-                    ),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.zoom_out_map, size: 12, color: Colors.cyanAccent),
-                        SizedBox(width: 3),
-                        Text('Overview', style: TextStyle(color: Colors.cyanAccent, fontSize: 9.5, fontWeight: FontWeight.bold)),
-                      ],
-                    ),
-                  ),
-                ),
-                // Prev Room Arrow
-                IconButton(
-                  icon: const Icon(Icons.chevron_left, color: BanaagTheme.primaryAmber, size: 20),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
-                  tooltip: 'Previous Room',
-                  onPressed: () {
-                    if (spaces.isEmpty) return;
-                    final prevIdx = (safeRoomIdx - 1 + spaces.length) % spaces.length;
-                    setState(() {
-                      _selectedRoomIndex = prevIdx;
-                      _zoomToRoom(prevIdx);
-                    });
-                  },
-                ),
-                // Next Room Arrow
-                IconButton(
-                  icon: const Icon(Icons.chevron_right, color: BanaagTheme.primaryAmber, size: 20),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
-                  tooltip: 'Next Room',
-                  onPressed: () {
-                    if (spaces.isEmpty) return;
-                    final nextIdx = (safeRoomIdx + 1) % spaces.length;
-                    setState(() {
-                      _selectedRoomIndex = nextIdx;
-                      _zoomToRoom(nextIdx);
-                    });
-                  },
-                ),
-                // Auto-assist button for active room
-                GestureDetector(
-                  onTap: () => _autoLayoutActiveRoom(activeRoom),
-                  child: Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 4),
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: BanaagTheme.primaryAmber.withValues(alpha: 0.18),
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(color: BanaagTheme.primaryAmber.withValues(alpha: 0.7), width: 0.8),
-                    ),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.flash_on, size: 12, color: BanaagTheme.primaryAmber),
-                        SizedBox(width: 2),
-                        Text('⚡ Auto-Fill', style: TextStyle(color: BanaagTheme.primaryAmber, fontSize: 9.5, fontWeight: FontWeight.bold)),
-                      ],
-                    ),
-                  ),
-                ),
-                // Clear active room points button
-                GestureDetector(
-                  onTap: () {
-                    final poly = _roomPolygons[activeRoom.id] ?? [];
-                    if (poly.isEmpty) return;
-                    setState(() {
-                      _points.removeWhere((p) => p.type != 'PANEL' && _isPointInPolygon(Offset(p.x, p.y), poly));
-                      final remainingIds = _points.map((p) => p.id).toSet();
-                      _routes.removeWhere((r) => !remainingIds.contains(r.fromPointId) || !remainingIds.contains(r.toPointId));
-                      if (widget.project != null) {
-                        widget.project!.canvasPoints = _points;
-                        widget.project!.conduitRoutes = _routes;
-                        ProjectRepository.instance.updateProject(widget.project!);
-                      }
-                    });
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('🗑️ Cleared devices in ${activeRoom.name}. Ready for manual placement!'),
-                        backgroundColor: Colors.orangeAccent,
-                        duration: const Duration(seconds: 2),
-                      ),
-                    );
-                  },
-                  child: Container(
-                    margin: const EdgeInsets.only(right: 6),
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: Colors.redAccent.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(color: Colors.redAccent.withValues(alpha: 0.6), width: 0.8),
-                    ),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.delete_sweep_outlined, size: 12, color: Colors.redAccent),
-                        SizedBox(width: 2),
-                        Text('Clear Room', style: TextStyle(color: Colors.redAccent, fontSize: 9.5, fontWeight: FontWeight.bold)),
-                      ],
-                    ),
-                  ),
-                ),
-                // Quick shortcut button to edit active room bounds directly
-                GestureDetector(
-                  onTap: () {
-                    final tappedRoom = activeRoom;
-                    HapticFeedback.heavyImpact();
-                    final poly = _roomPolygons[tappedRoom.id] ?? _defaultCadPolygonForRoom(tappedRoom.name, safeRoomIdx);
-                    _points.removeWhere((p) => _isPointInPolygon(Offset(p.x, p.y), poly));
-                    final remainingIds = _points.map((p) => p.id).toSet();
-                    _routes.removeWhere((r) => !remainingIds.contains(r.fromPointId) || !remainingIds.contains(r.toPointId));
-
-                    setState(() {
-                      _canvasStage = 1;
-                      _stage1SubStep = 3;
-                      _selectedRoomIndex = safeRoomIdx;
-                      _selectedTool = 'SELECT';
-                      if (widget.project != null) {
-                        widget.project!.canvasPoints = _points;
-                        widget.project!.conduitRoutes = _routes;
-                        ProjectRepository.instance.updateProject(widget.project!);
-                      }
-                    });
-                  },
-                  child: Container(
-                    margin: const EdgeInsets.only(right: 8),
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: Colors.cyanAccent.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(color: Colors.cyanAccent.withValues(alpha: 0.6), width: 0.8),
-                    ),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.edit_location_alt, size: 12, color: Colors.cyanAccent),
-                        SizedBox(width: 3),
-                        Text('📐 Edit Bounds', style: TextStyle(color: Colors.cyanAccent, fontSize: 9.5, fontWeight: FontWeight.bold)),
-                      ],
-                    ),
-                  ),
-                ),
-                Expanded(
-                  child: ListView.builder(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: spaces.length,
-                    itemBuilder: (ctx, idx) {
-                      final s = spaces[idx];
-                      final isSel = idx == safeRoomIdx;
-                      return Padding(
-                        padding: const EdgeInsets.only(right: 6, top: 4, bottom: 4),
-                        child: ChoiceChip(
-                          selectedColor: BanaagTheme.primaryAmber,
-                          backgroundColor: const Color(0xFF141822),
-                          labelPadding: const EdgeInsets.symmetric(horizontal: 4),
-                          label: Text(
-                            s.name,
-                            style: TextStyle(
-                              color: isSel ? Colors.black : Colors.white70,
-                              fontWeight: isSel ? FontWeight.bold : FontWeight.normal,
-                              fontSize: 10.5,
-                            ),
+                // Tier 1: Room Cycle Navigator (Overview + Prev + Next + Room Chips)
+                SizedBox(
+                  height: 34,
+                  child: Row(
+                    children: [
+                      // Overview Fit Button
+                      GestureDetector(
+                        onTap: () {
+                          setState(() {
+                            _fitSheetToViewport();
+                          });
+                        },
+                        child: Container(
+                          margin: const EdgeInsets.only(right: 4),
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.white10,
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(color: Colors.white24),
                           ),
-                          selected: isSel,
-                          onSelected: (_) {
-                            setState(() {
-                              _selectedRoomIndex = idx;
-                              _zoomToRoom(idx);
-                            });
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.zoom_out_map, size: 12, color: Colors.cyanAccent),
+                              SizedBox(width: 3),
+                              Text('Overview', style: TextStyle(color: Colors.cyanAccent, fontSize: 9.5, fontWeight: FontWeight.bold)),
+                            ],
+                          ),
+                        ),
+                      ),
+                      // Prev Room Arrow
+                      IconButton(
+                        icon: const Icon(Icons.chevron_left, color: BanaagTheme.primaryAmber, size: 20),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+                        tooltip: 'Previous Room',
+                        onPressed: () {
+                          if (spaces.isEmpty) return;
+                          final prevIdx = (safeRoomIdx - 1 + spaces.length) % spaces.length;
+                          setState(() {
+                            _selectedRoomIndex = prevIdx;
+                            _zoomToRoom(prevIdx);
+                          });
+                        },
+                      ),
+                      // Next Room Arrow
+                      IconButton(
+                        icon: const Icon(Icons.chevron_right, color: BanaagTheme.primaryAmber, size: 20),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+                        tooltip: 'Next Room',
+                        onPressed: () {
+                          if (spaces.isEmpty) return;
+                          final nextIdx = (safeRoomIdx + 1) % spaces.length;
+                          setState(() {
+                            _selectedRoomIndex = nextIdx;
+                            _zoomToRoom(nextIdx);
+                          });
+                        },
+                      ),
+                      // Horizontal Scrollable Room Chips
+                      Expanded(
+                        child: ListView.builder(
+                          scrollDirection: Axis.horizontal,
+                          itemCount: spaces.length,
+                          itemBuilder: (ctx, idx) {
+                            final s = spaces[idx];
+                            final isSel = idx == safeRoomIdx;
+                            return Padding(
+                              padding: const EdgeInsets.only(right: 6, top: 2, bottom: 2),
+                              child: ChoiceChip(
+                                selectedColor: BanaagTheme.primaryAmber,
+                                backgroundColor: const Color(0xFF141822),
+                                labelPadding: const EdgeInsets.symmetric(horizontal: 4),
+                                label: Text(
+                                  s.name,
+                                  style: TextStyle(
+                                    color: isSel ? Colors.black : Colors.white70,
+                                    fontWeight: isSel ? FontWeight.bold : FontWeight.normal,
+                                    fontSize: 10.5,
+                                  ),
+                                ),
+                                selected: isSel,
+                                onSelected: (_) {
+                                  setState(() {
+                                    _selectedRoomIndex = idx;
+                                    _zoomToRoom(idx);
+                                  });
+                                },
+                              ),
+                            );
                           },
                         ),
-                      );
-                    },
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 4),
+                // Tier 2: Action Buttons for Active Room (Active Room Badge + Auto-Fill + Clear Room + Edit Bounds)
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      Container(
+                        margin: const EdgeInsets.only(right: 6),
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(color: Colors.white24, width: 0.8),
+                        ),
+                        child: Text(
+                          activeRoom.name.toUpperCase(),
+                          style: const TextStyle(color: BanaagTheme.primaryAmber, fontSize: 9.5, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      GestureDetector(
+                        onTap: () => _autoLayoutActiveRoom(activeRoom),
+                        child: Container(
+                          margin: const EdgeInsets.symmetric(horizontal: 4),
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: BanaagTheme.primaryAmber.withValues(alpha: 0.18),
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(color: BanaagTheme.primaryAmber.withValues(alpha: 0.7), width: 0.8),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.flash_on, size: 12, color: BanaagTheme.primaryAmber),
+                              SizedBox(width: 2),
+                              Text('⚡ Auto-Fill', style: TextStyle(color: BanaagTheme.primaryAmber, fontSize: 9.5, fontWeight: FontWeight.bold)),
+                            ],
+                          ),
+                        ),
+                      ),
+                      GestureDetector(
+                        onTap: () {
+                          final poly = _roomPolygons[activeRoom.id] ?? [];
+                          if (poly.isEmpty) return;
+                          setState(() {
+                            _points.removeWhere((p) => p.type != 'PANEL' && _isPointInPolygon(Offset(p.x, p.y), poly));
+                            final remainingIds = _points.map((p) => p.id).toSet();
+                            _routes.removeWhere((r) => !remainingIds.contains(r.fromPointId) || !remainingIds.contains(r.toPointId));
+                            if (widget.project != null) {
+                              widget.project!.canvasPoints = _points;
+                              widget.project!.conduitRoutes = _routes;
+                              ProjectRepository.instance.updateProject(widget.project!);
+                            }
+                          });
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('🗑️ Cleared devices in \. Ready for manual placement!'),
+                              backgroundColor: Colors.orangeAccent,
+                              duration: const Duration(seconds: 2),
+                            ),
+                          );
+                        },
+                        child: Container(
+                          margin: const EdgeInsets.only(right: 6),
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: Colors.redAccent.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(color: Colors.redAccent.withValues(alpha: 0.6), width: 0.8),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.delete_sweep_outlined, size: 12, color: Colors.redAccent),
+                              SizedBox(width: 2),
+                              Text('Clear Room', style: TextStyle(color: Colors.redAccent, fontSize: 9.5, fontWeight: FontWeight.bold)),
+                            ],
+                          ),
+                        ),
+                      ),
+                      GestureDetector(
+                        onTap: () {
+                          final tappedRoom = activeRoom;
+                          HapticFeedback.heavyImpact();
+                          final poly = _roomPolygons[tappedRoom.id] ?? _defaultCadPolygonForRoom(tappedRoom.name, safeRoomIdx);
+                          _points.removeWhere((p) => _isPointInPolygon(Offset(p.x, p.y), poly));
+                          final remainingIds = _points.map((p) => p.id).toSet();
+                          _routes.removeWhere((r) => !remainingIds.contains(r.fromPointId) || !remainingIds.contains(r.toPointId));
+
+                          setState(() {
+                            _canvasStage = 1;
+                            _stage1SubStep = 3;
+                            _selectedRoomIndex = safeRoomIdx;
+                            _selectedTool = 'SELECT';
+                            if (widget.project != null) {
+                              widget.project!.canvasPoints = _points;
+                              widget.project!.conduitRoutes = _routes;
+                              ProjectRepository.instance.updateProject(widget.project!);
+                            }
+                          });
+                        },
+                        child: Container(
+                          margin: const EdgeInsets.only(right: 8),
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: Colors.cyanAccent.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(color: Colors.cyanAccent.withValues(alpha: 0.6), width: 0.8),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.edit_location_alt, size: 12, color: Colors.cyanAccent),
+                              SizedBox(width: 3),
+                              Text('📐 Edit Bounds', style: TextStyle(color: Colors.cyanAccent, fontSize: 9.5, fontWeight: FontWeight.bold)),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
             ),
           ),
-
           // Load-Synced Placement Toolbox
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
