@@ -1921,9 +1921,15 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
       return false;
     }
 
-    // 3. Stage 3 Electrical Devices
+    // 3. Stage 3 Electrical Devices & Move Handle
+    if (_selectedPoint != null) {
+      // Priority check on selected point and its move handle (within 40px radius)
+      final selDist = (Offset(_selectedPoint!.x, _selectedPoint!.y) - tapPos).distance;
+      if (selDist <= 42.0) return true;
+    }
+
     for (final pt in _points) {
-      if ((Offset(pt.x, pt.y) - tapPos).distance <= 32.0) {
+      if ((Offset(pt.x, pt.y) - tapPos).distance <= 30.0) {
         return true;
       }
     }
@@ -2033,13 +2039,29 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
       return;
     }
 
-    // STAGE 3: Detect if user grabbed an electrical device point
+    // STAGE 3: Select-then-drag or Direct Device Drag
     CanvasPoint? hitPt;
-    for (final pt in _points.reversed) {
-      final dist = (Offset(pt.x, pt.y) - Offset(tapX, tapY)).distance;
-      if (dist <= 28.0) {
-        hitPt = pt;
-        break;
+
+    // Check if user grabbed the active selected point or its 4-way move handle above it
+    if (_selectedPoint != null) {
+      final isPanel = _selectedPoint!.type == 'PANEL';
+      final handlePos = Offset(_selectedPoint!.x, _selectedPoint!.y - (isPanel ? 18.0 : 16.0));
+      final distToHandle = (handlePos - Offset(tapX, tapY)).distance;
+      final distToPt = (Offset(_selectedPoint!.x, _selectedPoint!.y) - Offset(tapX, tapY)).distance;
+
+      if (distToHandle <= 28.0 || distToPt <= 28.0) {
+        hitPt = _selectedPoint;
+      }
+    }
+
+    // If not dragging selected handle, check other devices
+    if (hitPt == null) {
+      for (final pt in _points.reversed) {
+        final dist = (Offset(pt.x, pt.y) - Offset(tapX, tapY)).distance;
+        if (dist <= 28.0) {
+          hitPt = pt;
+          break;
+        }
       }
     }
 
@@ -2048,6 +2070,7 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
         _draggedPoint = hitPt;
         _selectedPoint = hitPt;
       });
+      HapticFeedback.selectionClick();
     }
   }
 
@@ -4147,8 +4170,8 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                     constrained: false,
                     minScale: 0.15,
                     maxScale: 10.0,
-                    panEnabled: true,
-                    scaleEnabled: true,
+                    panEnabled: !_isDraggingItem,
+                    scaleEnabled: !_isDraggingItem,
                     panAxis: PanAxis.free,
                     boundaryMargin: const EdgeInsets.all(900.0),
                     onInteractionEnd: (_) {
@@ -6129,6 +6152,100 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
               ),
             ),
 
+          // Guided Step 0: Main Distribution Panel (MDP) Setup Card
+          if (!_points.any((p) => p.type == 'PANEL'))
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1B2332),
+                border: Border(bottom: BorderSide(color: Colors.redAccent.withValues(alpha: 0.5), width: 1.5)),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 32,
+                    height: 18,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF141923),
+                      border: Border.all(color: Colors.white, width: 1.2),
+                    ),
+                    child: Row(
+                      children: [
+                        const Spacer(),
+                        Container(width: 16, color: Colors.redAccent),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: const [
+                        Text(
+                          '⚡ STEP 1: POSITION MAIN DISTRIBUTION PANEL (MDP)',
+                          style: TextStyle(color: Colors.redAccent, fontSize: 10.5, fontWeight: FontWeight.w900),
+                        ),
+                        Text(
+                          'Place at Service Corridor/Shaft. Readily accessible, 900mm clearance (PEC 1.10.2.1).',
+                          style: TextStyle(color: Colors.white70, fontSize: 9.5),
+                        ),
+                      ],
+                    ),
+                  ),
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.redAccent,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    icon: const Icon(Icons.flash_auto, size: 13),
+                    label: const Text('Auto-Suggest', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                    onPressed: () {
+                      // Smart placement at landing / central service corridor wall
+                      final landingRoom = widget.project?.spaces.firstWhere(
+                        (s) => s.name.toLowerCase().contains('landing') || s.name.toLowerCase().contains('corridor') || s.name.toLowerCase().contains('stair'),
+                        orElse: () => widget.project!.spaces.first,
+                      );
+                      Offset mdpPos = const Offset(585.0, 535.0);
+                      if (landingRoom != null) {
+                        final poly = _roomPolygons[landingRoom.id] ?? [];
+                        if (poly.isNotEmpty) {
+                          final r = _boundingBoxOfPolygon(poly);
+                          mdpPos = Offset(r.center.dx, r.top + 14.0);
+                        }
+                      }
+                      setState(() {
+                        _points.removeWhere((p) => p.type == 'PANEL');
+                        final mdp = CanvasPoint(
+                          id: 'pt-panel',
+                          type: 'PANEL',
+                          label: 'MDP',
+                          x: mdpPos.dx,
+                          y: mdpPos.dy,
+                          circuitNumber: 0,
+                        );
+                        _points.insert(0, mdp);
+                        _selectedPoint = mdp;
+                        if (widget.project != null) {
+                          widget.project!.canvasPoints = _points;
+                          ProjectRepository.instance.updateProject(widget.project!);
+                        }
+                      });
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('⚡ MDP placed at Central Service Corridor Wall. Tap to select & drag move handle!'),
+                          backgroundColor: BanaagTheme.successGreen,
+                          duration: Duration(seconds: 2),
+                        ),
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ),
+
           // Room Selector Bar (Responsive 2-Tier Layout: Zero Overflow Guarantee)
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -7206,41 +7323,126 @@ class CanvasPainter extends CustomPainter {
       if (!isPointVisibleInLayer(pt)) continue;
       final isSel = selectedPoint?.id == pt.id;
       final bool isPanel = pt.type == 'PANEL';
-      final double radius = isSel ? 11.0 : (isPanel ? 9.5 : 7.5);
-      final pointPaint = Paint()..color = getColorForType(pt.type);
 
-      // Selection halo
-      if (isSel) {
+      if (isPanel) {
+        // Standard Philippine / ANSI Architectural CAD Distribution Panelboard Symbol:
+        // Flush/Surface Rectangular Enclosure with Half-Solid Fill & Double Border
+        const double pw = 28.0;
+        const double ph = 14.0;
+        final panelRect = Rect.fromCenter(center: Offset(pt.x, pt.y), width: pw, height: ph);
+
+        // Selection halo for Panel
+        if (isSel) {
+          canvas.drawRRect(
+            RRect.fromRectAndRadius(panelRect.inflate(4.0), const Radius.circular(3)),
+            Paint()
+              ..color = BanaagTheme.primaryAmber.withValues(alpha: 0.35)
+              ..style = PaintingStyle.fill,
+          );
+        }
+
+        // 1. Enclosure background (Dark Slate)
+        canvas.drawRect(panelRect, Paint()..color = const Color(0xFF141923));
+
+        // 2. Right half solid fill (Classic CAD Panelboard representation)
+        final halfFillRect = Rect.fromLTWH(panelRect.left + pw / 2, panelRect.top, pw / 2, ph);
+        canvas.drawRect(halfFillRect, Paint()..color = Colors.redAccent);
+
+        // 3. Crisp Enclosure Outer Border & Center Divider
+        final borderPaint = Paint()
+          ..color = isSel ? BanaagTheme.primaryAmber : Colors.white
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = isSel ? 2.0 : 1.4;
+        canvas.drawRect(panelRect, borderPaint);
+        canvas.drawLine(
+          Offset(panelRect.center.dx, panelRect.top),
+          Offset(panelRect.center.dx, panelRect.bottom),
+          borderPaint,
+        );
+
+        // 4. Panel Header Tag Label (e.g. "MDP" or "LP-1")
+        final panelTagSpan = TextSpan(
+          text: pt.label,
+          style: TextStyle(
+            color: isSel ? BanaagTheme.primaryAmber : Colors.white,
+            fontSize: 9.0,
+            fontWeight: FontWeight.w900,
+            letterSpacing: 0.5,
+          ),
+        );
+        final tagTp = TextPainter(text: panelTagSpan, textDirection: TextDirection.ltr)..layout();
+        tagTp.paint(canvas, Offset(pt.x - tagTp.width / 2, panelRect.top - tagTp.height - 3.0));
+      } else {
+        final double radius = isSel ? 10.5 : 7.5;
+        final pointPaint = Paint()..color = getColorForType(pt.type);
+
+        // Selection halo
+        if (isSel) {
+          canvas.drawCircle(
+            Offset(pt.x, pt.y),
+            12.0,
+            Paint()
+              ..color = BanaagTheme.primaryAmber.withValues(alpha: 0.35)
+              ..style = PaintingStyle.fill,
+          );
+        }
+
+        canvas.drawCircle(Offset(pt.x, pt.y), radius, pointPaint);
+
+        // Crisp CAD Symbol Border
         canvas.drawCircle(
           Offset(pt.x, pt.y),
-          10.0,
+          radius,
           Paint()
-            ..color = BanaagTheme.primaryAmber.withValues(alpha: 0.35)
-            ..style = PaintingStyle.fill,
+            ..color = isSel ? BanaagTheme.primaryAmber : const Color(0xFF11151E)
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = isSel ? 2.2 : 1.2,
+        );
+
+        // Inner CAD center dot for precision visual anchor
+        canvas.drawCircle(
+          Offset(pt.x, pt.y),
+          1.8,
+          Paint()..color = const Color(0xFF11151E),
         );
       }
 
-      canvas.drawCircle(Offset(pt.x, pt.y), radius, pointPaint);
+      // If Selected: Draw an obvious 4-Way Move Handle (●) above the symbol for intuitive drag!
+      if (isSel) {
+        final moveHandleCenter = Offset(pt.x, pt.y - (isPanel ? 18.0 : 16.0));
+        canvas.drawCircle(
+          moveHandleCenter,
+          8.5,
+          Paint()..color = BanaagTheme.primaryAmber,
+        );
+        canvas.drawCircle(
+          moveHandleCenter,
+          8.5,
+          Paint()
+            ..color = Colors.black
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 1.4,
+        );
+        // Micro move arrows cross inside the handle
+        final moveArrowPaint = Paint()
+          ..color = Colors.black
+          ..strokeWidth = 1.5
+          ..style = PaintingStyle.stroke;
+        canvas.drawLine(
+          Offset(moveHandleCenter.dx - 4.5, moveHandleCenter.dy),
+          Offset(moveHandleCenter.dx + 4.5, moveHandleCenter.dy),
+          moveArrowPaint,
+        );
+        canvas.drawLine(
+          Offset(moveHandleCenter.dx, moveHandleCenter.dy - 4.5),
+          Offset(moveHandleCenter.dx, moveHandleCenter.dy + 4.5),
+          moveArrowPaint,
+        );
+      }
 
-      // Crisp CAD Symbol Border
-      canvas.drawCircle(
-        Offset(pt.x, pt.y),
-        radius,
-        Paint()
-          ..color = isSel ? BanaagTheme.primaryAmber : const Color(0xFF11151E)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = isSel ? 2.0 : 1.2,
-      );
-
-      // Inner CAD center dot for precision visual anchor
-      canvas.drawCircle(
-        Offset(pt.x, pt.y),
-        1.8,
-        Paint()..color = const Color(0xFF11151E),
-      );
-
-      // Micro-Badge Label
-      if (showLabels) {
+      // Micro-Badge Label (for Non-Panel devices)
+      if (showLabels && !isPanel) {
+        const double r = 7.5;
         final displayLabel = pt.label.length > 7 ? pt.label.substring(0, 7) : pt.label;
         final textSpan = TextSpan(
           text: displayLabel,
@@ -7257,7 +7459,7 @@ class CanvasPainter extends CustomPainter {
         final bgRect = RRect.fromRectAndRadius(
           Rect.fromLTWH(
             pt.x - (textPainter.width / 2) - 2.5,
-            pt.y + radius + 1.5,
+            pt.y + r + 1.5,
             textPainter.width + 5.0,
             textPainter.height + 1.8,
           ),
@@ -7272,7 +7474,7 @@ class CanvasPainter extends CustomPainter {
 
         canvas.drawRRect(bgRect, bgPaint);
         canvas.drawRRect(bgRect, borderPaint);
-        textPainter.paint(canvas, Offset(pt.x - (textPainter.width / 2), pt.y + radius + 2.4));
+        textPainter.paint(canvas, Offset(pt.x - (textPainter.width / 2), pt.y + r + 2.4));
       }
     }
   }
