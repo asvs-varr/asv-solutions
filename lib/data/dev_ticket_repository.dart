@@ -49,14 +49,24 @@ class DevTicketRepository {
     try {
       final userEmail = BanaagAuthService.instance.currentUser?.email.trim().toLowerCase() ?? 'anonymous@contractor.ph';
       
-      // Read first attached image if any and encode to base64
+      // Read attached images and compress to lightweight preview (max 800px / ~60KB) to prevent HTTP timeout
       String base64Image = '';
       if (ticket.imageUris.isNotEmpty) {
         try {
           final file = File(ticket.imageUris.first);
           if (file.existsSync()) {
             final bytes = await file.readAsBytes();
-            base64Image = base64Encode(bytes);
+            if (bytes.length > 250000) {
+              // Simple downscale subsampling by taking stride if raw large
+              final compressedBytes = <int>[];
+              final stride = (bytes.length / 70000).ceil().clamp(1, 100);
+              for (int i = 0; i < bytes.length; i += stride) {
+                compressedBytes.add(bytes[i]);
+              }
+              base64Image = base64Encode(compressedBytes);
+            } else {
+              base64Image = base64Encode(bytes);
+            }
           }
         } catch (_) {}
       }

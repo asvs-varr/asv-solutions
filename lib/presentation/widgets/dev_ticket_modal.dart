@@ -38,6 +38,7 @@ class _DevTicketModalContentState extends State<DevTicketModalContent> {
   bool _showListView = false;
   List<DevTicket> _tickets = [];
   bool _isLoading = true;
+  bool _isSubmittingTicket = false;
   final List<String> _attachedImagePaths = [];
 
   final Map<String, Map<String, dynamic>> _typeMeta = {
@@ -95,6 +96,7 @@ class _DevTicketModalContentState extends State<DevTicketModalContent> {
       return;
     }
 
+    setState(() => _isSubmittingTicket = true);
     final newTicket = DevTicket(
       id: 'TKT-${DateTime.now().millisecondsSinceEpoch}',
       title: title,
@@ -116,6 +118,7 @@ class _DevTicketModalContentState extends State<DevTicketModalContent> {
 
     if (mounted) {
       setState(() {
+        _isSubmittingTicket = false;
         _showListView = true;
       });
       ScaffoldMessenger.of(context).showSnackBar(
@@ -427,7 +430,7 @@ class _DevTicketModalContentState extends State<DevTicketModalContent> {
         ],
         const SizedBox(height: 16),
 
-        // Submit Button
+        // Submit Button with Loading Spinner & Anti-Double-Tap Lock
         SizedBox(
           width: double.infinity,
           height: 46,
@@ -437,9 +440,14 @@ class _DevTicketModalContentState extends State<DevTicketModalContent> {
               foregroundColor: Colors.black,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             ),
-            icon: const Icon(Icons.send_rounded, size: 18),
-            label: const Text('SUBMIT DEV TICKET', style: TextStyle(fontWeight: FontWeight.bold)),
-            onPressed: _submitTicket,
+            icon: _isSubmittingTicket
+                ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
+                : const Icon(Icons.send_rounded, size: 18),
+            label: Text(
+              _isSubmittingTicket ? 'SUBMITTING TO CLOUD...' : 'SUBMIT DEV TICKET',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            onPressed: _isSubmittingTicket ? null : _submitTicket,
           ),
         ),
       ],

@@ -1287,13 +1287,18 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
       _routes = List<ConduitRoute>.from(widget.project!.conduitRoutes);
       _sanitizeAndFitExistingPointsIfNeeded();
       _recalculateAllRouteLengths();
-    } else if (widget.project != null && widget.project!.applianceLoads.isNotEmpty) {
+    } else if (widget.project != null && widget.project!.applianceLoads.isNotEmpty && widget.forceRegenerateFromLoads) {
       _autoGenerateFromAppliances(widget.project!.applianceLoads);
       _recalculateAllRouteLengths();
       widget.project!.canvasPoints = _points;
       widget.project!.conduitRoutes = _routes;
       ProjectRepository.instance.updateProject(widget.project!);
     } else {
+      // Manual default: Keep canvas clean with MDP panel placed at central structural wall
+      _points = [
+        CanvasPoint(id: 'pt-panel', type: 'PANEL', label: 'MDP', x: 585.0, y: 535.0, circuitNumber: 0),
+      ];
+      _routes = [];
       _points = [
         CanvasPoint(id: 'pt-1', type: 'PANEL', label: 'MDP', x: 585, y: 535),
         CanvasPoint(id: 'pt-2', type: 'SWITCH_1G', label: 'S1-1', x: 645, y: 290),
@@ -1485,11 +1490,8 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
         }
       }
 
-      // Max lights capacity based on room area so symbols never overlap
-      final int maxLightsForRoom = lowerRoom.contains('hall') || lowerRoom.contains('event')
-          ? 8
-          : (lowerRoom.contains('office') ? 4 : 2);
-      final int numLights = rawLights > 0 ? math.min(rawLights, maxLightsForRoom) : 0;
+      // Exact IESNA count without artificial caps
+      final int numLights = rawLights;
 
       // 1. Place Room Wall Switch + Point-in-Polygon Ceiling Grid inside roomPoly
       if (numLights > 0) {
@@ -5519,6 +5521,190 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
     );
   }
 
+
+  void _autoLayoutActiveRoom(RoomSpace room) {
+    if (widget.project == null) return;
+    final lowerRoom = room.name.toLowerCase();
+    final poly = _roomPolygons[room.id] ?? _defaultCadPolygonForRoom(room.name, _selectedRoomIndex);
+    if (poly.length < 3) return;
+    final rect = _boundingBoxOfPolygon(poly);
+
+    // Get assigned loads for this room
+    final roomLoads = widget.project!.applianceLoads.where(
+      (a) => a.roomCategory.trim().toLowerCase() == lowerRoom ||
+             (lowerRoom.contains('hall') && a.roomCategory.toLowerCase().contains('hall'))
+    ).toList();
+
+    // Check which items are already manually placed
+    final existingRoomPts = _points.where((p) => _isPointInPolygon(Offset(p.x, p.y), poly)).toList();
+
+    int existingLights = existingRoomPts.where((p) => p.type == 'LIGHT').length;
+    int existingOutlets = existingRoomPts.where((p) => p.type == 'OUTLET_DUPLEX').length;
+    int existingAcus = existingRoomPts.where((p) => p.type == 'ACU').length;
+    int existingSwitches = existingRoomPts.where((p) => p.type.startsWith('SWITCH')).length;
+
+    // Tally target requirements
+    int targetLights = 0;
+    int targetOutlets = 0;
+    int targetAcus = 0;
+    int lightCkt = 1;
+    int outletCkt = 2;
+    int nextDedicatedCkt = 3;
+
+    for (final app in roomLoads) {
+      final nm = app.name.toLowerCase();
+      final pcsMatch = RegExp(r'(?:x|\()\s*(\d+)\s*pcs', caseSensitive: false).firstMatch(app.name);
+      final int packMult = pcsMatch != null ? (int.tryParse(pcsMatch.group(1)!) ?? 1) : 1;
+      final totalPcs = app.quantity * packMult;
+
+      if (nm.contains('aircon') || nm.contains('acu')) {
+        targetAcus += totalPcs;
+      } else if (app.isLighting || nm.contains('light') || nm.contains('troffer') || nm.contains('luminaire') || nm.contains('led')) {
+        targetLights += totalPcs;
+        lightCkt = app.circuitNumber > 0 ? app.circuitNumber : 1;
+      } else {
+        targetOutlets += totalPcs;
+        outletCkt = app.circuitNumber > 0 ? app.circuitNumber : 2;
+      }
+    }
+
+    final int lightsToAdd = math.max(0, targetLights - existingLights);
+    final int outletsToAdd = math.max(0, targetOutlets - existingOutlets);
+    final int acusToAdd = math.max(0, targetAcus - existingAcus);
+    final bool needSwitch = existingSwitches == 0 && targetLights > 0;
+
+    final addedPoints = <CanvasPoint>[];
+    final addedRoutes = <ConduitRoute>[];
+
+    // 1. Add Switch at door/corner if missing
+    CanvasPoint? switchPt;
+    if (needSwitch) {
+      final swPos = Offset(rect.left + 22.0, rect.bottom - 22.0);
+      switchPt = CanvasPoint(
+        id: 'pt-sw-',
+        type: 'SWITCH_1G',
+        label: 'S1-',
+        x: swPos.dx,
+        y: swPos.dy,
+        circuitNumber: lightCkt,
+      );
+      addedPoints.add(switchPt);
+    }
+
+    // 2. Distribute missing lights across clean IESNA grid matrix
+    final List<CanvasPoint> newLights = [];
+    if (lightsToAdd > 0) {
+      int cols = math.max(1, math.sqrt(lightsToAdd * (rect.width / rect.height)).round());
+      int rows = (lightsToAdd / cols).ceil();
+      if (cols * rows < lightsToAdd) rows += 1;
+
+      final double stepX = rect.width / (cols + 1);
+      final double stepY = rect.height / (rows + 1);
+      int placedCount = 0;
+
+      for (int r = 1; r <= rows && placedCount < lightsToAdd; r++) {
+        for (int c = 1; c <= cols && placedCount < lightsToAdd; c++) {
+          final cand = Offset(rect.left + c * stepX, rect.top + r * stepY);
+          if (_isPointInPolygon(cand, poly)) {
+            final pt = CanvasPoint(
+              id: 'pt-lt--',
+              type: 'LIGHT',
+              label: 'L-',
+              x: cand.dx,
+              y: cand.dy,
+              circuitNumber: lightCkt,
+            );
+            newLights.add(pt);
+            addedPoints.add(pt);
+            placedCount++;
+          }
+        }
+      }
+
+      // Chain lights together on same circuit
+      CanvasPoint? prev = switchPt;
+      for (final lt in newLights) {
+        if (prev != null) {
+          addedRoutes.add(ConduitRoute(
+            id: 'rt--',
+            fromPointId: prev.id,
+            toPointId: lt.id,
+            circuitNumber: lightCkt,
+            measuredLengthMeters: (Offset(prev.x, prev.y) - Offset(lt.x, lt.y)).distance / _pixelsPerMeter,
+          ));
+        }
+        prev = lt;
+      }
+    }
+
+    // 3. Add ACUs along exterior walls with dedicated circuit
+    if (acusToAdd > 0) {
+      for (int a = 0; a < acusToAdd; a++) {
+        final acuX = rect.left + (rect.width / (acusToAdd + 1)) * (a + 1);
+        final acuY = rect.top + 16.0;
+        final acuPt = CanvasPoint(
+          id: 'pt-acu--',
+          type: 'ACU',
+          label: 'ACU-',
+          x: acuX,
+          y: acuY,
+          circuitNumber: nextDedicatedCkt + a,
+        );
+        addedPoints.add(acuPt);
+      }
+    }
+
+    // 4. Add convenience outlets along walls
+    if (outletsToAdd > 0) {
+      for (int o = 0; o < outletsToAdd; o++) {
+        final outX = rect.left + 18.0;
+        final outY = rect.top + (rect.height / (outletsToAdd + 1)) * (o + 1);
+        final outPt = CanvasPoint(
+          id: 'pt-co--',
+          type: 'OUTLET_DUPLEX',
+          label: 'CO-',
+          x: outX,
+          y: outY,
+          circuitNumber: outletCkt,
+        );
+        addedPoints.add(outPt);
+      }
+    }
+
+    // Connect first device of each circuit to MDP as a dedicated Homerun
+    final mdpPt = _points.firstWhere((p) => p.type == 'PANEL', orElse: () => _points.first);
+    final circuitsInRoom = addedPoints.map((p) => p.circuitNumber).toSet();
+    for (final ckt in circuitsInRoom) {
+      if (ckt <= 0) continue;
+      final firstPtInCkt = addedPoints.firstWhere((p) => p.circuitNumber == ckt);
+      addedRoutes.add(ConduitRoute(
+        id: 'rt-hr--',
+        fromPointId: mdpPt.id,
+        toPointId: firstPtInCkt.id,
+        circuitNumber: ckt,
+        measuredLengthMeters: (Offset(mdpPt.x, mdpPt.y) - Offset(firstPtInCkt.x, firstPtInCkt.y)).distance / _pixelsPerMeter,
+      ));
+    }
+
+    setState(() {
+      _points.addAll(addedPoints);
+      _routes.addAll(addedRoutes);
+      if (widget.project != null) {
+        widget.project!.canvasPoints = _points;
+        widget.project!.conduitRoutes = _routes;
+        ProjectRepository.instance.updateProject(widget.project!);
+      }
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('⚡ Auto-assisted:  remaining devices placed in !'),
+        backgroundColor: BanaagTheme.successGreen,
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
   Widget _buildRoomLoadPlacementTray() {
     if (widget.project == null || widget.project!.spaces.isEmpty) {
       return Container(
@@ -5626,6 +5812,27 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                 const Icon(Icons.meeting_room, size: 15, color: BanaagTheme.primaryAmber),
                 const SizedBox(width: 6),
                 const Text('ROOM: ', style: TextStyle(color: Colors.white60, fontSize: 10.5, fontWeight: FontWeight.bold)),
+                // Auto-assist button for active room
+                GestureDetector(
+                  onTap: () => _autoLayoutActiveRoom(activeRoom),
+                  child: Container(
+                    margin: const EdgeInsets.only(right: 6),
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: BanaagTheme.primaryAmber.withValues(alpha: 0.18),
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: BanaagTheme.primaryAmber.withValues(alpha: 0.7), width: 0.8),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.flash_on, size: 12, color: BanaagTheme.primaryAmber),
+                        SizedBox(width: 2),
+                        Text('⚡ Auto-Fill Room', style: TextStyle(color: BanaagTheme.primaryAmber, fontSize: 9.5, fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                  ),
+                ),
                 // Quick shortcut button to edit active room bounds directly
                 GestureDetector(
                   onTap: () {
