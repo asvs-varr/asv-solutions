@@ -3342,171 +3342,173 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                         ],
                       ),
                       const SizedBox(height: 6),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              '📏 Pin A–B: ${refLengthMm.round()} mm (${refLengthM.toStringAsFixed(2)}m / ${(refLengthMm / 25.4 / 12.0).floor()}\'-${(refLengthMm / 25.4 % 12.0).round()}")  •  🧱 Wall: ${_wallThicknessMm.round()} mm CHB',
-                              style: const TextStyle(color: BanaagTheme.primaryAmber, fontSize: 11.5, fontWeight: FontWeight.w700),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          GestureDetector(
-                            onTap: () {
-                              setState(() {
-                                _isOrthoSnapEnabled = !_isOrthoSnapEnabled;
-                              });
-                              HapticFeedback.selectionClick();
-                              ScaffoldMessenger.of(context).hideCurrentSnackBar();
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  duration: const Duration(milliseconds: 1200),
-                                  content: Text(
-                                    _isOrthoSnapEnabled
-                                        ? '📐 Orthogonal Snap: ON (Locks to 0°/90° & Column/Wall)'
-                                        : '📐 Orthogonal Snap: OFF (Free-Angle Movement)',
+                      Text(
+                        '📏 Pin A–B: ${refLengthMm.round()} mm (${refLengthM.toStringAsFixed(2)}m / ${(refLengthMm / 25.4 / 12.0).floor()}\'-${(refLengthMm / 25.4 % 12.0).round()}")  •  🧱 Wall: ${_wallThicknessMm.round()} mm CHB',
+                        style: const TextStyle(color: BanaagTheme.primaryAmber, fontSize: 11.5, fontWeight: FontWeight.w700),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 6),
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
+                            GestureDetector(
+                              onTap: () {
+                                setState(() {
+                                  _isOrthoSnapEnabled = !_isOrthoSnapEnabled;
+                                });
+                                HapticFeedback.selectionClick();
+                                ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    duration: const Duration(milliseconds: 1200),
+                                    content: Text(
+                                      _isOrthoSnapEnabled
+                                          ? '📐 Orthogonal Snap: ON (Locks to 0°/90° & Column/Wall)'
+                                          : '📐 Orthogonal Snap: OFF (Free-Angle Movement)',
+                                    ),
+                                    backgroundColor: _isOrthoSnapEnabled ? BanaagTheme.primaryAmber : Colors.grey[800],
                                   ),
-                                  backgroundColor: _isOrthoSnapEnabled ? BanaagTheme.primaryAmber : Colors.grey[800],
-                                ),
-                              );
-                            },
-                            child: Container(
-                              margin: const EdgeInsets.only(right: 6),
-                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: _isOrthoSnapEnabled
-                                    ? BanaagTheme.primaryAmber.withValues(alpha: 0.22)
-                                    : Colors.white.withValues(alpha: 0.08),
-                                borderRadius: BorderRadius.circular(6),
-                                border: Border.all(
-                                  color: _isOrthoSnapEnabled ? BanaagTheme.primaryAmber : Colors.white24,
-                                ),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    Icons.square_foot,
-                                    size: 13,
-                                    color: _isOrthoSnapEnabled ? BanaagTheme.primaryAmber : Colors.white70,
+                                );
+                              },
+                              child: Container(
+                                margin: const EdgeInsets.only(right: 6),
+                                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: _isOrthoSnapEnabled
+                                      ? BanaagTheme.primaryAmber.withValues(alpha: 0.22)
+                                      : Colors.white.withValues(alpha: 0.08),
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(
+                                    color: _isOrthoSnapEnabled ? BanaagTheme.primaryAmber : Colors.white24,
                                   ),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    _isOrthoSnapEnabled ? 'Ortho: ON' : 'Ortho: OFF',
-                                    style: TextStyle(
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.square_foot,
+                                      size: 13,
                                       color: _isOrthoSnapEnabled ? BanaagTheme.primaryAmber : Colors.white70,
-                                      fontSize: 10.5,
-                                      fontWeight: FontWeight.bold,
                                     ),
-                                  ),
-                                ],
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      _isOrthoSnapEnabled ? 'Ortho: ON' : 'Ortho: OFF',
+                                      style: TextStyle(
+                                        color: _isOrthoSnapEnabled ? BanaagTheme.primaryAmber : Colors.white70,
+                                        fontSize: 10.5,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
-                          ),
-                          GestureDetector(
-                            onTap: () {
-                              setState(() {
-                                _isAiAutoWallDetectEnabled = !_isAiAutoWallDetectEnabled;
-                              });
-                              HapticFeedback.selectionClick();
-                              ScaffoldMessenger.of(context).hideCurrentSnackBar();
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  duration: const Duration(milliseconds: 1400),
-                                  content: Text(
-                                    _isAiAutoWallDetectEnabled
-                                        ? '🧠 AI Auto-Detect Walls: ON (Smart Corners & Needles)'
-                                        : '🧠 AI Auto-Detect Walls: OFF (Manual Freehand Mode)',
+                            GestureDetector(
+                              onTap: () {
+                                setState(() {
+                                  _isAiAutoWallDetectEnabled = !_isAiAutoWallDetectEnabled;
+                                });
+                                HapticFeedback.selectionClick();
+                                ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    duration: const Duration(milliseconds: 1400),
+                                    content: Text(
+                                      _isAiAutoWallDetectEnabled
+                                          ? '🧠 AI Auto-Detect Walls: ON (Smart Corners & Needles)'
+                                          : '🧠 AI Auto-Detect Walls: OFF (Manual Freehand Mode)',
+                                    ),
+                                    backgroundColor: _isAiAutoWallDetectEnabled ? BanaagTheme.primaryAmber : Colors.grey[800],
                                   ),
-                                  backgroundColor: _isAiAutoWallDetectEnabled ? BanaagTheme.primaryAmber : Colors.grey[800],
-                                ),
-                              );
-                            },
-                            child: Container(
-                              margin: const EdgeInsets.only(right: 6),
-                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: _isAiAutoWallDetectEnabled
-                                    ? Colors.cyanAccent.withValues(alpha: 0.22)
-                                    : Colors.white.withValues(alpha: 0.08),
-                                borderRadius: BorderRadius.circular(6),
-                                border: Border.all(
-                                  color: _isAiAutoWallDetectEnabled ? Colors.cyanAccent : Colors.white24,
-                                ),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    Icons.auto_awesome,
-                                    size: 13,
-                                    color: _isAiAutoWallDetectEnabled ? Colors.cyanAccent : Colors.white70,
+                                );
+                              },
+                              child: Container(
+                                margin: const EdgeInsets.only(right: 6),
+                                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: _isAiAutoWallDetectEnabled
+                                      ? Colors.cyanAccent.withValues(alpha: 0.22)
+                                      : Colors.white.withValues(alpha: 0.08),
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(
+                                    color: _isAiAutoWallDetectEnabled ? Colors.cyanAccent : Colors.white24,
                                   ),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    _isAiAutoWallDetectEnabled ? 'AI Wall: ON' : 'AI Wall: OFF',
-                                    style: TextStyle(
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.auto_awesome,
+                                      size: 13,
                                       color: _isAiAutoWallDetectEnabled ? Colors.cyanAccent : Colors.white70,
-                                      fontSize: 10.5,
-                                      fontWeight: FontWeight.bold,
                                     ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                          GestureDetector(
-                            onTap: () {
-                              setState(() {
-                                _autoPositionScalePinsToNeedles(recomputePpm: true);
-                              });
-                              HapticFeedback.selectionClick();
-                              ScaffoldMessenger.of(context).hideCurrentSnackBar();
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  duration: Duration(milliseconds: 1400),
-                                  content: Text('🎯 Scale Pins snapped directly to Drawing Dimension Needles!'),
-                                  backgroundColor: BanaagTheme.primaryAmber,
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      _isAiAutoWallDetectEnabled ? 'AI Wall: ON' : 'AI Wall: OFF',
+                                      style: TextStyle(
+                                        color: _isAiAutoWallDetectEnabled ? Colors.cyanAccent : Colors.white70,
+                                        fontSize: 10.5,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                              );
-                            },
-                            child: Container(
-                              margin: const EdgeInsets.only(right: 6),
-                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: BanaagTheme.primaryAmber.withValues(alpha: 0.18),
-                                borderRadius: BorderRadius.circular(6),
-                                border: Border.all(color: BanaagTheme.primaryAmber.withValues(alpha: 0.6)),
                               ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: const [
-                                  Icon(Icons.gps_fixed, size: 12, color: BanaagTheme.primaryAmber),
-                                  SizedBox(width: 4),
-                                  Text(
-                                    'Auto-Pin',
-                                    style: TextStyle(color: BanaagTheme.primaryAmber, fontSize: 10.5, fontWeight: FontWeight.bold),
+                            ),
+                            GestureDetector(
+                              onTap: () {
+                                setState(() {
+                                  _autoPositionScalePinsToNeedles(recomputePpm: true);
+                                });
+                                HapticFeedback.selectionClick();
+                                ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    duration: Duration(milliseconds: 1400),
+                                    content: Text('🎯 Scale Pins snapped directly to Drawing Dimension Needles!'),
+                                    backgroundColor: BanaagTheme.primaryAmber,
                                   ),
-                                ],
+                                );
+                              },
+                              child: Container(
+                                margin: const EdgeInsets.only(right: 6),
+                                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: BanaagTheme.primaryAmber.withValues(alpha: 0.18),
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(color: BanaagTheme.primaryAmber.withValues(alpha: 0.6)),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: const [
+                                    Icon(Icons.gps_fixed, size: 12, color: BanaagTheme.primaryAmber),
+                                    SizedBox(width: 4),
+                                    Text(
+                                      'Auto-Pin',
+                                      style: TextStyle(color: BanaagTheme.primaryAmber, fontSize: 10.5, fontWeight: FontWeight.bold),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
-                          ),
-                          GestureDetector(
-                            onTap: _showCalibrationDialog,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.1),
-                                borderRadius: BorderRadius.circular(6),
-                                border: Border.all(color: Colors.white38),
-                              ),
-                              child: const Text(
-                                '✏️ Specify Actual',
-                                style: TextStyle(color: Colors.white, fontSize: 10.5, fontWeight: FontWeight.bold),
+                            GestureDetector(
+                              onTap: _showCalibrationDialog,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(color: Colors.white38),
+                                ),
+                                child: const Text(
+                                  '✏️ Specify Actual',
+                                  style: TextStyle(color: Colors.white, fontSize: 10.5, fontWeight: FontWeight.bold),
+                                ),
                               ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ],
                   );
@@ -7233,7 +7235,8 @@ class CanvasPainter extends CustomPainter {
     }
 
     // Draw Conduit Routes (Intra-Room Orthogonal CAD Conduits + Short Home-Run Arrowheads)
-    if (showConduits) {
+    // Conduits are only drawn in Stage 3 (Wire Takeoff)
+    if (showConduits && canvasStage == 3) {
       final lightingRoutePaint = Paint()
         ..color = BanaagTheme.primaryAmber.withValues(alpha: 0.78)
         ..strokeWidth = 1.6
@@ -7436,11 +7439,12 @@ class CanvasPainter extends CustomPainter {
       }
     }
 
-    // Draw Crisp CAD Points (scaled cleanly for the 1000 x 1220 CAD sheet)
-    for (final pt in points) {
-      if (!isPointVisibleInLayer(pt)) continue;
-      final isSel = selectedPoint?.id == pt.id;
-      final bool isPanel = pt.type == 'PANEL';
+    // Draw Crisp CAD Points (ONLY in Stage 3 Wire Takeoff)
+    if (canvasStage == 3) {
+      for (final pt in points) {
+        if (!isPointVisibleInLayer(pt)) continue;
+        final isSel = selectedPoint?.id == pt.id;
+        final bool isPanel = pt.type == 'PANEL';
 
       if (isPanel) {
         // Official DPWH / PEC 2017 CAD Standard Panelboard Symbol:
@@ -7602,6 +7606,7 @@ class CanvasPainter extends CustomPainter {
         textPainter.paint(canvas, Offset(pt.x - (textPainter.width / 2), pt.y + r + 2.4));
       }
     }
+    } // End of if (canvasStage == 3) for points
   }
 
   void _drawRoomWalls(Canvas canvas, Size size, RoomGeometry geom) {
