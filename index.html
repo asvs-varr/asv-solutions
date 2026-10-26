@@ -1,421 +1,218 @@
-﻿<!DOCTYPE html>
-
+<!DOCTYPE html>
 <html lang="en">
-
 <head>
-
   <meta charset="UTF-8">
-
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>ASV Solutions | A.E. CCTV & Computer Installation Services</title>
-
   <meta name="description" content="Official Corporate Portal of A.E. CCTV & Computer Installation Services (ASV Solutions). Providing Smart Security, IT Infrastructure, and Next-Gen Engineering Software.">
-
+  <link rel="icon" type="image/svg+xml" href="asvs_logo.svg">
   <style>
-
     :root {
-
       --bg-dark: #0a0c10;
-
       --card-bg: #141822;
-
       --card-border: #232b3d;
-
       --primary-cyan: #00e5ff;
-
       --primary-amber: #ffb300;
-
       --text-main: #f0f4f8;
-
       --text-muted: #94a3b8;
-
       --accent-grad: linear-gradient(135deg, #00e5ff 0%, #3b82f6 50%, #ffb300 100%);
-
     }
-
-
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
-
     body {
-
       background-color: var(--bg-dark);
-
       color: var(--text-main);
-
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-
       line-height: 1.6;
-
       overflow-x: hidden;
-
     }
-
-
 
     /* Header Nav */
-
     header {
-
       display: flex;
-
       justify-content: space-between;
-
       align-items: center;
-
       padding: 1.25rem 2.5rem;
-
       border-bottom: 1px solid var(--card-border);
-
-      background: rgba(10, 12, 16, 0.85);
-
+      background: rgba(10, 12, 16, 0.95);
       backdrop-filter: blur(12px);
-
       position: sticky;
-
       top: 0;
-
       z-index: 100;
-
     }
-
     .logo-area { display: flex; align-items: center; gap: 0.75rem; }
-
-    .brand-logo-pill {
-
-      background: var(--accent-grad);
-
-      width: 36px;
-
-      height: 36px;
-
-      border-radius: 8px;
-
-      display: flex;
-
-      align-items: center;
-
-      justify-content: center;
-
-      font-weight: 900;
-
-      color: #000;
-
-      font-size: 1.1rem;
-
+    .brand-logo-img {
+      width: 42px;
+      height: 42px;
+      border-radius: 10px;
+      object-fit: contain;
     }
-
     .brand-title { font-size: 1.25rem; font-weight: 800; letter-spacing: 0.5px; }
-
     .nav-links a {
-
       color: var(--text-muted);
-
       text-decoration: none;
-
       margin-left: 1.75rem;
-
       font-size: 0.95rem;
-
       transition: color 0.2s;
-
     }
-
     .nav-links a:hover { color: var(--primary-cyan); }
-
     .btn-contact {
-
       background: var(--primary-cyan);
-
-      color: #000;
-
+      color: #000 !important;
       font-weight: 700;
-
       padding: 0.5rem 1.2rem;
-
       border-radius: 6px;
-
       text-decoration: none;
-
       margin-left: 1.5rem;
-
       transition: transform 0.2s, opacity 0.2s;
-
     }
-
     .btn-contact:hover { opacity: 0.9; transform: translateY(-1px); }
 
-
-
     /* Hero Section */
-
     .hero {
-
       text-align: center;
-
       padding: 5rem 1.5rem 3.5rem;
-
       max-width: 900px;
-
       margin: 0 auto;
-
     }
-
     .dti-badge {
-
       display: inline-flex;
-
       align-items: center;
-
       gap: 0.5rem;
-
       background: rgba(255, 179, 0, 0.12);
-
       border: 1px solid rgba(255, 179, 0, 0.35);
-
       color: var(--primary-amber);
-
       font-size: 0.85rem;
-
       font-weight: 600;
-
       padding: 0.4rem 1rem;
-
       border-radius: 20px;
-
       margin-bottom: 1.5rem;
-
     }
-
     .hero h1 {
-
       font-size: 2.8rem;
-
       line-height: 1.2;
-
       font-weight: 900;
-
       margin-bottom: 1.25rem;
-
       background: linear-gradient(180deg, #ffffff 30%, #94a3b8 100%);
-
       -webkit-background-clip: text;
-
       -webkit-text-fill-color: transparent;
-
     }
-
     .hero p {
-
       font-size: 1.15rem;
-
       color: var(--text-muted);
-
       margin-bottom: 2rem;
-
       max-width: 750px;
-
       margin-left: auto;
-
       margin-right: auto;
-
     }
-
-
 
     /* Core Divisions Grid */
-
     .section-title {
-
       text-align: center;
-
       font-size: 1.8rem;
-
       font-weight: 800;
-
       margin-bottom: 2.5rem;
-
     }
-
     .divisions-grid {
-
       display: grid;
-
       grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-
       gap: 1.75rem;
-
       max-width: 1150px;
-
       margin: 0 auto 5rem;
-
       padding: 0 1.5rem;
-
     }
-
     .division-card {
-
       background: var(--card-bg);
-
       border: 1px solid var(--card-border);
-
       border-radius: 14px;
-
       padding: 2rem;
-
       transition: transform 0.25s, border-color 0.25s;
-
     }
-
     .division-card:hover {
-
       transform: translateY(-4px);
-
       border-color: rgba(0, 229, 255, 0.4);
-
     }
-
     .division-card .icon {
-
       font-size: 2.2rem;
-
       margin-bottom: 1rem;
-
     }
-
     .division-card h3 {
-
       font-size: 1.35rem;
-
       margin-bottom: 0.75rem;
-
       color: #fff;
-
     }
-
     .division-card p {
-
       color: var(--text-muted);
-
       font-size: 0.95rem;
-
       line-height: 1.55;
-
     }
-
-
 
     /* Flagship Showcase: BANAAG */
-
     .banaag-showcase {
-
       background: radial-gradient(circle at center, #18130e 0%, #0a0c10 70%);
-
       border-top: 1px solid #2e2119;
-
       border-bottom: 1px solid #2e2119;
-
       padding: 5rem 1.5rem;
-
     }
-
     .showcase-container {
-
       max-width: 1100px;
-
       margin: 0 auto;
-
       display: flex;
-
       align-items: center;
-
       gap: 3.5rem;
-
       flex-wrap: wrap;
-
     }
-
     .showcase-text { flex: 1; min-width: 320px; }
-
     .showcase-text .tag {
-
       background: rgba(255, 179, 0, 0.15);
-
       border: 1px solid var(--primary-amber);
-
       color: var(--primary-amber);
-
       font-size: 0.8rem;
-
       font-weight: 700;
-
       padding: 0.35rem 0.8rem;
-
       border-radius: 6px;
-
       display: inline-block;
-
       margin-bottom: 1rem;
-
       letter-spacing: 0.5px;
-
     }
-
     .showcase-text h2 {
-
       font-size: 2.3rem;
-
       font-weight: 900;
-
       line-height: 1.25;
-
       margin-bottom: 1rem;
-
       color: #fff;
-
     }
-
     .showcase-text p {
-
       color: var(--text-muted);
-
       font-size: 1rem;
-
       margin-bottom: 1.75rem;
-
+      line-height: 1.6;
     }
-
     .feature-list {
-
       list-style: none;
-
       margin-bottom: 2rem;
-
+      padding: 0;
     }
-
     .feature-list li {
-
-      margin-bottom: 0.65rem;
-
+      margin-bottom: 0.85rem;
       display: flex;
-
-      align-items: center;
-
-      gap: 0.6rem;
-
-      color: #e2e8f0;
-
+      align-items: flex-start;
+      gap: 0.75rem;
+      color: #cbd5e1;
       font-size: 0.95rem;
-
+      line-height: 1.5;
     }
-
-    .feature-list li span { color: var(--primary-amber); font-weight: bold; }
-
+    .feature-icon {
+      color: #f59e0b;
+      font-weight: 900;
+      font-size: 1.1rem;
+      line-height: 1.4;
+      flex-shrink: 0;
+    }
 
     .banaag-cta-group {
       display: flex;
-      gap: 12px;
+      gap: 14px;
       align-items: center;
       flex-wrap: wrap;
       margin-top: 2rem;
@@ -424,150 +221,103 @@
       background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
       color: #000 !important;
       font-weight: 800;
-      padding: 0.85rem 1.6rem;
-      border-radius: 8px;
+      padding: 0.95rem 1.8rem;
+      border-radius: 10px;
       text-decoration: none;
       display: inline-flex;
       align-items: center;
-      gap: 8px;
-      box-shadow: 0 0 25px rgba(245, 158, 11, 0.4);
+      justify-content: center;
+      gap: 10px;
+      font-size: 1rem;
+      box-shadow: 0 0 25px rgba(245, 158, 11, 0.45);
       transition: transform 0.2s, box-shadow 0.2s;
     }
     .btn-download-banaag:hover {
       transform: translateY(-2px);
-      box-shadow: 0 0 35px rgba(245, 158, 11, 0.6);
+      box-shadow: 0 0 35px rgba(245, 158, 11, 0.65);
     }
     .btn-specs-banaag {
       background: rgba(255, 255, 255, 0.08);
-      border: 1px solid rgba(255, 255, 255, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.25);
       color: #fff !important;
       font-weight: 600;
-      padding: 0.85rem 1.4rem;
-      border-radius: 8px;
+      padding: 0.95rem 1.6rem;
+      border-radius: 10px;
       text-decoration: none;
       display: inline-flex;
       align-items: center;
+      justify-content: center;
+      font-size: 1rem;
       transition: background 0.2s;
     }
     .btn-specs-banaag:hover {
-      background: rgba(255, 255, 255, 0.15);
+      background: rgba(255, 255, 255, 0.16);
     }
 
     .showcase-img {
-
       flex: 1;
-
       min-width: 280px;
-
       display: flex;
-
       justify-content: center;
-
     }
-
     .showcase-img img {
-
       max-width: 320px;
-
       width: 100%;
-
       border-radius: 24px;
-
       box-shadow: 0 20px 40px rgba(0,0,0,0.8), 0 0 50px rgba(255, 179, 0, 0.15);
-
       border: 2px solid #2e2119;
-
     }
 
-
-
-    /* Verification & DTI Section */
-
+    /* Verification Section */
     .verification-section {
-
       max-width: 900px;
-
       margin: 5rem auto;
-
       padding: 2.5rem;
-
-      background: var(--card-bg);
-
+      background: #11141c;
       border: 1px solid var(--card-border);
-
-      border-radius: 14px;
-
-      text-align: center;
-
+      border-radius: 16px;
     }
-
-    .verification-section h3 { font-size: 1.4rem; margin-bottom: 0.75rem; }
-
+    .verification-section h3 {
+      font-size: 1.5rem;
+      margin-bottom: 0.5rem;
+      color: #fff;
+    }
     .verification-details {
-
       display: grid;
-
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
       gap: 1.25rem;
-
-      margin-top: 1.5rem;
-
-      text-align: left;
-
+      margin-top: 1.75rem;
     }
-
     .v-item {
-
-      background: #0f121a;
-
+      background: var(--card-bg);
       padding: 1rem;
-
       border-radius: 8px;
-
-      border: 1px solid #1e2638;
-
+      border: 1px solid rgba(255, 255, 255, 0.05);
     }
-
     .v-item span {
-
       display: block;
-
-      color: var(--text-muted);
-
       font-size: 0.8rem;
-
+      color: var(--text-muted);
       margin-bottom: 0.25rem;
-
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
     }
-
     .v-item strong { color: #fff; font-size: 0.95rem; }
 
-
-
     /* Footer */
-
     footer {
-
       border-top: 1px solid var(--card-border);
-
       padding: 2.5rem 1.5rem;
-
       text-align: center;
-
       color: var(--text-muted);
-
       font-size: 0.9rem;
-
     }
-
     footer a { color: var(--primary-cyan); text-decoration: none; margin: 0 10px; }
 
-
-    /* Mobile Responsive Optimizations */
+    /* Clean Mobile Responsive Overhauls */
     @media (max-width: 768px) {
       header {
-        padding: 1rem 1.25rem;
+        padding: 0.85rem 1.25rem;
         flex-direction: column;
         gap: 0.75rem;
       }
@@ -581,319 +331,202 @@
         margin-left: 0;
         font-size: 0.85rem;
       }
+      .btn-contact {
+        margin-left: 0;
+        padding: 0.4rem 0.9rem;
+      }
       .hero {
-        padding: 3rem 1rem 2rem;
+        padding: 2.5rem 1rem 2rem;
       }
       .hero h1 {
-        font-size: 2rem;
+        font-size: 1.85rem;
       }
       .banaag-showcase {
-        padding: 3rem 1rem;
+        padding: 3rem 1.25rem;
       }
       .showcase-container {
         flex-direction: column;
-        gap: 2rem;
+        gap: 2.25rem;
       }
       .showcase-text {
         min-width: 100%;
         text-align: left;
       }
       .showcase-text h2 {
-        font-size: 1.75rem;
+        font-size: 1.7rem;
       }
-  
-    .banaag-cta-group {
-      display: flex;
-      gap: 12px;
-      align-items: center;
-      flex-wrap: wrap;
-      margin-top: 2rem;
-    }
-    .btn-download-banaag {
-      background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
-      color: #000 !important;
-      font-weight: 800;
-      padding: 0.85rem 1.6rem;
-      border-radius: 8px;
-      text-decoration: none;
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      box-shadow: 0 0 25px rgba(245, 158, 11, 0.4);
-      transition: transform 0.2s, box-shadow 0.2s;
-    }
-    .btn-download-banaag:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 0 35px rgba(245, 158, 11, 0.6);
-    }
-    .btn-specs-banaag {
-      background: rgba(255, 255, 255, 0.08);
-      border: 1px solid rgba(255, 255, 255, 0.2);
-      color: #fff !important;
-      font-weight: 600;
-      padding: 0.85rem 1.4rem;
-      border-radius: 8px;
-      text-decoration: none;
-      display: inline-flex;
-      align-items: center;
-      transition: background 0.2s;
-    }
-    .btn-specs-banaag:hover {
-      background: rgba(255, 255, 255, 0.15);
-    }
-
-    .showcase-img {
+      .showcase-text p {
+        font-size: 0.95rem;
+      }
+      .feature-list li {
+        font-size: 0.9rem;
+        margin-bottom: 0.75rem;
+      }
+      .showcase-img {
         width: 100%;
-        margin-top: 1rem;
       }
       .showcase-img img {
-        max-width: 260px;
+        max-width: 250px;
         margin: 0 auto;
       }
       .banaag-cta-group {
         flex-direction: column;
         width: 100%;
-        gap: 10px;
+        gap: 12px;
       }
       .btn-download-banaag, .btn-specs-banaag {
         width: 100%;
         text-align: center;
-        justify-content: center;
         box-sizing: border-box;
+        padding: 0.9rem 1rem;
+      }
+      .verification-section {
+        margin: 3rem 1rem;
+        padding: 1.5rem 1rem;
       }
       .verification-details {
         grid-template-columns: 1fr;
       }
     }
   </style>
-
 </head>
-
 <body>
 
-
-
-  <!-- Navigation -->
-
+  <!-- Header Navigation -->
   <header>
-
     <div class="logo-area">
-
       <img src="asvs_logo.svg" alt="ASVS Logo" class="brand-logo-img" />
-
       <div class="brand-title">ASV SOLUTIONS</div>
-
     </div>
-
     <nav class="nav-links">
-
       <a href="#services">Services</a>
-
       <a href="#software">Software Suite</a>
-
       <a href="#verification">Legal & Verification</a>
-
       <a href="mailto:mr.arvin03@gmail.com" class="btn-contact">Contact Us</a>
-
     </nav>
-
   </header>
 
-
-
   <!-- Hero Section -->
-
   <section class="hero">
-
     <div class="dti-badge">
-
       &#128737; DTI Registered Business Name No. 8285425
-
     </div>
-
     <h1>Enterprise Security Systems, IT Infrastructure & Engineering Software</h1>
-
     <p>A.E. CCTV AND COMPUTER INSTALLATION SERVICES (ASV Solutions) delivers professional high-precision surveillance, network architecture, and mission-critical engineering applications.</p>
-
   </section>
-
-
 
   <!-- Services Division -->
-
   <section id="services">
-
     <h2 class="section-title">Core Service Ecosystem</h2>
-
     <div class="divisions-grid">
-
       <div class="division-card">
-
         <div class="icon">&#128249;</div>
-
         <h3>CCTV & Smart Security Surveillance</h3>
-
         <p>Industrial AI-powered CCTV engineering, IP camera architectures, NVR central telemetry, remote viewing setups, and perimeter security for commercial, industrial, and residential projects.</p>
-
       </div>
 
-
-
       <div class="division-card">
-
         <div class="icon">&#128421;</div>
-
         <h3>IT Infrastructure & Network Systems</h3>
-
         <p>Enterprise structured cabling, high-performance router configuration (MikroTik Load Balancing & Failover), localized servers, Wi-Fi mesh design, and hardware maintenance.</p>
-
       </div>
-
-
 
       <div class="division-card">
-
         <div class="icon">&#9889;</div>
-
         <h3>Software Engineering & Digital Solutions</h3>
-
         <p>Architecting autonomous mobile and desktop applications for technical industries, including electrical calculation engines, automated bill of materials, and CAD takeoff tools.</p>
-
       </div>
-
     </div>
-
   </section>
 
-
-
   <!-- Flagship Software Showcase: BANAAG -->
-
   <section id="software" class="banaag-showcase">
-
     <div class="showcase-container">
-
       <div class="showcase-text">
-
         <div class="tag">FLAGSHIP MOBILE APPLICATION</div>
-
         <h2>BANAAG: Electrical Project Director</h2>
-
         <p>A high-performance offline engineering suite engineered for Filipino Registered Master Electricians (RME), Professional Electrical Engineers (PEE/REE), and Master Contractors. Multi-standard compliant: 100% Verbatim Philippine Electrical Code (PEC 2017), IESNA 10th Edition Illuminance & Lighting Photometrics, IEEE/NFPA Standards, and Utility Distribution Interconnection guidelines (Meralco, CANORECO).</p>
-
+        
         <ul class="feature-list">
-          <li><span style="color: #f59e0b; font-weight: bold; margin-right: 6px;">&#10003;</span> 100% Verbatim PEC 2017 Wire Ampacity, Raceway & Conduit Derating Engine</li>
-          <li><span style="color: #f59e0b; font-weight: bold; margin-right: 6px;">&#10003;</span> On-Device Blueprint Space Extraction, Scale Calibration & Wall Sizing</li>
-          <li><span style="color: #f59e0b; font-weight: bold; margin-right: 6px;">&#10003;</span> Instant Single-Line Diagram (SLD) & Schedule of Loads Generator</li>
-          <li><span style="color: #f59e0b; font-weight: bold; margin-right: 6px;">&#10003;</span> Comprehensive Bill of Materials (BOM) & Itemized Cost Estimation</li>
-          <li><span style="color: #f59e0b; font-weight: bold; margin-right: 6px;">&#10003;</span> 7-Stage Pre-Cover Gate & Megger Insulation QA Verification Protocol</li>
-          <li><span style="color: #f59e0b; font-weight: bold; margin-right: 6px;">&#10003;</span> 1-Tap Professional PDF Export & AutoCAD DXF Blueprint Integration</li>
+          <li>
+            <span class="feature-icon">&#10003;</span>
+            <div><strong>Philippine Electrical Code (PEC 2017)</strong>: Verbatim Wire Ampacity, Raceway Sizing, Continuous Solar PV (Sec. 6.90) & EV Charger (Sec. 6.25) Derating</div>
+          </li>
+          <li>
+            <span class="feature-icon">&#10003;</span>
+            <div><strong>IESNA 10th Edition Lighting Design</strong>: Zonal Cavity Method (Eq. 10.31 / 10.32), RCR Room Cavity Ratio, Lux Thresholds & Uniform Illuminance Grid Engine</div>
+          </li>
+          <li>
+            <span class="feature-icon">&#10003;</span>
+            <div><strong>IEEE & ASTM Insulation Quality Standards</strong>: 7-Stage Pre-Cover Gate, Phase-to-Phase / Phase-to-Ground Megger Insulation Resistance Telemetry</div>
+          </li>
+          <li>
+            <span class="feature-icon">&#10003;</span>
+            <div><strong>On-Device Blueprint Intake & Scale Calibration</strong>: ML Kit CAD/PDF Room Extraction, Wall Thickness Sizing & Touch-Driven Dimensioning</div>
+          </li>
+          <li>
+            <span class="feature-icon">&#10003;</span>
+            <div><strong>Automated SLD & Engineering Schedules</strong>: 1-Tap Single-Line Diagram, Schedule of Loads, Panelboard Balance & Voltage Drop Check</div>
+          </li>
+          <li>
+            <span class="feature-icon">&#10003;</span>
+            <div><strong>Bill of Materials & AutoCAD Export</strong>: Dynamic itemized pricing, labor cost breakdowns, and exportable high-precision DXF CAD blueprints</div>
+          </li>
         </ul>
 
-        <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-top: 1.5rem;">
-          <a href="https://github.com/asvs-varr/asv-solutions/releases/download/v1.0.0/banaag-v1.0.0.apk" class="btn-contact" style="margin: 0; background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); color: #000; font-weight: 800; box-shadow: 0 0 20px rgba(245, 158, 11, 0.4); text-decoration: none; display: inline-flex; align-items: center; gap: 8px;">
+        <div class="banaag-cta-group">
+          <a href="https://github.com/asvs-varr/asv-solutions/releases/download/v1.0.0/banaag-v1.0.0.apk" class="btn-download-banaag">
             <span>📥</span> Download BANAAG APK (v1.0.0)
           </a>
-          <a href="#verification" class="btn-contact" style="margin: 0; background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.2); color: #fff; text-decoration: none;">Explore Technical Specs</a>
+          <a href="#verification" class="btn-specs-banaag">Explore Technical Specs</a>
         </div>
-
       </div>
 
       <div class="showcase-img">
-
         <img src="banaag_screen.png" alt="BANAAG Mobile App - Obsidian Theme">
-
       </div>
-
     </div>
-
   </section>
-
-
 
   <!-- Business Legal & Verification for D-U-N-S / Google Play -->
-
   <section id="verification" class="verification-section">
-
     <h3>Registered Business Entity Details</h3>
-
     <p style="color: var(--text-muted); font-size: 0.95rem;">Official information registered with the Republic of the Philippines Department of Trade and Industry (DTI).</p>
-
     
-
     <div class="verification-details">
-
       <div class="v-item">
-
         <span>Registered Business Name</span>
-
         <strong>A.E. CCTV AND COMPUTER INSTALLATION SERVICES</strong>
-
       </div>
-
       <div class="v-item">
-
         <span>Public Trademark / Trade Name</span>
-
         <strong>ASV Solutions / ASV Solutions</strong>
-
       </div>
-
       <div class="v-item">
-
         <span>DTI Certificate No.</span>
-
         <strong>8285425</strong>
-
       </div>
-
       <div class="v-item">
-
         <span>Proprietor / Representative</span>
-
         <strong>Vincent Jamito Arrogante</strong>
-
       </div>
-
       <div class="v-item">
-
         <span>Principal Location</span>
-
         <strong>Laniton, San Lorenzo Ruiz, Camarines Norte, Region V</strong>
-
       </div>
-
       <div class="v-item">
-
         <span>Official Contact Email</span>
-
         <strong>mr.arvin03@gmail.com</strong>
-
       </div>
-
     </div>
-
   </section>
 
-
-
   <!-- Footer -->
-
   <footer>
-
-    <p> 2026 A.E. CCTV AND COMPUTER INSTALLATION SERVICES (ASV Solutions). All rights reserved.</p>
-
+    <p>&copy; 2026 A.E. CCTV AND COMPUTER INSTALLATION SERVICES (ASV Solutions). All rights reserved.</p>
     <p style="margin-top: 0.5rem; font-size: 0.8rem;">DTI Business Name No. 8285425 | Philippines</p>
-
+    <p style="margin-top: 0.5rem; font-size: 0.8rem;"><a href="privacy.html">Privacy Policy</a> | <a href="terms.html">Terms of Service</a></p>
   </footer>
 
-
-
 </body>
-
 </html>
-
-
-
-
-
