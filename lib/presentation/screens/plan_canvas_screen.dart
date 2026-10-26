@@ -962,10 +962,13 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
     }
 
     final bool hasBlueprint = _blueprintPath != null && File(_blueprintPath!).existsSync();
+    final bool hasCustomizedSpaces = proj.spaces.isNotEmpty &&
+        proj.spaces.any((s) => s.polygonVertices != null && s.polygonVertices!.length >= 3);
     final bool isLegacyResidentialDefault = proj.spaces.isNotEmpty &&
+        !hasCustomizedSpaces &&
         proj.spaces.any((s) => s.id == 'sp-1' || s.name.toLowerCase().contains('living & dining'));
 
-    if (proj.spaces.isEmpty || (hasBlueprint && isLegacyResidentialDefault)) {
+    if (!hasCustomizedSpaces && (proj.spaces.isEmpty || (hasBlueprint && isLegacyResidentialDefault))) {
       proj.spaces.clear();
       proj.spaces.addAll([
         RoomSpace(id: 'sp-func', name: 'Function Hall / Event Place', areaSqm: 64.5, ceilingHeight: 3.5),
@@ -1028,9 +1031,11 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
     final path = _blueprintPath;
     if (proj == null || path == null || !File(path).existsSync()) return;
 
+    final bool hasCustomizedSpaces = proj.spaces.isNotEmpty &&
+        proj.spaces.any((s) => s.polygonVertices != null && s.polygonVertices!.length >= 3);
     final bool isDefaultSpaces = proj.spaces.isEmpty ||
-        proj.spaces.any((s) => s.id.startsWith('sp-') || s.name.toLowerCase().contains('living & dining'));
-    if (!isDefaultSpaces && !forceRescan) return;
+        (!hasCustomizedSpaces && proj.spaces.any((s) => s.id.startsWith('sp-') || s.name.toLowerCase().contains('living & dining')));
+    if ((!isDefaultSpaces || hasCustomizedSpaces) && !forceRescan) return;
 
     try {
       final scanResult = await FloorPlanScannerEngine.scanFloorPlanWithMetadata(path, pdfPageIndex: _pdfSheetIndex);
@@ -2482,6 +2487,61 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
     _addPointAt(details);
   }
 
+  void _handleCanvasLongPressStart(LongPressStartDetails details) {
+    if (widget.project == null || widget.project!.spaces.isEmpty) return;
+    final tapPos = details.localPosition;
+
+    // Check which room polygon was long-pressed
+    int tappedRoomIdx = -1;
+    for (int i = widget.project!.spaces.length - 1; i >= 0; i--) {
+      final sp = widget.project!.spaces[i];
+      final poly = _roomPolygons[sp.id] ?? _defaultCadPolygonForRoom(sp.name, i);
+      if (poly.length >= 3 && _isPointInPolygon(tapPos, poly)) {
+        tappedRoomIdx = i;
+        break;
+      }
+    }
+
+    if (tappedRoomIdx != -1) {
+      final tappedRoom = widget.project!.spaces[tappedRoomIdx];
+      HapticFeedback.heavyImpact();
+
+      // Rule: Wipe all existing electrical devices inside this room when entering re-edit
+      final poly = _roomPolygons[tappedRoom.id] ?? _defaultCadPolygonForRoom(tappedRoom.name, tappedRoomIdx);
+      final initialPointCount = _points.length;
+      _points.removeWhere((p) => _isPointInPolygon(Offset(p.x, p.y), poly));
+      final removedCount = initialPointCount - _points.length;
+
+      // Also clean up broken conduit routes connected to removed points
+      final remainingIds = _points.map((p) => p.id).toSet();
+      _routes.removeWhere((r) => !remainingIds.contains(r.fromPointId) || !remainingIds.contains(r.toPointId));
+
+      setState(() {
+        _canvasStage = 1;
+        _stage1SubStep = 3; // Direct Single-Room Re-Edit Mode!
+        _selectedRoomIndex = tappedRoomIdx;
+        _selectedTool = 'SELECT';
+        _selectedPoint = null;
+        if (widget.project != null) {
+          widget.project!.canvasPoints = _points;
+          widget.project!.conduitRoutes = _routes;
+          ProjectRepository.instance.updateProject(widget.project!);
+        }
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '📐 Editing  bounds. ' +
+                (removedCount > 0 ? '( devices in this room cleared for re-layout).' : ''),
+          ),
+          backgroundColor: BanaagTheme.primaryAmber,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    }
+  }
+
   void _showPointInspectionSheet(CanvasPoint pt) {
     showModalBottomSheet(
       context: context,
@@ -3919,6 +3979,7 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                         child: GestureDetector(
                           behavior: HitTestBehavior.translucent,
                           onTapUp: _handleCanvasTap,
+                          onLongPressStart: _handleCanvasLongPressStart,
                           onPanStart: _isDraggingItem ? _handlePanStart : null,
                           onPanUpdate: _isDraggingItem ? _handlePanUpdate : null,
                           onPanEnd: _isDraggingItem ? _handlePanEnd : null,
@@ -4285,7 +4346,7 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                                         ? '✅ Confirm Room ${activeIdx + 1} → Next (${activeIdx + 2}/$totalRooms)'
                                         : '✅ Confirm Room ${activeIdx + 1} → Finish')
                                     : (_stage1SubStep == 3
-                                        ? '✅ Save Room Dimensions'
+                                        ? '💾 Save & Return to Wire Takeoff'
                                         : '✅ All Accounted → Stage 2 Loads')),
                             style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11.2),
                             overflow: TextOverflow.ellipsis,
@@ -4362,8 +4423,17 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                             } else if (_stage1SubStep == 3) {
                               setState(() {
                                 _syncRoomSpacesFromBoxes(persist: true);
-                                _stage1SubStep = 2;
+                                // Directly return to Stage 3 Wire Takeoff & Layout so the user can immediately place appliances!
+                                _canvasStage = 3;
+                                _selectedTool = 'SELECT';
                               });
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('💾 Room boundaries saved! Returning to Wire Takeoff & Placement.'),
+                                  backgroundColor: BanaagTheme.successGreen,
+                                  duration: Duration(seconds: 2),
+                                ),
+                              );
                             } else {
                               _confirmStage1AndOpenStage2Loads();
                             }
@@ -5556,6 +5626,46 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                 const Icon(Icons.meeting_room, size: 15, color: BanaagTheme.primaryAmber),
                 const SizedBox(width: 6),
                 const Text('ROOM: ', style: TextStyle(color: Colors.white60, fontSize: 10.5, fontWeight: FontWeight.bold)),
+                // Quick shortcut button to edit active room bounds directly
+                GestureDetector(
+                  onTap: () {
+                    final tappedRoom = activeRoom;
+                    HapticFeedback.heavyImpact();
+                    final poly = _roomPolygons[tappedRoom.id] ?? _defaultCadPolygonForRoom(tappedRoom.name, safeRoomIdx);
+                    _points.removeWhere((p) => _isPointInPolygon(Offset(p.x, p.y), poly));
+                    final remainingIds = _points.map((p) => p.id).toSet();
+                    _routes.removeWhere((r) => !remainingIds.contains(r.fromPointId) || !remainingIds.contains(r.toPointId));
+
+                    setState(() {
+                      _canvasStage = 1;
+                      _stage1SubStep = 3;
+                      _selectedRoomIndex = safeRoomIdx;
+                      _selectedTool = 'SELECT';
+                      if (widget.project != null) {
+                        widget.project!.canvasPoints = _points;
+                        widget.project!.conduitRoutes = _routes;
+                        ProjectRepository.instance.updateProject(widget.project!);
+                      }
+                    });
+                  },
+                  child: Container(
+                    margin: const EdgeInsets.only(right: 8),
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: Colors.cyanAccent.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: Colors.cyanAccent.withValues(alpha: 0.6), width: 0.8),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.edit_location_alt, size: 12, color: Colors.cyanAccent),
+                        SizedBox(width: 3),
+                        Text('📐 Edit Bounds', style: TextStyle(color: Colors.cyanAccent, fontSize: 9.5, fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                  ),
+                ),
                 Expanded(
                   child: ListView.builder(
                     scrollDirection: Axis.horizontal,
