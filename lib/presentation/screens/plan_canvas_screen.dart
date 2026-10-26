@@ -401,6 +401,45 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
       ..scaleByDouble(fitScale, fitScale, 1.0, 1.0);
   }
 
+  /// Smoothly zooms and centers the viewport on a specific room bounding box
+  void _zoomToRoom(int roomIdx) {
+    if (widget.project == null || widget.project!.spaces.isEmpty) return;
+    final spaces = widget.project!.spaces;
+    if (roomIdx < 0 || roomIdx >= spaces.length) {
+      _fitSheetToViewport();
+      return;
+    }
+
+    final room = spaces[roomIdx];
+    final poly = _roomPolygons[room.id] ?? _defaultCadPolygonForRoom(room.name, roomIdx);
+    if (poly.isEmpty) {
+      _fitSheetToViewport();
+      return;
+    }
+
+    final rect = _boundingBoxOfPolygon(poly);
+    // Standard viewport dimensions assumed ~380x580 on mobile canvas area
+    const double viewW = 380.0;
+    const double viewH = 540.0;
+
+    final double scaleX = (viewW * 0.85) / math.max(100.0, rect.width);
+    final double scaleY = (viewH * 0.85) / math.max(100.0, rect.height);
+    final double targetScale = math.min(scaleX, scaleY).clamp(0.45, 1.35);
+
+    final double cx = rect.center.dx;
+    final double cy = rect.center.dy;
+
+    final double transX = (viewW / 2.0) - (cx * targetScale);
+    final double transY = (viewH / 2.0) - (cy * targetScale);
+
+    setState(() {
+      _currentZoom = targetScale;
+      _zoomController.value = Matrix4.identity()
+        ..translateByDouble(transX, transY, 0.0, 1.0)
+        ..scaleByDouble(targetScale, targetScale, 1.0, 1.0);
+    });
+  }
+
   /// Purges orphaned residential loads and fixes legacy misclassified room appliances
   bool _sanitizeProjectApplianceLoads(Project proj) {
     if (proj.spaces.isEmpty) return false;
@@ -1236,7 +1275,13 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
         widget.project!.canvasPoints = _points;
         widget.project!.conduitRoutes = _routes;
         ProjectRepository.instance.updateProject(widget.project!);
-        _fitSheetToViewport();
+        // Ticket TKT-1793014772146: Auto-focus on Room 1 immediately upon entering canvas!
+        _selectedRoomIndex = 0;
+        if (widget.project!.spaces.isNotEmpty) {
+          _zoomToRoom(0);
+        } else {
+          _fitSheetToViewport();
+        }
       });
       if (result == true) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -2484,6 +2529,65 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
     }
 
     if (tappedPt != null) {
+      if (_selectedTool == 'HOMERUN') {
+        // Ticket TKT-1793014772146: 1-Tap Manual Homerun Arrow Placement
+        if (tappedPt.type == 'PANEL') {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('⚠️ Cannot homerun panel to itself! Tap an outlet, light, switch, or ACU.'),
+              backgroundColor: Colors.orangeAccent,
+              duration: Duration(seconds: 2),
+            ),
+          );
+          return;
+        }
+
+        final mdpPt = _points.firstWhere((p) => p.type == 'PANEL', orElse: () => _points.first);
+        // Check if point already has homerun
+        final existingHr = _routes.firstWhere(
+          (r) => (r.fromPointId == mdpPt.id && r.toPointId == tappedPt!.id) ||
+                 (r.fromPointId == tappedPt!.id && r.toPointId == mdpPt.id),
+          orElse: () => ConduitRoute(id: '', fromPointId: '', toPointId: '', measuredLengthMeters: 0),
+        );
+
+        setState(() {
+          if (existingHr.id.isNotEmpty) {
+            _routes.removeWhere((r) => r.id == existingHr.id);
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('⚡ Homerun arrow removed from ${tappedPt!.label}.'),
+                backgroundColor: Colors.orangeAccent,
+                duration: const Duration(seconds: 1),
+              ),
+            );
+          } else {
+            final int hrNum = _routes.length + 1;
+            _routes.add(ConduitRoute(
+              id: 'rt-hr-${tappedPt.id}-$hrNum',
+              fromPointId: mdpPt.id,
+              toPointId: tappedPt.id,
+              conductorCount: tappedPt.type == 'LIGHT' ? 2 : 3,
+              measuredLengthMeters: (Offset(mdpPt.x, mdpPt.y) - Offset(tappedPt.x, tappedPt.y)).distance / _pixelsPerMeter,
+            ));
+            HapticFeedback.mediumImpact();
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('⚡ Homerun Arrow created on ${tappedPt!.label} (Circuit C\${tappedPt!.circuitNumber})!'),
+                backgroundColor: BanaagTheme.successGreen,
+                duration: const Duration(seconds: 1),
+              ),
+            );
+          }
+
+          if (widget.project != null) {
+            widget.project!.canvasPoints = _points;
+            widget.project!.conduitRoutes = _routes;
+            ProjectRepository.instance.updateProject(widget.project!);
+          }
+        });
+        return;
+      }
+
       setState(() {
         _selectedPoint = tappedPt;
       });
@@ -2691,10 +2795,8 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
       _points.add(newPt);
       _selectedPoint = newPt;
 
-      // Connect to previous compatible point in SAME room/circuit, or Homerun to MDP
-      final mdpPt = _points.firstWhere((p) => p.type == 'PANEL', orElse: () => _points.first);
+      // Connect intra-room conduit to previous compatible point in SAME room/circuit
       final sameCktPts = _points.where((p) => p.circuitNumber == assignedCkt && p.id != newPt.id).toList();
-
       if (sameCktPts.isNotEmpty) {
         final lastSameCkt = sameCktPts.last;
         _routes.add(ConduitRoute(
@@ -2704,16 +2806,8 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
           conductorCount: _selectedTool == 'LIGHT' ? 2 : 3,
           measuredLengthMeters: (Offset(lastSameCkt.x, lastSameCkt.y) - Offset(newPt.x, newPt.y)).distance / _pixelsPerMeter,
         ));
-      } else if (newPt.type != 'PANEL') {
-        // First device in circuit gets dedicated homerun from MDP
-        _routes.add(ConduitRoute(
-          id: 'rt-hr-${_routes.length + 1}',
-          fromPointId: mdpPt.id,
-          toPointId: newPt.id,
-          conductorCount: _selectedTool == 'LIGHT' ? 2 : 3,
-          measuredLengthMeters: (Offset(mdpPt.x, mdpPt.y) - Offset(newPt.x, newPt.y)).distance / _pixelsPerMeter,
-        ));
       }
+      // Note: Homerun arrow is now explicitly placed via the dedicated HOMERUN tool!
 
       if (widget.project != null) {
         widget.project!.canvasPoints = _points;
@@ -3924,6 +4018,8 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                       _layerFilterChip('LIGHTING', '💡 E-1'),
                       const SizedBox(width: 4),
                       _layerFilterChip('POWER', '🔌 E-2'),
+                      const SizedBox(width: 4),
+                      _layerFilterChip('ACU', '❄️ E-3'),
                     ],
                   ),
                   const SizedBox(height: 6),
@@ -5803,6 +5899,7 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
           child: Row(
             children: [
               _symbolButton('SELECT', Icons.near_me, 'Select / Move'),
+              _symbolButton('HOMERUN', Icons.arrow_outward, '⚡ Homerun'),
               _symbolButton('CALIBRATE', Icons.straighten, 'Scale (mm)'),
               _symbolButton('PANEL', Icons.dashboard, 'Panel'),
               _symbolButton('SWITCH_1G', Icons.toggle_on, '1G Switch'),
@@ -5890,22 +5987,74 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
               ),
             ),
 
-          // Room Selector Bar
+          // Room Selector Bar (Ticket TKT-1793014772146: Focus Bar with Prev/Next Room Cycle & Overview)
           Container(
-            height: 38,
-            padding: const EdgeInsets.symmetric(horizontal: 10),
+            height: 42,
+            padding: const EdgeInsets.symmetric(horizontal: 8),
             color: const Color(0xFF1E2430),
             child: Row(
               children: [
-                const Icon(Icons.meeting_room, size: 15, color: BanaagTheme.primaryAmber),
-                const SizedBox(width: 6),
-                const Text('ROOM: ', style: TextStyle(color: Colors.white60, fontSize: 10.5, fontWeight: FontWeight.bold)),
+                // Overview Fit Button
+                GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      _fitSheetToViewport();
+                    });
+                  },
+                  child: Container(
+                    margin: const EdgeInsets.only(right: 4),
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.white10,
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: Colors.white24),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.zoom_out_map, size: 12, color: Colors.cyanAccent),
+                        SizedBox(width: 3),
+                        Text('Overview', style: TextStyle(color: Colors.cyanAccent, fontSize: 9.5, fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                  ),
+                ),
+                // Prev Room Arrow
+                IconButton(
+                  icon: const Icon(Icons.chevron_left, color: BanaagTheme.primaryAmber, size: 20),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+                  tooltip: 'Previous Room',
+                  onPressed: () {
+                    if (spaces.isEmpty) return;
+                    final prevIdx = (safeRoomIdx - 1 + spaces.length) % spaces.length;
+                    setState(() {
+                      _selectedRoomIndex = prevIdx;
+                      _zoomToRoom(prevIdx);
+                    });
+                  },
+                ),
+                // Next Room Arrow
+                IconButton(
+                  icon: const Icon(Icons.chevron_right, color: BanaagTheme.primaryAmber, size: 20),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+                  tooltip: 'Next Room',
+                  onPressed: () {
+                    if (spaces.isEmpty) return;
+                    final nextIdx = (safeRoomIdx + 1) % spaces.length;
+                    setState(() {
+                      _selectedRoomIndex = nextIdx;
+                      _zoomToRoom(nextIdx);
+                    });
+                  },
+                ),
                 // Auto-assist button for active room
                 GestureDetector(
                   onTap: () => _autoLayoutActiveRoom(activeRoom),
                   child: Container(
-                    margin: const EdgeInsets.only(right: 6),
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                    margin: const EdgeInsets.symmetric(horizontal: 4),
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
                     decoration: BoxDecoration(
                       color: BanaagTheme.primaryAmber.withValues(alpha: 0.18),
                       borderRadius: BorderRadius.circular(4),
@@ -5916,7 +6065,7 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                       children: [
                         Icon(Icons.flash_on, size: 12, color: BanaagTheme.primaryAmber),
                         SizedBox(width: 2),
-                        Text('⚡ Auto-Fill Room', style: TextStyle(color: BanaagTheme.primaryAmber, fontSize: 9.5, fontWeight: FontWeight.bold)),
+                        Text('⚡ Auto-Fill', style: TextStyle(color: BanaagTheme.primaryAmber, fontSize: 9.5, fontWeight: FontWeight.bold)),
                       ],
                     ),
                   ),
@@ -6024,7 +6173,12 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                             ),
                           ),
                           selected: isSel,
-                          onSelected: (_) => setState(() => _selectedRoomIndex = idx),
+                          onSelected: (_) {
+                            setState(() {
+                              _selectedRoomIndex = idx;
+                              _zoomToRoom(idx);
+                            });
+                          },
                         ),
                       );
                     },
@@ -6042,6 +6196,7 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
               child: Row(
                 children: [
                   _symbolButton('SELECT', Icons.near_me, 'Select / Move'),
+                  _symbolButton('HOMERUN', Icons.arrow_outward, '⚡ Homerun'),
                   _symbolButton('PANEL', Icons.dashboard, 'Main Panel'),
                   if (assignedLoads.isEmpty) ...[
                     _symbolButton('LIGHT', Icons.lightbulb, 'Light'),
@@ -6759,7 +6914,10 @@ class CanvasPainter extends CustomPainter {
         return pt.type == 'LIGHT' || pt.type == 'FAN' || pt.type == 'SWITCH_1G';
       }
       if (activeLayerFilter == 'POWER') {
-        return pt.type == 'OUTLET_DUPLEX' || pt.type == 'ACU';
+        return pt.type == 'OUTLET_DUPLEX';
+      }
+      if (activeLayerFilter == 'ACU') {
+        return pt.type == 'ACU';
       }
       return true;
     }
