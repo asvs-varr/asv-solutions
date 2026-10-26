@@ -3,6 +3,7 @@
 // Guarantees 100% offline functionality while preventing unauthorized APK sharing.
 
 import 'dart:convert';
+import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'security_engine.dart';
@@ -260,5 +261,33 @@ class BanaagAuthService {
         'message': 'Offline: Unable to verify voucher without internet connection.',
       };
     }
+  }
+
+  /// Verifies 6-digit Master Admin PIN against Supabase Cloud Salted Hash
+  Future<bool> verifyAdminPasscode(String pin) async {
+    const salt = 'BANAAG_MASTER_ADMIN_2026_SALT';
+    final computedHash = sha256.convert(utf8.encode('$pin:$salt')).toString();
+
+    try {
+      final url = Uri.parse('$_supabaseUrl/rest/v1/project_vouchers?code=eq.SYS_ADMIN_HASH');
+      final response = await http.get(
+        url,
+        headers: {
+          'apikey': _anonKey,
+          'Authorization': 'Bearer $_anonKey',
+        },
+      );
+      if (response.statusCode == 200) {
+        final List<dynamic> data = jsonDecode(response.body);
+        if (data.isNotEmpty) {
+          final cloudHash = data.first['redeemed_by_email'] as String?;
+          return cloudHash == computedHash;
+        }
+      }
+    } catch (_) {}
+
+    // Fallback if temporarily offline but matches verified hash
+    const masterVerifiedHash = 'a36a47a6638575fa4a75b92fed985a04a7f19413c060deaeee9ebfd19487b1e9';
+    return computedHash == masterVerifiedHash;
   }
 }

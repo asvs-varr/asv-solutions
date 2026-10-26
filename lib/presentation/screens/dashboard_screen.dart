@@ -39,7 +39,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           onLongPress: () {
             final email = BanaagAuthService.instance.currentUser?.email.toLowerCase() ?? '';
             if (email == 'vincentjamitoarrogante@gmail.com' || email == 'mr.arvin03@gmail.com') {
-              Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminVerificationScreen()));
+              _showMasterAdminPasscodeDialog(context);
             }
           },
           child: Row(
@@ -1040,6 +1040,105 @@ class _DashboardScreenState extends State<DashboardScreen> {
             onPressed: () => Navigator.pop(ctx),
           ),
         ],
+      ),
+    );
+  }
+
+  void _showMasterAdminPasscodeDialog(BuildContext context) {
+    final pinController = TextEditingController();
+    bool isVerifying = false;
+    String? errorMessage;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (dialogCtx, setDialogState) => AlertDialog(
+          backgroundColor: const Color(0xFF161922),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: const BorderSide(color: Colors.amber, width: 1.2)),
+          title: const Row(
+            children: [
+              Icon(Icons.admin_panel_settings, color: Colors.amber),
+              SizedBox(width: 10),
+              Text('Master Admin Security', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Enter 6-digit Master Admin Passcode to unlock verified cloud operations & billing oversight.',
+                style: TextStyle(color: Colors.white70, fontSize: 13),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: pinController,
+                keyboardType: TextInputType.number,
+                maxLength: 6,
+                obscureText: true,
+                autofocus: true,
+                style: const TextStyle(color: Colors.amber, letterSpacing: 8, fontSize: 20, fontWeight: FontWeight.bold),
+                decoration: InputDecoration(
+                  counterText: '',
+                  hintText: '••••••',
+                  hintStyle: const TextStyle(color: Colors.white24, letterSpacing: 4),
+                  filled: true,
+                  fillColor: Colors.black26,
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                  focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Colors.amber)),
+                ),
+              ),
+              if (errorMessage != null) ...[
+                const SizedBox(height: 8),
+                Text(errorMessage!, style: const TextStyle(color: Colors.redAccent, fontSize: 12, fontWeight: FontWeight.bold)),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: isVerifying ? null : () => Navigator.pop(dialogCtx),
+              child: const Text('CANCEL', style: TextStyle(color: Colors.white54)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.amber,
+                foregroundColor: Colors.black,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+              onPressed: isVerifying
+                  ? null
+                  : () async {
+                      final pin = pinController.text.trim();
+                      if (pin.length != 6) {
+                        setDialogState(() => errorMessage = 'Please enter full 6-digit passcode');
+                        return;
+                      }
+
+                      setDialogState(() {
+                        isVerifying = true;
+                        errorMessage = null;
+                      });
+
+                      final isValid = await BanaagAuthService.instance.verifyAdminPasscode(pin);
+                      if (dialogCtx.mounted) {
+                        if (isValid) {
+                          Navigator.pop(dialogCtx);
+                          Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminVerificationScreen()));
+                        } else {
+                          setDialogState(() {
+                            isVerifying = false;
+                            errorMessage = 'Access Denied: Invalid Master Passcode';
+                          });
+                        }
+                      }
+                    },
+              child: isVerifying
+                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
+                  : const Text('VERIFY', style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
       ),
     );
   }
