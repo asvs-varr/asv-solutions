@@ -169,18 +169,65 @@
       border: 1px solid #f59e0b;
       color: #f59e0b;
     }
-    .badge-coming-soon {
-      background: rgba(255, 179, 0, 0.12);
-      border: 1px solid rgba(255, 179, 0, 0.4);
-      color: #f59e0b;
-      font-weight: 700;
-      padding: 0.85rem 1.6rem;
-      border-radius: 10px;
+    .badge-pilot-status {
       display: inline-flex;
       align-items: center;
       gap: 8px;
+      background: rgba(245, 158, 11, 0.15);
+      border: 1px solid rgba(245, 158, 11, 0.5);
+      color: #f59e0b;
+      font-size: 0.8rem;
+      font-weight: 800;
+      padding: 0.45rem 1rem;
+      border-radius: 20px;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      margin-bottom: 1.25rem;
+    }
+    .badge-pilot-status .pulse-dot {
+      width: 8px;
+      height: 8px;
+      background: #f59e0b;
+      border-radius: 50%;
+      box-shadow: 0 0 10px #f59e0b;
+      animation: pulse 1.8s infinite;
+    }
+    @keyframes pulse {
+      0% { transform: scale(0.95); opacity: 0.6; }
+      50% { transform: scale(1.3); opacity: 1; }
+      100% { transform: scale(0.95); opacity: 0.6; }
+    }
+    .btn-cta-pilot {
+      background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+      color: #000 !important;
+      font-weight: 800;
+      padding: 0.95rem 1.8rem;
+      border-radius: 10px;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      font-size: 1rem;
+      box-shadow: 0 0 25px rgba(245, 158, 11, 0.45);
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .btn-cta-pilot:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 0 35px rgba(245, 158, 11, 0.65);
+    }
+    .value-highlight-box {
+      background: rgba(255, 179, 0, 0.05);
+      border-left: 3px solid #f59e0b;
+      padding: 1rem 1.25rem;
+      border-radius: 0 10px 10px 0;
+      margin-bottom: 1.75rem;
+    }
+    .value-highlight-box p {
+      margin: 0;
       font-size: 0.95rem;
-      letter-spacing: 0.3px;
+      color: #e2e8f0;
+      line-height: 1.5;
     }
     .showcase-img.sinag-frame img {
       box-shadow: 0 20px 40px rgba(0,0,0,0.85), 0 0 50px rgba(245, 158, 11, 0.25);
@@ -603,42 +650,40 @@
   <section class="sinag-showcase">
     <div class="showcase-container">
       <div class="showcase-text">
-        <div class="tag amber-solar-tag">SOLAR ENGINEERING & SIZING DIRECTOR</div>
-        <h2>Sinag: Solar Design Director</h2>
-        <p>A standard-first, professional solar photovoltaic (PV) sizing suite engineered for Philippine solar contractors, EPC engineers, and electrical practitioners. Built with strict adherence to Philippine statutory electrical mandates, live load profiling, dynamic SLD schematics, and an automated compliance gatekeeper.</p>
+        <div class="badge-pilot-status">
+          <span class="pulse-dot"></span>
+          <span>Active Engineering Pilot &bull; Invite-Only Access</span>
+        </div>
+        <h2>Huwag nang Hulaan ang Solar Sizing. Bawasan ang Panganib sa Sunog at Disqualification.</h2>
         
+        <div class="value-highlight-box">
+          <p>Karamihan sa mga solar installer at kliyente sa Pilipinas ay nahaharap sa <strong>tinatanggihang Net-Metering permits</strong>, <strong>nag-o-overheat na busbar</strong>, at <strong>maling battery backup</strong> dahil sa mano-manong hula-hula sa computation. Ang Sinag ay ang automated design director na nagtitiyak na ligtas ang inyong investment at 100% aprubado sa statutory codes bago pa magkabit ng unang panel.</p>
+        </div>
+
         <ul class="feature-list">
           <li>
             <span class="feature-icon">&#10003;</span>
-            <div><strong>Philippine Electrical Code (PEC 2017) Article 6.90 & 7.05</strong>: Exact 125% and 156% continuous duty conductor derating, OCPD sizing, and strict 120% Busbar Interconnection Rule calculation.</div>
+            <div><strong>Garantisadong Aprubado sa Meralco / DU</strong>: Awtomatikong pinoprotektahan ang inyong aplikasyon laban sa 100 kWp statutory cap violation at busbar overcurrent bago pa isumite ang papeles.</div>
           </li>
           <li>
             <span class="feature-icon">&#10003;</span>
-            <div><strong>ERC Net-Metering (Resolution No. 06-2019) Gatekeeper</strong>: Automatic 100 kWp export cap gate, anti-islanding trip validation (&le; 2s), and mandatory 10-minute reconnection lockout verification.</div>
+            <div><strong>Tunay na Tipid Nang Walang Bitin sa Kuryente</strong>: Tumpak na tinutugma ang solar harvest sa inyong buwanang kuryente o badyet, para sulit bawat pisong ibinayad sa panels at baterya.</div>
           </li>
           <li>
             <span class="feature-icon">&#10003;</span>
-            <div><strong>Philippine Distribution Code (PDC 2017) Telemetry</strong>: Transformer/feeder penetration limit checks (30% LV feeder / 33.3% transformer capacity) and 0.85 power factor enforcement.</div>
+            <div><strong>Zero Fire Hazard & Safe Wiring</strong>: Kinakalkula ang tamang kapal ng kable at breaker ratings upang maiwasan ang sunog dulot ng continuous solar DC current.</div>
           </li>
           <li>
             <span class="feature-icon">&#10003;</span>
-            <div><strong>Super Dynamic Cross-Tab Tuning Engine</strong>: Real-time reactive signal bus propagating adjustments across Load Ledger, SLD Schematics, Gatekeeper Audits, and live BOM Proposal.</div>
-          </li>
-          <li>
-            <span class="feature-icon">&#10003;</span>
-            <div><strong>Native 60fps Single-Line Diagram (SLD) CAD</strong>: Real-time vector rendering of solar arrays, DC disconnects, inverters, battery storage, and distribution boards with 1-Tap Sync to Standards.</div>
-          </li>
-          <li>
-            <span class="feature-icon">&#10003;</span>
-            <div><strong>NSCP 2015 & RA 9514 Fire Code Compliance</strong>: Rooftop setback perimeter verification, module-level rapid shutdown (RSD &lt; 30V in 30s), and structural wind zone derating up to 300 kph.</div>
+            <div><strong>1-Tap Instant Proposal & CAD Schematics</strong>: Mula sa simpleng bill ng kuryente patungo sa kumpletong Bill of Materials (BOM), presyo, at single-line diagram sa loob lamang ng ilang segundo.</div>
           </li>
         </ul>
 
         <div class="banaag-cta-group">
-          <div class="badge-coming-soon">
-            <span>☀️</span> In Active Engineering Pilot &bull; Distribution Release Coming Soon
-          </div>
-          <a href="#verification" class="btn-specs-banaag">Technical Compliance Specs</a>
+          <a href="mailto:mr.arvin03@gmail.com?subject=Request%20Pilot%20Access%3A%20Sinag%20Solar%20Design%20Director&body=Hi%20Engr.%20Arvin%2C%0A%0AInteresado%20po%20kaming%20subukan%20ang%20Sinag%20Solar%20Design%20Director%20para%20sa%20aming%20solar%20projects.%0A%0ACompany%2FContractor%20Name%3A%0ALocation%3A%0AEstimated%20Projects%20per%20Month%3A" class="btn-cta-pilot">
+            <span>🚀</span> Request Early Pilot Access / Demo
+          </a>
+          <a href="#verification" class="btn-specs-banaag">About ASV Solutions</a>
         </div>
       </div>
 
