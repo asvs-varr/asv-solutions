@@ -297,8 +297,14 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
     final List<Offset> columns = [];
     if (_isCommercialCadPlan) {
       columns.addAll(_cadStructuralColumns);
+    } else if (_isResidentialPlan) {
+      // Residential structural corner/post locations
+      columns.addAll(BlueprintSnapEngine.residentialWallCorners.take(4));
+    } else {
+      // Universal Blueprint Smart Fallback: Provide sensible structural column grid
+      columns.addAll(_cadStructuralColumns);
     }
-    // Merge user-tagged or smart-detected columns for residential/custom plans
+    // Merge user-tagged or smart-detected columns for custom plans
     columns.addAll(_customProjectColumns);
     return columns;
   }
@@ -312,8 +318,10 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
     } else if (_isResidentialPlan) {
       rawCorners.addAll(BlueprintSnapEngine.residentialWallCorners);
     } else {
-      rawCorners.add(_pinA);
-      rawCorners.add(_pinB);
+      // Universal Blueprint Smart Fallback:
+      // Include reference residential wall corners and any existing room polygons
+      rawCorners.addAll(BlueprintSnapEngine.residentialWallCorners);
+      rawCorners.addAll(_cadArchitecturalCorners);
       _roomPolygons.forEach((_, poly) {
         rawCorners.addAll(poly);
       });
@@ -341,7 +349,11 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
     if (_isResidentialPlan) {
       return BlueprintSnapEngine.residentialDimensionNeedles;
     }
-    return [_pinA, _pinB];
+    // Universal Blueprint Smart Fallback: Provide standard dimension ticks so calibration pins always snap cleanly
+    return [
+      ..._cadDimensionNeedles,
+      ...BlueprintSnapEngine.residentialDimensionNeedles,
+    ];
   }
 
   @override
@@ -774,10 +786,10 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
       }
     }
 
-    // 3. Snap to CAD Dimension Needles / Witness Ticks & Arrowhead Endpoints (Generous 26px Tolerance)
+    // 3. Snap to CAD Dimension Needles / Witness Ticks & Arrowhead Endpoints (Generous 28px Tolerance)
     for (final needlePt in _activeDimensionNeedles) {
       final distNeedle = (pos - needlePt).distance;
-      if (distNeedle <= math.max(minDistance, 24.0)) {
+      if (distNeedle <= math.max(snapTol, 28.0) && distNeedle < minDistance) {
         minDistance = distNeedle;
         nearestSnap = needlePt;
       }
@@ -2066,9 +2078,9 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
     if ((_canvasStage == 1 || _selectedTool == 'CALIBRATE') && _activeDraggingPin != null) {
       setState(() {
         if (_activeDraggingPin == 1) {
-          _pinA = _snapToFloorPlanFeatures(newPos, orthoAnchor: _pinB);
+          _pinA = _snapToFloorPlanFeatures(newPos, orthoAnchor: _pinB, snapTol: 28.0);
         } else if (_activeDraggingPin == 2) {
-          _pinB = _snapToFloorPlanFeatures(newPos, orthoAnchor: _pinA);
+          _pinB = _snapToFloorPlanFeatures(newPos, orthoAnchor: _pinA, snapTol: 28.0);
         }
       });
       return;
@@ -2891,12 +2903,20 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
 
     return Scaffold(
       appBar: AppBar(
+        titleSpacing: 8,
         title: Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('📐 Plan Canvas & Takeoff', style: TextStyle(fontSize: 16)),
-            const SizedBox(width: 8),
+            const Flexible(
+              child: Text(
+                '📐 Plan Canvas & Takeoff',
+                style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.bold),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const SizedBox(width: 6),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+              padding: const EdgeInsets.symmetric(horizontal: 4.5, vertical: 2),
               decoration: BoxDecoration(
                 color: BanaagTheme.primaryAmber.withValues(alpha: 0.18),
                 borderRadius: BorderRadius.circular(4),
@@ -2906,9 +2926,9 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                 'BETA',
                 style: TextStyle(
                   color: BanaagTheme.primaryAmber,
-                  fontSize: 8.5,
+                  fontSize: 8.0,
                   fontWeight: FontWeight.w900,
-                  letterSpacing: 0.6,
+                  letterSpacing: 0.5,
                 ),
               ),
             ),
