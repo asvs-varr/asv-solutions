@@ -33,6 +33,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        titleSpacing: 12,
         title: InkWell(
           onLongPress: () {
             final email = BanaagAuthService.instance.currentUser?.email.toLowerCase() ?? '';
@@ -47,16 +48,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 borderRadius: BorderRadius.circular(6),
                 child: Image.asset(
                   'assets/icon/app_icon.png',
-                  width: 26,
-                  height: 26,
+                  width: 24,
+                  height: 24,
                   fit: BoxFit.cover,
                 ),
               ),
-              const SizedBox(width: 6),
-              const Text('BANAAG', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16, letterSpacing: 1.1)),
-              const SizedBox(width: 6),
+              const SizedBox(width: 5),
+              const Text('BANAAG', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 15, letterSpacing: 1.0)),
+              const SizedBox(width: 5),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1.5),
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
                 decoration: BoxDecoration(
                   color: BanaagTheme.primaryAmber.withValues(alpha: 0.18),
                   borderRadius: BorderRadius.circular(4),
@@ -66,9 +67,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   'BETA',
                   style: TextStyle(
                     color: BanaagTheme.primaryAmber,
-                    fontSize: 8.5,
+                    fontSize: 8.0,
                     fontWeight: FontWeight.w900,
-                    letterSpacing: 0.6,
+                    letterSpacing: 0.5,
                   ),
                 ),
               ),
@@ -77,30 +78,30 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.receipt_long_outlined, color: BanaagTheme.primaryAmber, size: 21),
-            padding: const EdgeInsets.all(6),
-            constraints: const BoxConstraints(),
+            icon: const Icon(Icons.receipt_long_outlined, color: BanaagTheme.primaryAmber, size: 20),
+            padding: const EdgeInsets.symmetric(horizontal: 3),
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
             tooltip: 'Project Quota & Voucher Top-Up',
             onPressed: () => ProjectQuotaVoucherModal.show(context),
           ),
           IconButton(
-            icon: const Icon(Icons.bug_report_outlined, color: BanaagTheme.primaryAmber, size: 21),
-            padding: const EdgeInsets.all(6),
-            constraints: const BoxConstraints(),
+            icon: const Icon(Icons.bug_report_outlined, color: BanaagTheme.primaryAmber, size: 20),
+            padding: const EdgeInsets.symmetric(horizontal: 3),
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
             tooltip: 'Submit Dev Ticket / Issue',
             onPressed: () => showDevTicketSheet(context, projectContext: 'Dashboard'),
           ),
           IconButton(
-            icon: const Icon(Icons.workspace_premium, color: BanaagTheme.primaryAmber, size: 21),
-            padding: const EdgeInsets.all(6),
-            constraints: const BoxConstraints(),
+            icon: const Icon(Icons.workspace_premium, color: BanaagTheme.primaryAmber, size: 20),
+            padding: const EdgeInsets.symmetric(horizontal: 3),
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
             tooltip: 'BANAAG PRO Settings',
             onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BanaagProScreen())),
           ),
           IconButton(
-            icon: const Icon(Icons.shield_outlined, color: BanaagTheme.primaryAmber, size: 21),
-            padding: const EdgeInsets.only(left: 6, right: 12),
-            constraints: const BoxConstraints(),
+            icon: const Icon(Icons.shield_outlined, color: BanaagTheme.primaryAmber, size: 20),
+            padding: const EdgeInsets.only(left: 3, right: 8),
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
             tooltip: 'PS/ICC Material Shield',
             onPressed: () => _showMaterialShieldDialog(context),
           ),
