@@ -41,33 +41,34 @@ class _DashboardScreenState extends State<DashboardScreen> {
             }
           },
           child: Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
               ClipRRect(
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(6),
                 child: Image.asset(
                   'assets/icon/app_icon.png',
-                  width: 32,
-                  height: 32,
+                  width: 26,
+                  height: 26,
                   fit: BoxFit.cover,
                 ),
               ),
-              const SizedBox(width: 10),
-              const Text('BANAAG', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1.2)),
-              const SizedBox(width: 8),
+              const SizedBox(width: 6),
+              const Text('BANAAG', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16, letterSpacing: 1.1)),
+              const SizedBox(width: 6),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1.5),
                 decoration: BoxDecoration(
                   color: BanaagTheme.primaryAmber.withValues(alpha: 0.18),
                   borderRadius: BorderRadius.circular(4),
-                  border: Border.all(color: BanaagTheme.primaryAmber, width: 0.9),
+                  border: Border.all(color: BanaagTheme.primaryAmber, width: 0.8),
                 ),
                 child: const Text(
                   'BETA',
                   style: TextStyle(
                     color: BanaagTheme.primaryAmber,
-                    fontSize: 9.5,
+                    fontSize: 8.5,
                     fontWeight: FontWeight.w900,
-                    letterSpacing: 0.8,
+                    letterSpacing: 0.6,
                   ),
                 ),
               ),
@@ -76,22 +77,30 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.receipt_long_outlined, color: BanaagTheme.primaryAmber),
+            icon: const Icon(Icons.receipt_long_outlined, color: BanaagTheme.primaryAmber, size: 21),
+            padding: const EdgeInsets.all(6),
+            constraints: const BoxConstraints(),
             tooltip: 'Project Quota & Voucher Top-Up',
             onPressed: () => ProjectQuotaVoucherModal.show(context),
           ),
           IconButton(
-            icon: const Icon(Icons.bug_report_outlined, color: BanaagTheme.primaryAmber),
+            icon: const Icon(Icons.bug_report_outlined, color: BanaagTheme.primaryAmber, size: 21),
+            padding: const EdgeInsets.all(6),
+            constraints: const BoxConstraints(),
             tooltip: 'Submit Dev Ticket / Issue',
             onPressed: () => showDevTicketSheet(context, projectContext: 'Dashboard'),
           ),
           IconButton(
-            icon: const Icon(Icons.workspace_premium, color: BanaagTheme.primaryAmber),
+            icon: const Icon(Icons.workspace_premium, color: BanaagTheme.primaryAmber, size: 21),
+            padding: const EdgeInsets.all(6),
+            constraints: const BoxConstraints(),
             tooltip: 'BANAAG PRO Settings',
             onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BanaagProScreen())),
           ),
           IconButton(
-            icon: const Icon(Icons.shield_outlined, color: BanaagTheme.primaryAmber),
+            icon: const Icon(Icons.shield_outlined, color: BanaagTheme.primaryAmber, size: 21),
+            padding: const EdgeInsets.only(left: 6, right: 12),
+            constraints: const BoxConstraints(),
             tooltip: 'PS/ICC Material Shield',
             onPressed: () => _showMaterialShieldDialog(context),
           ),
@@ -160,10 +169,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 const SizedBox(height: 18),
 
                 // Quick-Tap Action Matrix
-                Row(
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 4,
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     const Text('One-Tap Operations Hub', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                    const SizedBox(width: 8),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                       decoration: BoxDecoration(
@@ -175,7 +186,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         'COMING SOON IN STABLE RELEASE',
                         style: TextStyle(
                           color: Colors.white70,
-                          fontSize: 9.0,
+                          fontSize: 8.5,
                           fontWeight: FontWeight.bold,
                           letterSpacing: 0.4,
                         ),
