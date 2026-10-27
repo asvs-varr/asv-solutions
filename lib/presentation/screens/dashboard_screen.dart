@@ -53,6 +53,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
               const SizedBox(width: 10),
               const Text('BANAAG', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1.2)),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: BanaagTheme.primaryAmber.withValues(alpha: 0.18),
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: BanaagTheme.primaryAmber, width: 0.9),
+                ),
+                child: const Text(
+                  'BETA',
+                  style: TextStyle(
+                    color: BanaagTheme.primaryAmber,
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 0.8,
+                  ),
+                ),
+              ),
             ],
           ),
         ),
@@ -92,6 +110,34 @@ class _DashboardScreenState extends State<DashboardScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // BANAAG (Early Access) Watermark Banner
+                Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1E2430),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: BanaagTheme.primaryAmber.withValues(alpha: 0.5), width: 1.0),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.info_outline, size: 16, color: BanaagTheme.primaryAmber),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'BANAAG (Early Access) • Beta Engineering Preview v1.0.0',
+                          style: TextStyle(
+                            color: BanaagTheme.primaryAmber.withValues(alpha: 0.95),
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 0.3,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
                 // Top Financial Overview
                 Card(
                   color: const Color(0xFF1B2028),
@@ -114,13 +160,41 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 const SizedBox(height: 18),
 
                 // Quick-Tap Action Matrix
-                const Text('One-Tap Operations Hub', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                const SizedBox(height: 12),
                 Row(
                   children: [
-                    Expanded(
-                      child: _quickActionTile(
-                        icon: Icons.calculate_outlined,
+                    const Text('One-Tap Operations Hub', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: Colors.white24, width: 0.8),
+                      ),
+                      child: const Text(
+                        'COMING SOON IN STABLE RELEASE',
+                        style: TextStyle(
+                          color: Colors.white70,
+                          fontSize: 9.0,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.4,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Opacity(
+                  opacity: 0.50,
+                  child: IgnorePointer(
+                    ignoring: true,
+                    child: Column(
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _quickActionTile(
+                                icon: Icons.calculate_outlined,
                         title: 'PEC Engine',
                         subtitle: 'Wire, Pipe & Balancer',
                         color: BanaagTheme.primaryAmber,
@@ -176,6 +250,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ),
                     ),
                   ],
+                ),
+                      ],
+                    ),
+                  ),
                 ),
                 const SizedBox(height: 24),
 

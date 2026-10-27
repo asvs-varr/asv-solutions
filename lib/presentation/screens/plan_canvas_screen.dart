@@ -2891,7 +2891,29 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('📐 Plan Canvas & Takeoff'),
+        title: Row(
+          children: [
+            const Text('📐 Plan Canvas & Takeoff', style: TextStyle(fontSize: 16)),
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+              decoration: BoxDecoration(
+                color: BanaagTheme.primaryAmber.withValues(alpha: 0.18),
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(color: BanaagTheme.primaryAmber, width: 0.8),
+              ),
+              child: const Text(
+                'BETA',
+                style: TextStyle(
+                  color: BanaagTheme.primaryAmber,
+                  fontSize: 8.5,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 0.6,
+                ),
+              ),
+            ),
+          ],
+        ),
         actions: [
           // 1. Quick Room Dimensions Generator
           IconButton(
@@ -3216,6 +3238,28 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
       ),
       body: Column(
         children: [
+          // BANAAG (Early Access) Watermark Banner
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            color: const Color(0xFF181F2C),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.shield_outlined, size: 12, color: BanaagTheme.primaryAmber),
+                const SizedBox(width: 6),
+                Text(
+                  'BANAAG (Early Access) • Beta Engineering Preview',
+                  style: TextStyle(
+                    color: BanaagTheme.primaryAmber.withValues(alpha: 0.9),
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.3,
+                  ),
+                ),
+              ],
+            ),
+          ),
           // 3-Stage Engineering Flow Stepper Bar
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
@@ -6219,14 +6263,24 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                   ),
                   ElevatedButton.icon(
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.redAccent,
-                      foregroundColor: Colors.white,
+                      backgroundColor: Colors.white.withValues(alpha: 0.12),
+                      foregroundColor: Colors.white38,
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       visualDensity: VisualDensity.compact,
                     ),
-                    icon: const Icon(Icons.flash_auto, size: 13),
-                    label: const Text('Auto-Suggest', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                    icon: const Icon(Icons.lock_clock, size: 13, color: Colors.white38),
+                    label: const Text('Auto-Suggest (Beta)', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white38)),
                     onPressed: () {
+                      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('🔒 Auto-Suggest is currently under polish for Beta. Please use manual guided target snapping!'),
+                          backgroundColor: BanaagTheme.warningOrange,
+                          duration: Duration(seconds: 2),
+                        ),
+                      );
+                    },
+                    /* disabled during beta polish:
                       // Smart placement at landing / central service corridor wall
                       final landingRoom = widget.project?.spaces.firstWhere(
                         (s) => s.name.toLowerCase().contains('landing') || s.name.toLowerCase().contains('corridor') || s.name.toLowerCase().contains('stair'),
@@ -6264,7 +6318,7 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                           duration: Duration(seconds: 2),
                         ),
                       );
-                    },
+                    }, */
                   ),
                 ],
               ),
@@ -6394,21 +6448,34 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                         ),
                       ),
                       GestureDetector(
-                        onTap: () => _autoLayoutActiveRoom(activeRoom),
+                        onTap: () {
+                          HapticFeedback.selectionClick();
+                          ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('🔒 Auto-Fill is currently under polish for Beta. Please use manual guided target snapping!'),
+                              backgroundColor: BanaagTheme.warningOrange,
+                              duration: Duration(seconds: 2),
+                            ),
+                          );
+                          if (false as dynamic) {
+                            _autoLayoutActiveRoom(activeRoom);
+                          }
+                        },
                         child: Container(
                           margin: const EdgeInsets.symmetric(horizontal: 4),
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
                           decoration: BoxDecoration(
-                            color: BanaagTheme.primaryAmber.withValues(alpha: 0.18),
+                            color: Colors.white.withValues(alpha: 0.08),
                             borderRadius: BorderRadius.circular(4),
-                            border: Border.all(color: BanaagTheme.primaryAmber.withValues(alpha: 0.7), width: 0.8),
+                            border: Border.all(color: Colors.white24, width: 0.8),
                           ),
                           child: const Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(Icons.flash_on, size: 12, color: BanaagTheme.primaryAmber),
-                              SizedBox(width: 2),
-                              Text('⚡ Auto-Fill', style: TextStyle(color: BanaagTheme.primaryAmber, fontSize: 9.5, fontWeight: FontWeight.bold)),
+                              Icon(Icons.lock_clock, size: 12, color: Colors.white38),
+                              SizedBox(width: 3),
+                              Text('Auto-Fill (Beta)', style: TextStyle(color: Colors.white38, fontSize: 9.5, fontWeight: FontWeight.bold)),
                             ],
                           ),
                         ),
