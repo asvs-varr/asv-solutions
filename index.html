@@ -159,6 +159,33 @@
       border-bottom: 1px solid #1a2a44;
       padding: 5rem 1.5rem;
     }
+    .sinag-showcase {
+      background: radial-gradient(circle at center, #1f1609 0%, #0a0c10 70%);
+      border-bottom: 1px solid #3d2a10;
+      padding: 5rem 1.5rem;
+    }
+    .showcase-text .tag.amber-solar-tag {
+      background: rgba(255, 179, 0, 0.15);
+      border: 1px solid #f59e0b;
+      color: #f59e0b;
+    }
+    .badge-coming-soon {
+      background: rgba(255, 179, 0, 0.12);
+      border: 1px solid rgba(255, 179, 0, 0.4);
+      color: #f59e0b;
+      font-weight: 700;
+      padding: 0.85rem 1.6rem;
+      border-radius: 10px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.95rem;
+      letter-spacing: 0.3px;
+    }
+    .showcase-img.sinag-frame img {
+      box-shadow: 0 20px 40px rgba(0,0,0,0.85), 0 0 50px rgba(245, 158, 11, 0.25);
+      border: 2px solid #3d2a10;
+    }
     .showcase-container {
       max-width: 1100px;
       margin: 0 auto;
@@ -568,6 +595,55 @@
 
       <div class="showcase-img plusfocus-frame">
         <img src="plusfocus_screen.png" alt="PlusFocus Mobile App - Dark Obsidian Theme">
+      </div>
+    </div>
+  </section>
+
+  <!-- Software Showcase: SINAG (Solar Design Director) -->
+  <section class="sinag-showcase">
+    <div class="showcase-container">
+      <div class="showcase-text">
+        <div class="tag amber-solar-tag">SOLAR ENGINEERING & SIZING DIRECTOR</div>
+        <h2>Sinag: Solar Design Director</h2>
+        <p>A standard-first, professional solar photovoltaic (PV) sizing suite engineered for Philippine solar contractors, EPC engineers, and electrical practitioners. Built with strict adherence to Philippine statutory electrical mandates, live load profiling, dynamic SLD schematics, and an automated compliance gatekeeper.</p>
+        
+        <ul class="feature-list">
+          <li>
+            <span class="feature-icon">&#10003;</span>
+            <div><strong>Philippine Electrical Code (PEC 2017) Article 6.90 & 7.05</strong>: Exact 125% and 156% continuous duty conductor derating, OCPD sizing, and strict 120% Busbar Interconnection Rule calculation.</div>
+          </li>
+          <li>
+            <span class="feature-icon">&#10003;</span>
+            <div><strong>ERC Net-Metering (Resolution No. 06-2019) Gatekeeper</strong>: Automatic 100 kWp export cap gate, anti-islanding trip validation (&le; 2s), and mandatory 10-minute reconnection lockout verification.</div>
+          </li>
+          <li>
+            <span class="feature-icon">&#10003;</span>
+            <div><strong>Philippine Distribution Code (PDC 2017) Telemetry</strong>: Transformer/feeder penetration limit checks (30% LV feeder / 33.3% transformer capacity) and 0.85 power factor enforcement.</div>
+          </li>
+          <li>
+            <span class="feature-icon">&#10003;</span>
+            <div><strong>Super Dynamic Cross-Tab Tuning Engine</strong>: Real-time reactive signal bus propagating adjustments across Load Ledger, SLD Schematics, Gatekeeper Audits, and live BOM Proposal.</div>
+          </li>
+          <li>
+            <span class="feature-icon">&#10003;</span>
+            <div><strong>Native 60fps Single-Line Diagram (SLD) CAD</strong>: Real-time vector rendering of solar arrays, DC disconnects, inverters, battery storage, and distribution boards with 1-Tap Sync to Standards.</div>
+          </li>
+          <li>
+            <span class="feature-icon">&#10003;</span>
+            <div><strong>NSCP 2015 & RA 9514 Fire Code Compliance</strong>: Rooftop setback perimeter verification, module-level rapid shutdown (RSD &lt; 30V in 30s), and structural wind zone derating up to 300 kph.</div>
+          </li>
+        </ul>
+
+        <div class="banaag-cta-group">
+          <div class="badge-coming-soon">
+            <span>☀️</span> In Active Engineering Pilot &bull; Distribution Release Coming Soon
+          </div>
+          <a href="#verification" class="btn-specs-banaag">Technical Compliance Specs</a>
+        </div>
+      </div>
+
+      <div class="showcase-img sinag-frame">
+        <img src="sinag_screen.png" alt="Sinag: Solar Design Director - Mobile Showcase">
       </div>
     </div>
   </section>
