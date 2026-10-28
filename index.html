@@ -154,6 +154,125 @@
       border-bottom: 1px solid #2e2119;
       padding: 5rem 1.5rem;
     }
+    /* + focus Use Cases Section */
+    .focus-usecases-section {
+      background: #080b11;
+      padding: 4.5rem 1.5rem 5.5rem;
+      border-bottom: 1px solid #141c2b;
+    }
+    .focus-usecases-container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    .focus-usecases-header {
+      text-align: center;
+      margin-bottom: 3.5rem;
+    }
+    .focus-usecases-header .tag {
+      margin-bottom: 1rem;
+    }
+    .focus-usecases-header h3 {
+      font-size: 2.2rem;
+      font-weight: 800;
+      color: #ffffff;
+      margin: 0 0 0.8rem 0;
+      letter-spacing: -0.5px;
+    }
+    .focus-usecases-header p {
+      color: var(--text-muted);
+      font-size: 1.05rem;
+      max-width: 680px;
+      margin: 0 auto;
+      line-height: 1.6;
+    }
+    .focus-usecase-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1.75rem;
+    }
+    .focus-usecase-card {
+      background: linear-gradient(180deg, rgba(16, 25, 41, 0.7) 0%, rgba(10, 14, 23, 0.95) 100%);
+      border: 1px solid #1a2a44;
+      border-radius: 16px;
+      padding: 2.2rem 1.8rem;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      transition: transform 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
+    }
+    .focus-usecase-card:hover {
+      transform: translateY(-4px);
+      border-color: #00e5ff;
+      box-shadow: 0 16px 36px rgba(0, 229, 255, 0.12);
+    }
+    .focus-usecase-badge {
+      font-size: 0.75rem;
+      font-weight: 800;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: #00e5ff;
+      background: rgba(0, 229, 255, 0.1);
+      border: 1px solid rgba(0, 229, 255, 0.25);
+      padding: 0.35rem 0.75rem;
+      border-radius: 20px;
+      display: inline-block;
+      width: fit-content;
+      margin-bottom: 1.25rem;
+    }
+    .focus-usecase-icon {
+      font-size: 2.2rem;
+      margin-bottom: 1rem;
+      display: inline-block;
+    }
+    .focus-usecase-card h4 {
+      font-size: 1.35rem;
+      font-weight: 700;
+      color: #ffffff;
+      margin: 0 0 0.75rem 0;
+      line-height: 1.35;
+    }
+    .focus-usecase-pitch {
+      font-size: 0.98rem;
+      color: #94a3b8;
+      line-height: 1.6;
+      margin-bottom: 1.5rem;
+    }
+    .focus-usecase-subpoints {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 0.85rem;
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      padding-top: 1.25rem;
+    }
+    .focus-usecase-subpoints li {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      font-size: 0.9rem;
+      color: #cbd5e1;
+      line-height: 1.5;
+    }
+    .focus-usecase-subpoints li strong {
+      color: #ffffff;
+    }
+    .focus-point-check {
+      color: #00e5ff;
+      font-weight: 900;
+      flex-shrink: 0;
+      font-size: 1rem;
+    }
+    @media (max-width: 992px) {
+      .focus-usecase-grid {
+        grid-template-columns: 1fr;
+        gap: 1.5rem;
+      }
+      .focus-usecase-card {
+        padding: 1.8rem 1.5rem;
+      }
+    }
     .plusfocus-showcase {
       background: radial-gradient(circle at center, #0f1c2e 0%, #0a0c10 70%);
       border-bottom: 1px solid #1a2a44;
