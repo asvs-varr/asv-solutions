@@ -3575,6 +3575,7 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                                   pinA: _pinA,
                                   pinB: _pinB,
                                   pixelsPerMeter: _pixelsPerMeter,
+                                  blueprintImagePath: _blueprintPath,
                                   onApply: (newSpaces, newPolygons) {
                                     setState(() {
                                       if (widget.project != null) {

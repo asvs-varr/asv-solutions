@@ -1,5 +1,7 @@
+import 'dart:io';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 import '../../domain/models.dart';
 import '../theme/banaag_theme.dart';
 
@@ -24,6 +26,7 @@ class MultiRoomSketchBuilderModal extends StatefulWidget {
   final Offset pinA;
   final Offset pinB;
   final double pixelsPerMeter;
+  final String? blueprintImagePath;
   final Function(List<RoomSpace> spaces, Map<String, List<Offset>> polygons) onApply;
 
   const MultiRoomSketchBuilderModal({
@@ -32,6 +35,7 @@ class MultiRoomSketchBuilderModal extends StatefulWidget {
     required this.pinA,
     required this.pinB,
     required this.pixelsPerMeter,
+    this.blueprintImagePath,
     required this.onApply,
   });
 
@@ -41,6 +45,7 @@ class MultiRoomSketchBuilderModal extends StatefulWidget {
     required Offset pinA,
     required Offset pinB,
     required double pixelsPerMeter,
+    String? blueprintImagePath,
     required Function(List<RoomSpace> spaces, Map<String, List<Offset>> polygons) onApply,
   }) {
     return showModalBottomSheet(
@@ -52,6 +57,7 @@ class MultiRoomSketchBuilderModal extends StatefulWidget {
         pinA: pinA,
         pinB: pinB,
         pixelsPerMeter: pixelsPerMeter,
+        blueprintImagePath: blueprintImagePath,
         onApply: onApply,
       ),
     );
@@ -63,6 +69,8 @@ class MultiRoomSketchBuilderModal extends StatefulWidget {
 
 class _MultiRoomSketchBuilderModalState extends State<MultiRoomSketchBuilderModal> {
   late List<RoomBayConfig> _bays;
+  bool _isOcrScanning = false;
+  List<double> _detectedNumbers = [];
 
   @override
   void initState() {
@@ -76,6 +84,65 @@ class _MultiRoomSketchBuilderModalState extends State<MultiRoomSketchBuilderModa
       RoomBayConfig(name: 'Hallway / Utility', widthMeters: 1.0, depthMeters: 2.5),
       RoomBayConfig(name: 'Room 2 (Bedroom)', widthMeters: 2.0, depthMeters: 4.5),
     ];
+
+    if (widget.blueprintImagePath != null && widget.blueprintImagePath!.isNotEmpty) {
+      _scanOcrNumbersFromSketch(widget.blueprintImagePath!);
+    }
+  }
+
+  /// Scans handwriting on the sketch using ML Kit and auto-extracts meter dimensions
+  Future<void> _scanOcrNumbersFromSketch(String imagePath) async {
+    final file = File(imagePath);
+    if (!file.existsSync()) return;
+
+    setState(() => _isOcrScanning = true);
+
+    try {
+      final inputImage = InputImage.fromFilePath(imagePath);
+      final textRecognizer = TextRecognizer(script: TextRecognitionScript.latin);
+      final RecognizedText recognizedText = await textRecognizer.processImage(inputImage);
+      await textRecognizer.close();
+
+      final List<double> foundMeters = [];
+      // Look for tokens like "2m", "1m", "3.5", "2.5", "4.5", "2.0m"
+      final regex = RegExp(r'(\d+(?:\.\d+)?)\s*(?:m|meter|mtr)?', caseSensitive: false);
+
+      for (final block in recognizedText.blocks) {
+        for (final line in block.lines) {
+          for (final match in regex.allMatches(line.text)) {
+            final val = double.tryParse(match.group(1) ?? '');
+            if (val != null && val >= 0.8 && val <= 25.0) {
+              if (!foundMeters.contains(val)) {
+                foundMeters.add(val);
+              }
+            }
+          }
+        }
+      }
+
+      if (foundMeters.isNotEmpty && mounted) {
+        setState(() {
+          _detectedNumbers = foundMeters;
+          // If we found numbers like [2.0, 1.0, 3.5, 2.5, 4.5], adjust bays automatically!
+          final widths = foundMeters.where((n) => n <= 3.0).toList();
+          final depths = foundMeters.where((n) => n > 2.0).toList();
+
+          if (widths.isNotEmpty && depths.isNotEmpty) {
+            if (widths.length >= 2 && depths.length >= 2) {
+              _bays[0].widthMeters = widths[0];
+              _bays[0].depthMeters = depths[0];
+              if (widths.length > 2) {
+                _bays[1].widthMeters = widths[1];
+              }
+              _bays[_bays.length - 1].widthMeters = widths.last;
+              _bays[_bays.length - 1].depthMeters = depths.last;
+            }
+          }
+        });
+      }
+    } catch (_) {} finally {
+      if (mounted) setState(() => _isOcrScanning = false);
+    }
   }
 
   double get _totalConfiguredWidth => _bays.fold(0.0, (sum, b) => sum + b.widthMeters);
@@ -127,13 +194,6 @@ class _MultiRoomSketchBuilderModalState extends State<MultiRoomSketchBuilderModa
       List<Offset> polyVertices;
 
       if (bay.cutoutWidthMeters > 0.1 && bay.cutoutDepthMeters > 0.1 && bay.cutoutWidthMeters < bay.widthMeters) {
-        // L-Shape polygon:
-        // P1: Top-Left
-        // P2: Top Cutout start (bayTL + unitX * (width - cutoutWidth))
-        // P3: Cutout turn down (P2 + unitY * cutoutDepth)
-        // P4: Cutout turn right to TR line (P3 + unitX * cutoutWidth)
-        // P5: Bottom Right corner (bayTR + unitY * depth)
-        // P6: Bottom Left corner (bayTL + unitY * depth)
         final Offset p1 = bayTL;
         final Offset p2 = bayTL + (unitX * ((bay.widthMeters - bay.cutoutWidthMeters) * ppm));
         final Offset p3 = p2 + (unitY * (bay.cutoutDepthMeters * ppm));
@@ -143,7 +203,6 @@ class _MultiRoomSketchBuilderModalState extends State<MultiRoomSketchBuilderModa
 
         polyVertices = [p1, p2, p3, p4, p5, p6];
       } else {
-        // Rectangular 4-point bay
         final Offset p1 = bayTL;
         final Offset p2 = bayTR;
         final Offset p3 = bayTR + (unitY * (bay.depthMeters * ppm));
@@ -223,9 +282,17 @@ class _MultiRoomSketchBuilderModalState extends State<MultiRoomSketchBuilderModa
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        'Auto-Redraw Sketch to CAD Walls',
-                        style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                      Row(
+                        children: [
+                          const Text(
+                            'Auto-Redraw Sketch to CAD',
+                            style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                          ),
+                          if (_isOcrScanning) ...[
+                            const SizedBox(width: 6),
+                            const SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 1.5, color: Colors.cyanAccent)),
+                          ],
+                        ],
                       ),
                       Text(
                         'Aligns true 90° CAD walls to Pin A–B baseline ($totalW m total bay width)',
@@ -240,7 +307,7 @@ class _MultiRoomSketchBuilderModalState extends State<MultiRoomSketchBuilderModa
                 ),
               ],
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 14),
 
             // Dimension Summary Card
             Container(
@@ -250,26 +317,51 @@ class _MultiRoomSketchBuilderModalState extends State<MultiRoomSketchBuilderModa
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(color: Colors.white12),
               ),
-              child: Row(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(Icons.straighten, color: Colors.cyanAccent, size: 18),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Pin A–B Reference: ${widget.referenceWidthMeters.toStringAsFixed(2)} m\n'
-                      'Configured Bay Sum: ${totalW.toStringAsFixed(2)} m (${_bays.length} Rooms)',
-                      style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600, height: 1.3),
-                    ),
+                  Row(
+                    children: [
+                      const Icon(Icons.straighten, color: Colors.cyanAccent, size: 18),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Pin A–B Reference: ${widget.referenceWidthMeters.toStringAsFixed(2)} m\n'
+                          'Configured Bay Sum: ${totalW.toStringAsFixed(2)} m (${_bays.length} Rooms)',
+                          style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600, height: 1.3),
+                        ),
+                      ),
+                      TextButton.icon(
+                        style: TextButton.styleFrom(
+                          foregroundColor: BanaagTheme.primaryAmber,
+                          visualDensity: VisualDensity.compact,
+                        ),
+                        icon: const Icon(Icons.add, size: 16),
+                        label: const Text('Add Bay', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                        onPressed: _addBay,
+                      ),
+                    ],
                   ),
-                  TextButton.icon(
-                    style: TextButton.styleFrom(
-                      foregroundColor: BanaagTheme.primaryAmber,
-                      visualDensity: VisualDensity.compact,
+                  if (_detectedNumbers.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        const Text('🔍 Detected on sketch:', style: TextStyle(color: Colors.white60, fontSize: 10)),
+                        ..._detectedNumbers.map((detectedM) => Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.cyanAccent.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(color: Colors.cyanAccent.withValues(alpha: 0.4)),
+                          ),
+                          child: Text('${detectedM.toStringAsFixed(detectedM % 1 == 0 ? 0 : 1)}m', style: const TextStyle(color: Colors.cyanAccent, fontSize: 10, fontWeight: FontWeight.bold)),
+                        )),
+                      ],
                     ),
-                    icon: const Icon(Icons.add, size: 16),
-                    label: const Text('Add Bay', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
-                    onPressed: _addBay,
-                  ),
+                  ],
                 ],
               ),
             ),
@@ -299,6 +391,7 @@ class _MultiRoomSketchBuilderModalState extends State<MultiRoomSketchBuilderModa
                         const SizedBox(width: 8),
                         Expanded(
                           child: TextFormField(
+                            key: ValueKey('name-$idx-${bay.name}'),
                             initialValue: bay.name,
                             style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
                             decoration: const InputDecoration(
@@ -330,6 +423,7 @@ class _MultiRoomSketchBuilderModalState extends State<MultiRoomSketchBuilderModa
                               const Text('Lapad (m)', style: TextStyle(color: Colors.white60, fontSize: 10)),
                               const SizedBox(height: 3),
                               TextFormField(
+                                key: ValueKey('w-$idx-${bay.widthMeters}'),
                                 initialValue: bay.widthMeters.toStringAsFixed(1),
                                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
                                 style: const TextStyle(color: Colors.cyanAccent, fontSize: 13, fontWeight: FontWeight.bold),
@@ -359,6 +453,7 @@ class _MultiRoomSketchBuilderModalState extends State<MultiRoomSketchBuilderModa
                               const Text('Lalim (m)', style: TextStyle(color: Colors.white60, fontSize: 10)),
                               const SizedBox(height: 3),
                               TextFormField(
+                                key: ValueKey('d-$idx-${bay.depthMeters}'),
                                 initialValue: bay.depthMeters.toStringAsFixed(1),
                                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
                                 style: const TextStyle(color: Colors.amberAccent, fontSize: 13, fontWeight: FontWeight.bold),
