@@ -1,3 +1,4 @@
+import 'dart:ui';
 // BANAAG Core Domain: Floor Plan Room Space Scanner Engine
 // Uses Google ML Kit on-device Text Recognition (100% offline) and direct
 // Vector CAD / PDF Binary stream extraction to parse rooms, CAD bay dimensions,
@@ -16,6 +17,7 @@ class FloorPlanScanResult {
   final double detectedBuildingWidthMeters;
   final List<String> candidateQuickAddTags;
   final bool isCadMillimeterDrawing;
+  final List<Offset> detectedCorners;
 
   FloorPlanScanResult({
     required this.rooms,
@@ -23,6 +25,7 @@ class FloorPlanScanResult {
     this.detectedBuildingWidthMeters = 15.50,
     this.candidateQuickAddTags = const [],
     this.isCadMillimeterDrawing = false,
+    this.detectedCorners = const [],
   });
 }
 
@@ -170,13 +173,30 @@ class FloorPlanScannerEngine {
   /// Parses text blocks from OCR recognition
   static FloorPlanScanResult _parseRecognizedTextWithMetadata(RecognizedText recognizedText) {
     final List<String> allLines = [];
+    final List<Offset> corners = [];
+
     for (final block in recognizedText.blocks) {
+      final bb = block.boundingBox;
+      corners.add(Offset(bb.left, bb.top));
+      corners.add(Offset(bb.right, bb.top));
+      corners.add(Offset(bb.right, bb.bottom));
+      corners.add(Offset(bb.left, bb.bottom));
+
       for (final line in block.lines) {
         final t = line.text.trim();
         if (t.isNotEmpty) allLines.add(t);
       }
     }
-    return parseRawTextLines(allLines);
+
+    final res = parseRawTextLines(allLines);
+    return FloorPlanScanResult(
+      rooms: res.rooms,
+      detectedBuildingLengthMeters: res.detectedBuildingLengthMeters,
+      detectedBuildingWidthMeters: res.detectedBuildingWidthMeters,
+      candidateQuickAddTags: res.candidateQuickAddTags,
+      isCadMillimeterDrawing: res.isCadMillimeterDrawing,
+      detectedCorners: corners,
+    );
   }
 
   /// Core Parser: dynamically parses any raw lines from OCR or CAD PDF streams

@@ -188,6 +188,7 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
   bool _isOrthoSnapEnabled = true;
   bool _isAiAutoWallDetectEnabled = true;
   final List<Offset> _customProjectColumns = [];
+  final List<Offset> _dynamicVisionCorners = [];
   Offset? _lastHapticSnappedPoint;
   Offset? _roomDragStartPos;
   List<Offset>? _roomDragInitialPoly;
@@ -270,26 +271,24 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
       _blueprintPath != null && _blueprintPath!.isNotEmpty && File(_blueprintPath!).existsSync();
 
   /// Determines if current blueprint is a commercial/institutional CAD plan with column grids
+  /// Determines if current blueprint is a bundled commercial/institutional CAD demo plan
   bool get _isCommercialCadPlan {
     final path = _blueprintPath?.toLowerCase() ?? '';
-    final title = widget.project?.title.toLowerCase() ?? '';
-    return path.contains('tesda') ||
-        path.contains('commercial') ||
-        path.contains('model.pdf') ||
-        title.contains('commercial') ||
-        title.contains('tesda');
+    // Never treat user-uploaded external files as bundled CAD templates
+    if (path.isNotEmpty && !path.contains('assets') && !path.contains('sample') && !path.contains('tesda_demo')) {
+      return false;
+    }
+    return path.contains('tesda') || path.contains('model.pdf');
   }
 
-  /// Determines if current blueprint is a residential timber/CHB plan
+  /// Determines if current blueprint is a bundled residential demo plan
   bool get _isResidentialPlan {
     final path = _blueprintPath?.toLowerCase() ?? '';
-    final title = widget.project?.title.toLowerCase() ?? '';
-    return path.contains('1000010166') ||
-        path.contains('residential') ||
-        path.contains('residence') ||
-        title.contains('residential') ||
-        title.contains('residence') ||
-        title.contains('other');
+    // Never treat user-uploaded external files as bundled residential templates
+    if (path.isNotEmpty && !path.contains('assets') && !path.contains('sample') && !path.contains('1000010166')) {
+      return false;
+    }
+    return path.contains('1000010166') || path.contains('sample_residence');
   }
 
   /// Dynamically active structural columns for snapping and rendering
@@ -318,10 +317,11 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
     } else if (_isResidentialPlan) {
       rawCorners.addAll(BlueprintSnapEngine.residentialWallCorners);
     } else {
-      // Custom Upload / Sketch Blueprint: Snap only to active room polygons
+      // Custom Upload / Sketch Blueprint: Snap to active room polygons AND detected dynamic visual corners!
       _roomPolygons.forEach((_, poly) {
         rawCorners.addAll(poly);
       });
+      rawCorners.addAll(_dynamicVisionCorners);
     }
 
     // Column-Priority Deduplication: If a spot has a column (within 20px), column is active and takes priority!
@@ -1085,6 +1085,12 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
 
     try {
       final scanResult = await FloorPlanScannerEngine.scanFloorPlanWithMetadata(path, pdfPageIndex: _pdfSheetIndex);
+      if (mounted && scanResult.detectedCorners.isNotEmpty) {
+        setState(() {
+          _dynamicVisionCorners.clear();
+          _dynamicVisionCorners.addAll(scanResult.detectedCorners);
+        });
+      }
       if (scanResult.rooms.isNotEmpty && mounted) {
         setState(() {
           proj.spaces.clear();
@@ -2656,8 +2662,61 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
   }
 
   void _handleCanvasLongPressStart(LongPressStartDetails details) {
-    if (widget.project == null || widget.project!.spaces.isEmpty) return;
     final tapPos = details.localPosition;
+
+    // STEP 0 (Scale Calibration Mode): Long-press manages dynamic snap points!
+    if (_canvasStage == 1 && _stage1SubStep == 0) {
+      // Check if user long-pressed near an existing custom column/corner snap point
+      final existingColIdx = _customProjectColumns.indexWhere((c) => (c - tapPos).distance <= 25.0);
+      final existingDynIdx = _dynamicVisionCorners.indexWhere((c) => (c - tapPos).distance <= 25.0);
+
+      if (existingColIdx != -1) {
+        setState(() {
+          _customProjectColumns.removeAt(existingColIdx);
+        });
+        HapticFeedback.heavyImpact();
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            duration: Duration(milliseconds: 1200),
+            content: Text('🗑️ Removed Custom Snap Point'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+        return;
+      } else if (existingDynIdx != -1) {
+        setState(() {
+          _dynamicVisionCorners.removeAt(existingDynIdx);
+        });
+        HapticFeedback.heavyImpact();
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            duration: Duration(milliseconds: 1200),
+            content: Text('🗑️ Removed Detected Snap Point'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+        return;
+      } else {
+        // Add new custom magnetic Snap Point at long-press position
+        setState(() {
+          _customProjectColumns.add(tapPos);
+        });
+        HapticFeedback.selectionClick();
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            duration: const Duration(milliseconds: 1400),
+            content: Text('📍 Added Magnetic Snap Point at (${tapPos.dx.round()}, ${tapPos.dy.round()})'),
+            backgroundColor: BanaagTheme.primaryAmber,
+          ),
+        );
+        return;
+      }
+    }
+
+    if (widget.project == null || widget.project!.spaces.isEmpty) return;
 
     // Check which room polygon was long-pressed
     int tappedRoomIdx = -1;
