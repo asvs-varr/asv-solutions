@@ -301,8 +301,7 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
       // Residential structural corner/post locations
       columns.addAll(BlueprintSnapEngine.residentialWallCorners.take(4));
     } else {
-      // Universal Blueprint Smart Fallback: Provide sensible structural column grid
-      columns.addAll(_cadStructuralColumns);
+      // Custom Upload / Sketch Blueprint: Do not inject template CAD columns
     }
     // Merge user-tagged or smart-detected columns for custom plans
     columns.addAll(_customProjectColumns);
@@ -318,10 +317,7 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
     } else if (_isResidentialPlan) {
       rawCorners.addAll(BlueprintSnapEngine.residentialWallCorners);
     } else {
-      // Universal Blueprint Smart Fallback:
-      // Include reference residential wall corners and any existing room polygons
-      rawCorners.addAll(BlueprintSnapEngine.residentialWallCorners);
-      rawCorners.addAll(_cadArchitecturalCorners);
+      // Custom Upload / Sketch Blueprint: Snap only to active room polygons
       _roomPolygons.forEach((_, poly) {
         rawCorners.addAll(poly);
       });
@@ -349,11 +345,8 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
     if (_isResidentialPlan) {
       return BlueprintSnapEngine.residentialDimensionNeedles;
     }
-    // Universal Blueprint Smart Fallback: Provide standard dimension ticks so calibration pins always snap cleanly
-    return [
-      ..._cadDimensionNeedles,
-      ...BlueprintSnapEngine.residentialDimensionNeedles,
-    ];
+    // Custom Upload / Sketch Blueprint: No artificial template needles
+    return const [];
   }
 
   @override
@@ -2903,20 +2896,19 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        titleSpacing: 8,
+        titleSpacing: 0,
         title: Row(
-          mainAxisSize: MainAxisSize.min,
           children: [
-            const Flexible(
+            const Expanded(
               child: Text(
                 '📐 Plan Canvas & Takeoff',
-                style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.bold),
+                style: TextStyle(fontSize: 14.0, fontWeight: FontWeight.bold),
                 overflow: TextOverflow.ellipsis,
               ),
             ),
-            const SizedBox(width: 6),
+            const SizedBox(width: 4),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 4.5, vertical: 2),
+              padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 2),
               decoration: BoxDecoration(
                 color: BanaagTheme.primaryAmber.withValues(alpha: 0.18),
                 borderRadius: BorderRadius.circular(4),
@@ -2926,12 +2918,13 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                 'BETA',
                 style: TextStyle(
                   color: BanaagTheme.primaryAmber,
-                  fontSize: 8.0,
+                  fontSize: 7.5,
                   fontWeight: FontWeight.w900,
                   letterSpacing: 0.5,
                 ),
               ),
             ),
+            const SizedBox(width: 4),
           ],
         ),
         actions: [
@@ -8003,17 +7996,9 @@ class CanvasPainter extends CustomPainter {
       ..color = Colors.cyanAccent.withValues(alpha: 0.8)
       ..strokeWidth = 1.0;
 
-    final columnsToDraw = activeStructuralColumns.isNotEmpty
-        ? activeStructuralColumns
-        : _PlanCanvasScreenState._cadStructuralColumns;
-
-    final archCornersToDraw = activeArchitecturalCorners.isNotEmpty
-        ? activeArchitecturalCorners
-        : _PlanCanvasScreenState._cadArchitecturalCorners;
-
-    final needlesToDraw = activeDimensionNeedles.isNotEmpty
-        ? activeDimensionNeedles
-        : _PlanCanvasScreenState._cadDimensionNeedles;
+    final columnsToDraw = activeStructuralColumns;
+    final archCornersToDraw = activeArchitecturalCorners;
+    final needlesToDraw = activeDimensionNeedles;
 
     final double ppm = pixelsPerMeter > 5.0 ? pixelsPerMeter : 44.77;
     final double wallThickPx = (wallThicknessMm / 1000.0) * ppm;
