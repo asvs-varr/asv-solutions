@@ -20,6 +20,7 @@ import '../../data/project_repository.dart';
 import '../theme/banaag_theme.dart';
 import '../widgets/dxf_export_guide_dialog.dart';
 import '../widgets/room_dimension_input_dialog.dart';
+import '../widgets/multi_room_sketch_builder_modal.dart';
 import '../widgets/lighting_visualizer_modal.dart';
 import '../../domain/blueprint_snap_engine.dart';
 import 'client_needs_analysis_screen.dart';
@@ -3561,6 +3562,61 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                                 child: const Text(
                                   '✏️ Specify Actual',
                                   style: TextStyle(color: Colors.white, fontSize: 10.5, fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            GestureDetector(
+                              onTap: () {
+                                final double refMeters = (_pinA - _pinB).distance / _pixelsPerMeter;
+                                MultiRoomSketchBuilderModal.show(
+                                  context,
+                                  referenceWidthMeters: refMeters,
+                                  pinA: _pinA,
+                                  pinB: _pinB,
+                                  pixelsPerMeter: _pixelsPerMeter,
+                                  onApply: (newSpaces, newPolygons) {
+                                    setState(() {
+                                      if (widget.project != null) {
+                                        widget.project!.spaces.clear();
+                                        widget.project!.spaces.addAll(newSpaces);
+                                      }
+                                      _roomPolygons.clear();
+                                      _roomBoxes.clear();
+                                      newPolygons.forEach((k, v) {
+                                        _roomPolygons[k] = v;
+                                        _roomBoxes[k] = _boundingBoxOfPolygon(v);
+                                      });
+                                      _stage1SubStep = 2; // Jump to Completeness Gate overview!
+                                      _selectedRoomIndex = 0;
+                                      _syncRoomSpacesFromBoxes(persist: true);
+                                    });
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text('⚡ Auto-reconstructed ${newSpaces.length} clean CAD rooms from sketch dimensions!'),
+                                        backgroundColor: BanaagTheme.successGreen,
+                                      ),
+                                    );
+                                  },
+                                );
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: BanaagTheme.primaryAmber.withValues(alpha: 0.22),
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(color: BanaagTheme.primaryAmber),
+                                ),
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.auto_fix_high, size: 12, color: BanaagTheme.primaryAmber),
+                                    SizedBox(width: 4),
+                                    Text(
+                                      '⚡ Redraw from Sketch',
+                                      style: TextStyle(color: BanaagTheme.primaryAmber, fontSize: 10.5, fontWeight: FontWeight.bold),
+                                    ),
+                                  ],
                                 ),
                               ),
                             ),
