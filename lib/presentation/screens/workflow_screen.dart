@@ -468,14 +468,24 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
-                  color: Colors.cyanAccent.withValues(alpha: 0.2),
+                  color: (item.isCompleted && _project.spaces.isNotEmpty)
+                      ? BanaagTheme.successGreen.withValues(alpha: 0.2)
+                      : Colors.cyanAccent.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(4),
                 ),
                 child: Text(
-                  _project.blueprintImagePath != null && _project.blueprintImagePath!.isNotEmpty
-                      ? 'CALIBRATE ROOMS ➔'
-                      : 'UPLOAD PLAN ➔',
-                  style: const TextStyle(color: Colors.cyanAccent, fontSize: 10, fontWeight: FontWeight.bold),
+                  (item.isCompleted && _project.spaces.isNotEmpty)
+                      ? 'CALIBRATED (${_project.spaces.length} ROOMS) • VIEW / EDIT ➔'
+                      : (_project.blueprintImagePath != null && _project.blueprintImagePath!.isNotEmpty
+                          ? 'CALIBRATE ROOMS ➔'
+                          : 'UPLOAD PLAN ➔'),
+                  style: TextStyle(
+                    color: (item.isCompleted && _project.spaces.isNotEmpty)
+                        ? BanaagTheme.successGreen
+                        : Colors.cyanAccent,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
             ),
@@ -1053,7 +1063,13 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
   }
 
   Future<void> _launchFloorPlanModal(String path) async {
+    final bool isDifferentFile = _project.blueprintImagePath != null &&
+        _project.blueprintImagePath!.isNotEmpty &&
+        _project.blueprintImagePath != path;
     setState(() {
+      if (isDifferentFile) {
+        _project.spaces.clear();
+      }
       _project.blueprintImagePath = path;
       ProjectRepository.instance.updateProject(_project);
     });

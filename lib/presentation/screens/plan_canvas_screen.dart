@@ -75,6 +75,7 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
   // 2 = End of Step 1: All Rooms Confirmed & Floor Plan Completeness Gate ("Are all spaces accounted for?")
   // 3 = Single-Room Re-Edit Mode (invoked from "📐 Edit Room Dimension" button, 1 room at a time)
   int _stage1SubStep = 0;
+  bool _enteredStep3FromStage3 = false;
   double _wallThicknessMm = 150.0; // Default 150 mm CHB Wall Thickness
   bool _highlightUnaccountedZones = false;
   final Map<String, Rect> _roomBoxes = {};
@@ -302,6 +303,48 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
       !_isCommercialCadPlan &&
       !_isResidentialPlan &&
       !PdfBlueprintEngine.isPdf(_blueprintPath);
+
+  /// True when the project already has user-calibrated / recreated rooms saved in persistence
+  bool get _hasSavedCalibratedRooms {
+    final proj = widget.project;
+    if (proj == null || proj.spaces.isEmpty) return false;
+    const legacyTemplateIds = {
+      'sp-func',
+      'sp-staff',
+      'sp-off',
+      'sp-land',
+      'sp-stor',
+      'sp-1',
+      'sp-2',
+      'sp-3',
+      'sp-4',
+      'sp-5',
+    };
+    if (_isCustomUploadedSketch) {
+      return proj.spaces.any((s) =>
+          s.id.startsWith('sp-sketch-') ||
+          (s.polygonVertices != null &&
+              s.polygonVertices!.length >= 3 &&
+              !legacyTemplateIds.contains(s.id)));
+    }
+    return proj.spaces.any((s) =>
+        (s.polygonVertices != null && s.polygonVertices!.length >= 3 && !legacyTemplateIds.contains(s.id)) ||
+        (s.canvasX != null && s.canvasWidth != null && !legacyTemplateIds.contains(s.id)));
+  }
+
+  void _markC0CalibrationCompleted() {
+    final proj = widget.project;
+    if (proj == null || proj.phases.isEmpty) return;
+    final p1 = proj.phases.firstWhere(
+      (p) => p.type == ProjectPhaseType.consultation,
+      orElse: () => proj.phases.first,
+    );
+    for (final c in p1.checklist) {
+      if (c.id == 'c0') {
+        c.isCompleted = true;
+      }
+    }
+  }
 
   /// Dynamically active structural columns for snapping and rendering
   List<Offset> get _activeStructuralColumns {
@@ -1028,18 +1071,21 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
 
     // CUSTOM UPLOADED SKETCH PHOTO: Never inject TESDA/Residential template rooms or ghost dots!
     if (_isCustomUploadedSketch) {
-      final bool hasVerifiedSketchRooms = proj.spaces.isNotEmpty &&
-          proj.spaces.every((s) => s.id.startsWith('sp-sketch-'));
+      final bool hasVerifiedSketchRooms = _hasSavedCalibratedRooms;
       _initDefaultSketchModelSync();
-      _runSketchRecreatorAnalysis(_blueprintPath!);
 
       if (!hasVerifiedSketchRooms) {
+        _runSketchRecreatorAnalysis(_blueprintPath!, preserveConfirmedWalls: false);
         proj.spaces.clear();
         _roomPolygons.clear();
         _roomBoxes.clear();
         _customProjectColumns.clear();
         _dynamicVisionCorners.clear();
         return;
+      } else {
+        // Keep existing calibrated rooms intact and reconstruct confirmed W1-W2 values from saved spaces!
+        _restoreSketchModelFromSavedSpaces();
+        _runSketchRecreatorAnalysis(_blueprintPath!, preserveConfirmedWalls: true);
       }
     }
 
@@ -1154,7 +1200,70 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
     );
   }
 
-  Future<void> _runSketchRecreatorAnalysis(String path) async {
+  void _restoreSketchModelFromSavedSpaces() {
+    final proj = widget.project;
+    final model = _sketchModel;
+    if (proj == null || proj.spaces.isEmpty || model == null) return;
+
+    final double ppm = _pixelsPerMeter > 5.0 ? _pixelsPerMeter : 44.77;
+    double minX = double.infinity;
+    double maxX = -double.infinity;
+    double minY = double.infinity;
+    double maxY = -double.infinity;
+
+    for (final sp in proj.spaces) {
+      final verts = sp.polygonVertices;
+      if (verts == null) continue;
+      for (final v in verts) {
+        final vx = v['x'] ?? 0.0;
+        final vy = v['y'] ?? 0.0;
+        if (vx < minX) minX = vx;
+        if (vx > maxX) maxX = vx;
+        if (vy < minY) minY = vy;
+        if (vy > maxY) maxY = vy;
+      }
+    }
+
+    if (minX < maxX && minY < maxY) {
+      final double wTop = double.parse(((maxX - minX) / ppm).clamp(1.5, 50.0).toStringAsFixed(2));
+      final double hRight = double.parse(((maxY - minY) / ppm).clamp(1.5, 50.0).toStringAsFixed(2));
+      final firstSp = proj.spaces.first;
+      double hStep = firstSp.cutoutDepth > 0.2 ? firstSp.cutoutDepth : 1.0;
+      double wStep = firstSp.cutoutWidth > 0.2 ? firstSp.cutoutWidth : 1.0;
+      double wBotRight = 1.0;
+
+      final v0 = firstSp.polygonVertices;
+      if (v0 != null && v0.length >= 6) {
+        final p1y = v0[1]['y'] ?? minY;
+        final p2y = v0[2]['y'] ?? minY;
+        final p2x = v0[2]['x'] ?? minX;
+        final p3x = v0[3]['x'] ?? minX;
+        final p4x = v0[4]['x'] ?? minX;
+        final p5x = v0[5]['x'] ?? minX;
+        final calcHStep = (p2y - p1y).abs() / ppm;
+        final calcWStep = (p3x - p2x).abs() / ppm;
+        final calcWBotLeft = (p4x - p5x).abs() / ppm;
+        if (calcHStep >= 0.3) hStep = double.parse(calcHStep.toStringAsFixed(2));
+        if (calcWStep >= 0.3) wStep = double.parse(calcWStep.toStringAsFixed(2));
+        if (calcWBotLeft >= 0.3 && calcWBotLeft < wTop) {
+          wBotRight = double.parse((wTop - calcWBotLeft).clamp(0.4, wTop - 0.3).toStringAsFixed(2));
+        }
+      }
+
+      for (final wp in model.wallPrompts) {
+        if (wp.id == 'w_top') wp.meters = wTop;
+        if (wp.id == 'h_right') wp.meters = hRight;
+        if (wp.id == 'h_step') wp.meters = hStep;
+        if (wp.id == 'w_step') wp.meters = wStep;
+        if (wp.id == 'w_bottom_right') wp.meters = wBotRight;
+        wp.isConfirmed = true;
+      }
+      model.topologyMode = proj.spaces.length == 1 ? 2 : (proj.spaces.length >= 3 ? 1 : 0);
+      model.syncRatiosFromMeters();
+    }
+  }
+
+  Future<void> _runSketchRecreatorAnalysis(String path, {bool preserveConfirmedWalls = false}) async {
     try {
       final analyzed = await SketchShapeRecreator.analyzeSketchPhoto(
         path,
@@ -1163,9 +1272,20 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
       );
       if (mounted) {
         setState(() {
-          _sketchModel = analyzed;
-          _activeWallPromptIndex = 0;
-          _showCadGrid = false;
+          if (preserveConfirmedWalls && _sketchModel != null) {
+            // Keep the user's confirmed wall meters & topologyMode while adopting the photo's detected outerBoxCanvas
+            analyzed.topologyMode = _sketchModel!.topologyMode;
+            for (int i = 0; i < analyzed.wallPrompts.length && i < _sketchModel!.wallPrompts.length; i++) {
+              analyzed.wallPrompts[i].meters = _sketchModel!.wallPrompts[i].meters;
+              analyzed.wallPrompts[i].isConfirmed = true;
+            }
+            analyzed.syncRatiosFromMeters();
+            _sketchModel = analyzed;
+          } else {
+            _sketchModel = analyzed;
+            _activeWallPromptIndex = 0;
+            _showCadGrid = false;
+          }
           _isOrthoSnapEnabled = true;
         });
       }
@@ -1234,6 +1354,7 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
       _canvasStage = 1;
       _stage1SubStep = 2; // Jump to Clean CAD Completeness Gate Overview!
       _selectedRoomIndex = 0;
+      _markC0CalibrationCompleted();
       _syncRoomSpacesFromBoxes(persist: true);
       _fitSheetToViewport();
     });
@@ -1603,19 +1724,10 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
     _roomGeometry = widget.project?.roomGeometry;
     _blueprintPath = widget.project?.blueprintImagePath;
     _invertBlueprint = widget.project?.invertBlueprint ?? false;
-    final bool hadConfirmedRooms = widget.project != null &&
-        widget.project!.spaces.isNotEmpty &&
-        widget.project!.spaces.every((s) =>
-            s.id.startsWith('sp-sketch-') ||
-            (!_isCustomUploadedSketch &&
-                s.canvasX != null &&
-                s.canvasWidth != null &&
-                !s.id.startsWith('sp-func') &&
-                s.id != 'sp-1'));
-
     _initRoomBoxesAndScale();
     _autoPositionScalePinsToNeedles();
     _fitSheetToViewport();
+    final bool hadConfirmedRooms = _hasSavedCalibratedRooms;
 
     // Determine starting stage:
     // If initialStage is explicitly passed, use it; otherwise if rooms haven't been confirmed on the blank plan yet, start at Stage 1!
@@ -1627,9 +1739,22 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
       _canvasStage = 3;
     }
     if (_canvasStage == 1) {
-      _stage1SubStep = 0;
+      if (hadConfirmedRooms) {
+        // User already calibrated rooms! Open directly to Saved Clean CAD Floor Plan Overview (SubStep 2)
+        _stage1SubStep = 2;
+        if (_isCustomUploadedSketch) {
+          _isUnderlayVisible = false;
+          _showCadGrid = true;
+        }
+      } else {
+        _stage1SubStep = 0;
+      }
       _selectedRoomIndex = 0;
       _selectedTool = 'SELECT';
+    } else if (_isCustomUploadedSketch && hadConfirmedRooms) {
+      // In Stage 3 on a calibrated sketch, show the Clean Proportional CAD Floor Plan by default
+      _isUnderlayVisible = false;
+      _showCadGrid = true;
     }
 
     bool loadsCleaned = false;
@@ -3094,6 +3219,7 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
       _routes.removeWhere((r) => !remainingIds.contains(r.fromPointId) || !remainingIds.contains(r.toPointId));
 
       setState(() {
+        _enteredStep3FromStage3 = (_canvasStage == 3);
         _canvasStage = 1;
         _stage1SubStep = 3; // Direct Single-Room Re-Edit Mode!
         _selectedRoomIndex = tappedRoomIdx;
@@ -3304,7 +3430,18 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
   Widget build(BuildContext context) {
     final takeoff = TakeoffEngine.calculate(points: _points, routes: _routes);
 
-    return Scaffold(
+    return PopScope(
+      onPopInvokedWithResult: (didPop, _) {
+        if (widget.project != null) {
+          if (_hasSavedCalibratedRooms || widget.project!.spaces.isNotEmpty) {
+            _syncRoomSpacesFromBoxes(persist: false);
+          }
+          widget.project!.canvasPoints = _points;
+          widget.project!.conduitRoutes = _routes;
+          ProjectRepository.instance.updateProject(widget.project!);
+        }
+      },
+      child: Scaffold(
       appBar: AppBar(
         titleSpacing: 0,
         title: Row(
@@ -3709,6 +3846,13 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                       }
                       setState(() {
                         _canvasStage = 1;
+                        if (_hasSavedCalibratedRooms) {
+                          _stage1SubStep = 2;
+                          if (_isCustomUploadedSketch) {
+                            _isUnderlayVisible = false;
+                            _showCadGrid = true;
+                          }
+                        }
                         _selectedTool = 'SELECT';
                       });
                     },
@@ -4726,12 +4870,29 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                               ),
                             ),
                           ),
-                          const SizedBox(width: 12),
+                          const SizedBox(width: 8),
                           GestureDetector(
-                            onTap: () => setState(() => _stage1SubStep = 0),
-                            child: const Text(
-                              '📏 Scale',
-                              style: TextStyle(color: Colors.white70, fontSize: 10.5, decoration: TextDecoration.underline),
+                            onTap: () {
+                              setState(() {
+                                _stage1SubStep = 0;
+                                if (_isCustomUploadedSketch) {
+                                  _activeWallPromptIndex = 0;
+                                  _isUnderlayVisible = true;
+                                  _showCadGrid = false;
+                                }
+                              });
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: BanaagTheme.primaryAmber.withValues(alpha: 0.16),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(color: BanaagTheme.primaryAmber),
+                              ),
+                              child: Text(
+                                _isCustomUploadedSketch ? '🔄 Edit Walls (W1–W2)' : '📏 Scale',
+                                style: const TextStyle(color: BanaagTheme.primaryAmber, fontSize: 10.5, fontWeight: FontWeight.bold),
+                              ),
                             ),
                           ),
                         ],
@@ -5534,21 +5695,32 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                                 if (activeIdx + 1 < totalRooms) {
                                   _selectedRoomIndex = activeIdx + 1;
                                 } else {
+                                  _markC0CalibrationCompleted();
+                                  _syncRoomSpacesFromBoxes(persist: true);
                                   _stage1SubStep = 2;
                                 }
                               });
                             } else if (_stage1SubStep == 3) {
                               setState(() {
+                                _markC0CalibrationCompleted();
                                 _syncRoomSpacesFromBoxes(persist: true);
-                                // Directly return to Stage 3 Wire Takeoff & Layout so the user can immediately place appliances!
-                                _canvasStage = 3;
+                                if (_enteredStep3FromStage3) {
+                                  _canvasStage = 3;
+                                } else {
+                                  _canvasStage = 1;
+                                  _stage1SubStep = 2;
+                                }
                                 _selectedTool = 'SELECT';
                               });
                               ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('💾 Room boundaries saved! Returning to Wire Takeoff & Placement.'),
+                                SnackBar(
+                                  content: Text(
+                                    _enteredStep3FromStage3
+                                        ? '💾 Room boundaries saved! Returning to Wire Takeoff & Placement.'
+                                        : '💾 Room dimensions saved to Clean CAD Floor Plan!',
+                                  ),
                                   backgroundColor: BanaagTheme.successGreen,
-                                  duration: Duration(seconds: 2),
+                                  duration: const Duration(seconds: 2),
                                 ),
                               );
                             } else {
@@ -5565,6 +5737,7 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
           else
             _buildRoomLoadPlacementTray(),
         ],
+      ),
       ),
     );
   }
@@ -6075,6 +6248,7 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                   onTap: () {
                     Navigator.pop(ctx);
                     setState(() {
+                      _enteredStep3FromStage3 = false;
                       _selectedRoomIndex = i;
                       _stage1SubStep = 3; // Single-Room Re-Edit Mode!
                       _selectedTool = 'SELECT';
@@ -6171,11 +6345,12 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
       Offset(rightWall, bottomWall),
       Offset(leftWall, bottomWall),
     ];
-    final String newId = 'sp-${DateTime.now().millisecondsSinceEpoch}';
+    final String newId = 'sp-sketch-add-${DateTime.now().millisecondsSinceEpoch}';
     final int newRoomNum = widget.project!.spaces.length + 1;
     final metrics = _computePolygonEngineeringMetrics(detectedPoly, 2.8);
 
     setState(() {
+      _enteredStep3FromStage3 = false;
       _highlightUnaccountedZones = false;
       _roomPolygons[newId] = detectedPoly;
       _roomBoxes[newId] = _boundingBoxOfPolygon(detectedPoly);
@@ -6192,6 +6367,7 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
       );
       _selectedRoomIndex = widget.project!.spaces.length - 1;
       _stage1SubStep = 3; // Open directly in 1-by-1 room verification mode!
+      _markC0CalibrationCompleted();
       _syncRoomSpacesFromBoxes(persist: true);
     });
   }
@@ -7530,6 +7706,7 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
             _roomPolygons.clear();
             _roomBoxes.clear();
             widget.project?.spaces.clear();
+            _sketchModel = null;
             _initDefaultSketchModelSync();
           }
           _fitSheetToViewport();
