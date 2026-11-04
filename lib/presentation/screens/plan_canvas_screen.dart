@@ -20,6 +20,7 @@ import '../../data/project_repository.dart';
 import '../theme/banaag_theme.dart';
 import '../widgets/dxf_export_guide_dialog.dart';
 import '../widgets/room_dimension_input_dialog.dart';
+import '../../domain/sketch_shape_recreator.dart';
 import '../widgets/multi_room_sketch_builder_modal.dart';
 import '../widgets/lighting_visualizer_modal.dart';
 import '../../domain/blueprint_snap_engine.dart';
@@ -47,7 +48,11 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
   bool _isHeatmapVisible = false;
   String _selectedTool = 'SELECT';
   bool _isUnderlayVisible = true;
-  final double _underlayOpacity = 0.78;
+  final double _underlayOpacity = 0.96;
+  bool _showCadGrid = false;
+  RecreatedSketchModel? _sketchModel;
+  int _activeWallPromptIndex = 0;
+  int? _activeDraggingSketchHandle;
   String? _blueprintPath;
   int _pdfSheetIndex = 0;
   List<PdfBlueprintPageInfo> _pdfPages = [];
@@ -291,6 +296,13 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
     return path.contains('1000010166') || path.contains('sample_residence');
   }
 
+  /// True when the user uploaded a custom photo/sketch image (not a bundled CAD/PDF demo)
+  bool get _isCustomUploadedSketch =>
+      _hasBlueprintFile &&
+      !_isCommercialCadPlan &&
+      !_isResidentialPlan &&
+      !PdfBlueprintEngine.isPdf(_blueprintPath);
+
   /// Dynamically active structural columns for snapping and rendering
   List<Offset> get _activeStructuralColumns {
     if (!_isAiAutoWallDetectEnabled) return const [];
@@ -317,7 +329,10 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
     } else if (_isResidentialPlan) {
       rawCorners.addAll(BlueprintSnapEngine.residentialWallCorners);
     } else {
-      // Custom Upload / Sketch Blueprint: Snap to active room polygons AND detected dynamic visual corners!
+      // Custom Upload / Sketch Blueprint: In Step 0 Sketch Recreation, use only clean Ortho Handles (zero random ghost dots!)
+      if (_stage1SubStep == 0 && _sketchModel != null) {
+        return const [];
+      }
       _roomPolygons.forEach((_, poly) {
         rawCorners.addAll(poly);
       });
@@ -1008,13 +1023,33 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
     }
 
     final bool hasBlueprint = _blueprintPath != null && File(_blueprintPath!).existsSync();
+    _showCadGrid = !hasBlueprint;
+    _isOrthoSnapEnabled = true;
+
+    // CUSTOM UPLOADED SKETCH PHOTO: Never inject TESDA/Residential template rooms or ghost dots!
+    if (_isCustomUploadedSketch) {
+      final bool hasVerifiedSketchRooms = proj.spaces.isNotEmpty &&
+          proj.spaces.every((s) => s.id.startsWith('sp-sketch-'));
+      _initDefaultSketchModelSync();
+      _runSketchRecreatorAnalysis(_blueprintPath!);
+
+      if (!hasVerifiedSketchRooms) {
+        proj.spaces.clear();
+        _roomPolygons.clear();
+        _roomBoxes.clear();
+        _customProjectColumns.clear();
+        _dynamicVisionCorners.clear();
+        return;
+      }
+    }
+
     final bool hasCustomizedSpaces = proj.spaces.isNotEmpty &&
         proj.spaces.any((s) => s.polygonVertices != null && s.polygonVertices!.length >= 3);
     final bool isLegacyResidentialDefault = proj.spaces.isNotEmpty &&
         !hasCustomizedSpaces &&
         proj.spaces.any((s) => s.id == 'sp-1' || s.name.toLowerCase().contains('living & dining'));
 
-    if (!hasCustomizedSpaces && (proj.spaces.isEmpty || (hasBlueprint && isLegacyResidentialDefault))) {
+    if (!_isCustomUploadedSketch && !hasCustomizedSpaces && (proj.spaces.isEmpty || (hasBlueprint && isLegacyResidentialDefault))) {
       proj.spaces.clear();
       proj.spaces.addAll([
         RoomSpace(id: 'sp-func', name: 'Function Hall / Event Place', areaSqm: 64.5, ceilingHeight: 3.5),
@@ -1072,7 +1107,265 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
 
   /// Silently scans the uploaded blueprint using ML Kit / CAD text stream in the background
   /// to dynamically detect and populate rooms directly from the blueprint!
+  void _initDefaultSketchModelSync() {
+    _sketchModel ??= RecreatedSketchModel(
+      outerBoxCanvas: const Rect.fromLTRB(330.0, 740.0, 960.0, 1340.0),
+      topStepXRatio: 0.48,
+      stepYRatio: 0.22,
+      lowerSplitXRatio: 0.74,
+      topologyMode: 0,
+      wallPrompts: [
+        SketchWallPrompt(
+          id: 'w_top',
+          shortCode: 'W1',
+          label: 'Top Total Width',
+          tagalogQuestion: 'Ano ang kabuuang lapad sa itaas (Top Width)?',
+          meters: 4.0,
+        ),
+        SketchWallPrompt(
+          id: 'h_right',
+          shortCode: 'L1',
+          label: 'Right Total Length',
+          tagalogQuestion: 'Ano ang kabuuang haba sa kanan (Right Length)?',
+          meters: 5.0,
+        ),
+        SketchWallPrompt(
+          id: 'h_step',
+          shortCode: 'S1',
+          label: 'Inner Vertical Step',
+          tagalogQuestion: 'Ano ang patayong sukat ng inner step/cutout sa itaas?',
+          meters: 1.0,
+        ),
+        SketchWallPrompt(
+          id: 'w_step',
+          shortCode: 'S2',
+          label: 'Inner Horizontal Step',
+          tagalogQuestion: 'Ano ang pahalang na sukat ng inner step/cutout?',
+          meters: 1.0,
+        ),
+        SketchWallPrompt(
+          id: 'w_bottom_right',
+          shortCode: 'W2',
+          label: 'Bottom-Right Bay Width',
+          tagalogQuestion: 'Ano ang lapad ng kanang bahagi sa ibaba (Bottom-Right)?',
+          meters: 1.0,
+        ),
+      ],
+    );
+  }
+
+  Future<void> _runSketchRecreatorAnalysis(String path) async {
+    try {
+      final analyzed = await SketchShapeRecreator.analyzeSketchPhoto(
+        path,
+        canvasWidth: _cadCanvasWidth,
+        canvasHeight: _cadCanvasHeight,
+      );
+      if (mounted) {
+        setState(() {
+          _sketchModel = analyzed;
+          _activeWallPromptIndex = 0;
+          _showCadGrid = false;
+          _isOrthoSnapEnabled = true;
+        });
+      }
+    } catch (_) {}
+  }
+
+  void _confirmCurrentSketchWallAndAdvance({double? overrideMeters}) {
+    final model = _sketchModel;
+    if (model == null || model.wallPrompts.isEmpty) return;
+
+    final int idx = _activeWallPromptIndex.clamp(0, model.wallPrompts.length - 1);
+    final wp = model.wallPrompts[idx];
+    setState(() {
+      if (overrideMeters != null && overrideMeters > 0.1) {
+        wp.meters = overrideMeters;
+      }
+      wp.isConfirmed = true;
+      model.syncRatiosFromMeters();
+    });
+    HapticFeedback.selectionClick();
+
+    // Find next unconfirmed wall or advance sequentially
+    if (idx + 1 < model.wallPrompts.length) {
+      setState(() {
+        _activeWallPromptIndex = idx + 1;
+      });
+    } else {
+      // All 5 walls verified -> Automatically generate 100% Clean Proportional CAD Floor Plan!
+      _finalizeSketchToCleanCadPlan();
+    }
+  }
+
+  void _finalizeSketchToCleanCadPlan() {
+    final model = _sketchModel;
+    if (model == null) return;
+
+    final res = model.generateCleanProportionalCadPlan(
+      canvasWidth: _cadCanvasWidth,
+      canvasHeight: _cadCanvasHeight,
+    );
+
+    setState(() {
+      _pixelsPerMeter = res.calibratedPixelsPerMeter;
+      _pinA = res.pinA;
+      _pinB = res.pinB;
+      if (widget.project != null) {
+        widget.project!.calibrationPixelsPerMeter = _pixelsPerMeter;
+        widget.project!.spaces
+          ..clear()
+          ..addAll(res.spaces);
+      }
+      _roomPolygons
+        ..clear()
+        ..addAll(res.polygons);
+      _roomBoxes.clear();
+      res.polygons.forEach((k, poly) {
+        _roomBoxes[k] = _boundingBoxOfPolygon(poly);
+      });
+      _customProjectColumns.clear();
+      _dynamicVisionCorners.clear();
+
+      // Hide raw camera photo so the screen transforms into a 100% Clean Proportional CAD Blueprint!
+      // (User can still peek at the photo anytime via the 👁️ toggle button)
+      _isUnderlayVisible = false;
+      _showCadGrid = true;
+      _canvasStage = 1;
+      _stage1SubStep = 2; // Jump to Clean CAD Completeness Gate Overview!
+      _selectedRoomIndex = 0;
+      _syncRoomSpacesFromBoxes(persist: true);
+      _fitSheetToViewport();
+    });
+
+    HapticFeedback.heavyImpact();
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          '⚡ Recreated ${res.spaces.length} proportional CAD spaces (${model.totalTopWidthM.toStringAsFixed(1)}m × ${model.totalRightHeightM.toStringAsFixed(1)}m)! Tap 👁️ anytime to peek at photo.',
+        ),
+        backgroundColor: BanaagTheme.successGreen,
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+
+  void _showEditSketchWallDialog(int wallIndex) {
+    final model = _sketchModel;
+    if (model == null || wallIndex < 0 || wallIndex >= model.wallPrompts.length) return;
+    final wp = model.wallPrompts[wallIndex];
+    final ctrl = TextEditingController(text: wp.meters.toStringAsFixed(2));
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF181D27),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: const BorderSide(color: BanaagTheme.primaryAmber),
+        ),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: BanaagTheme.primaryAmber,
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(
+                wp.shortCode,
+                style: const TextStyle(color: Colors.black, fontWeight: FontWeight.w900, fontSize: 13),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                wp.label,
+                style: const TextStyle(color: Colors.white, fontSize: 14.5, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              wp.tagalogQuestion,
+              style: const TextStyle(color: Colors.white70, fontSize: 12.5),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: ctrl,
+              autofocus: true,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              style: const TextStyle(color: BanaagTheme.primaryAmber, fontSize: 18, fontWeight: FontWeight.bold),
+              decoration: InputDecoration(
+                labelText: 'Sukat sa Meters (m)',
+                labelStyle: const TextStyle(color: Colors.white60),
+                suffixText: 'meters (m)',
+                suffixStyle: const TextStyle(color: Colors.white70),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: Colors.white24),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: BanaagTheme.primaryAmber, width: 2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: model.ocrCandidateMeters.map((mVal) {
+                return ActionChip(
+                  backgroundColor: Colors.white.withValues(alpha: 0.1),
+                  side: const BorderSide(color: Colors.cyanAccent),
+                  label: Text(
+                    '${mVal.toStringAsFixed(1)}m',
+                    style: const TextStyle(color: Colors.cyanAccent, fontSize: 11.5, fontWeight: FontWeight.bold),
+                  ),
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    setState(() => _activeWallPromptIndex = wallIndex);
+                    _confirmCurrentSketchWallAndAdvance(overrideMeters: mVal);
+                  },
+                );
+              }).toList(),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+          ),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: BanaagTheme.primaryAmber,
+              foregroundColor: Colors.black,
+            ),
+            icon: const Icon(Icons.check_circle, size: 16),
+            label: const Text('Save & Next Wall', style: TextStyle(fontWeight: FontWeight.bold)),
+            onPressed: () {
+              final v = double.tryParse(ctrl.text.trim().replaceAll(',', '.'));
+              Navigator.pop(ctx);
+              if (v != null && v > 0.1) {
+                setState(() => _activeWallPromptIndex = wallIndex);
+                _confirmCurrentSketchWallAndAdvance(overrideMeters: v);
+              }
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _triggerSilentBlueprintOcrScanIfNeeded({bool forceRescan = false}) async {
+    if (_isCustomUploadedSketch) return;
     final proj = widget.project;
     final path = _blueprintPath;
     if (proj == null || path == null || !File(path).existsSync()) return;
@@ -1312,7 +1605,13 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
     _invertBlueprint = widget.project?.invertBlueprint ?? false;
     final bool hadConfirmedRooms = widget.project != null &&
         widget.project!.spaces.isNotEmpty &&
-        widget.project!.spaces.every((s) => s.canvasX != null && s.canvasWidth != null);
+        widget.project!.spaces.every((s) =>
+            s.id.startsWith('sp-sketch-') ||
+            (!_isCustomUploadedSketch &&
+                s.canvasX != null &&
+                s.canvasWidth != null &&
+                !s.id.startsWith('sp-func') &&
+                s.id != 'sp-1'));
 
     _initRoomBoxesAndScale();
     _autoPositionScalePinsToNeedles();
@@ -1874,6 +2173,13 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
     // 1. Calibration Pins A & B or Midpoint Badge
     if (_canvasStage == 1 || _selectedTool == 'CALIBRATE') {
       if (_stage1SubStep == 0 || _selectedTool == 'CALIBRATE') {
+        if (_isCustomUploadedSketch && _sketchModel != null && _stage1SubStep == 0) {
+          final handles = _sketchModel!.getDraggableHandles();
+          for (final h in handles) {
+            if ((h - tapPos).distance <= 34.0) return true;
+          }
+          return false;
+        }
         if ((_pinA - tapPos).distance <= 36.0 || (_pinB - tapPos).distance <= 36.0) {
           return true;
         }
@@ -1942,6 +2248,17 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
     // STAGE 1: Step 0 (Scale Pin A/B) vs Step 1 / 3 (1-by-1 Polygon Vertex ● & Midpoint + Handles)
     if (_canvasStage == 1 || _selectedTool == 'CALIBRATE') {
       if (_stage1SubStep == 0 || _selectedTool == 'CALIBRATE') {
+        if (_isCustomUploadedSketch && _sketchModel != null && _stage1SubStep == 0) {
+          final handles = _sketchModel!.getDraggableHandles();
+          for (int h = 0; h < handles.length; h++) {
+            if ((handles[h] - tapPos).distance <= 34.0) {
+              setState(() => _activeDraggingSketchHandle = h);
+              HapticFeedback.selectionClick();
+              return;
+            }
+          }
+          return;
+        }
         if ((_pinA - tapPos).distance <= 32.0) {
           setState(() => _activeDraggingPin = 1);
           return;
@@ -2072,6 +2389,21 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
     final newPos = details.localPosition;
     if (_dragStartOffset != null && (newPos - _dragStartOffset!).distance > 5.0) {
       _hasMovedSignificantly = true;
+    }
+
+    // 0. Dragging Recreated Sketch 90-Degree Ortho Handle (Step 0 Custom Sketch)
+    if (_canvasStage == 1 && _stage1SubStep == 0 && _activeDraggingSketchHandle != null && _sketchModel != null) {
+      Offset targetPos = newPos;
+      for (final col in _customProjectColumns) {
+        if ((col - newPos).distance <= 22.0) {
+          targetPos = col;
+          break;
+        }
+      }
+      setState(() {
+        _sketchModel!.moveHandleOrtho(_activeDraggingSketchHandle!, targetPos);
+      });
+      return;
     }
 
     // 1. Dragging Reference Scale Pin A or Pin B (Step 0)
@@ -2225,6 +2557,7 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
     if (_canvasStage == 1 || _selectedTool == 'CALIBRATE') {
       final hadPinDrag = _activeDraggingPin != null && _hasMovedSignificantly;
       setState(() {
+        _activeDraggingSketchHandle = null;
         _activeDraggingPin = null;
         _activeDraggingVertexIndex = null;
         _activeDraggingWallIndex = null;
@@ -2447,8 +2780,25 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
   void _handleCanvasTap(TapUpDetails details) {
     final tapPos = details.localPosition;
     if (_canvasStage == 1) {
-      // Step 0: Reference Scale Calibration (Pin A & Pin B)
+      // Step 0: Custom Sketch Wall-by-Wall Dimension Prompt OR Reference Scale Calibration
       if (_stage1SubStep == 0) {
+        if (_isCustomUploadedSketch && _sketchModel != null) {
+          final prompts = _sketchModel!.wallPrompts;
+          for (int i = 0; i < prompts.length; i++) {
+            final wp = prompts[i];
+            if ((wp.midPoint - tapPos).distance <= 48.0 ||
+                _distanceToSegment(tapPos, wp.startCanvas, wp.endCanvas) <= 24.0) {
+              HapticFeedback.selectionClick();
+              if (_activeWallPromptIndex == i) {
+                _showEditSketchWallDialog(i);
+              } else {
+                setState(() => _activeWallPromptIndex = i);
+              }
+              return;
+            }
+          }
+          return;
+        }
         // 1. If a pin is already selected, tapping a snap target teleports the pin directly to it!
         if (_selectedPinForTap != null) {
           final targetSnap = _findNearestTargetSnapPoint(tapPos, maxDistance: 45.0);
@@ -3429,8 +3779,269 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                 final double refLengthMm = ((_pinA - _pinB).distance / _pixelsPerMeter * 1000.0);
                 final double refLengthM = refLengthMm / 1000.0;
 
-                // SUB-STEP 0: Solo Scale (Pin A–B) & Wall Thickness Verification Card
+                // SUB-STEP 0: Custom Sketch Interactive Wall-by-Wall Highlighter OR Solo Scale (Pin A–B)
                 if (_stage1SubStep == 0) {
+                  if (_isCustomUploadedSketch && _sketchModel != null) {
+                    final prompts = _sketchModel!.wallPrompts;
+                    final int wIdx = _activeWallPromptIndex.clamp(0, prompts.length - 1);
+                    final activeWp = prompts[wIdx];
+                    final String topoLabel = _sketchModel!.topologyMode == 0
+                        ? '2-Room Split'
+                        : (_sketchModel!.topologyMode == 1 ? '3-Space (+Alcove)' : '1-Room L-Shape');
+
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: BanaagTheme.primaryAmber.withValues(alpha: 0.25),
+                                borderRadius: BorderRadius.circular(4),
+                                border: Border.all(color: BanaagTheme.primaryAmber),
+                              ),
+                              child: Text(
+                                'WALL ${wIdx + 1}/${prompts.length} • ${activeWp.shortCode}',
+                                style: const TextStyle(color: BanaagTheme.primaryAmber, fontSize: 9.5, fontWeight: FontWeight.w900),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                activeWp.tagalogQuestion,
+                                style: const TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.bold),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(
+                            children: [
+                              const Text(
+                                '📏 Tap sukat: ',
+                                style: TextStyle(color: Colors.white70, fontSize: 10.5, fontWeight: FontWeight.bold),
+                              ),
+                              ..._sketchModel!.ocrCandidateMeters.map((mVal) {
+                                final bool isSelected = (activeWp.meters - mVal).abs() < 0.05;
+                                return Padding(
+                                  padding: const EdgeInsets.only(right: 5),
+                                  child: GestureDetector(
+                                    onTap: () => _confirmCurrentSketchWallAndAdvance(overrideMeters: mVal),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
+                                      decoration: BoxDecoration(
+                                        color: isSelected
+                                            ? BanaagTheme.primaryAmber
+                                            : Colors.cyanAccent.withValues(alpha: 0.16),
+                                        borderRadius: BorderRadius.circular(6),
+                                        border: Border.all(
+                                          color: isSelected ? BanaagTheme.primaryAmber : Colors.cyanAccent,
+                                        ),
+                                      ),
+                                      child: Text(
+                                        '${mVal.toStringAsFixed(1)}m',
+                                        style: TextStyle(
+                                          color: isSelected ? Colors.black : Colors.cyanAccent,
+                                          fontSize: 10.5,
+                                          fontWeight: FontWeight.w900,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              }),
+                              GestureDetector(
+                                onTap: () => _showEditSketchWallDialog(wIdx),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withValues(alpha: 0.12),
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(color: Colors.white38),
+                                  ),
+                                  child: const Text(
+                                    '✏️ I-type',
+                                    style: TextStyle(color: Colors.white, fontSize: 10.5, fontWeight: FontWeight.bold),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(
+                            children: [
+                              // 1. FIRST POSITION: 1-Tap Clean CAD Floor Plan Generator
+                              GestureDetector(
+                                onTap: _finalizeSketchToCleanCadPlan,
+                                child: Container(
+                                  margin: const EdgeInsets.only(right: 6),
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: BanaagTheme.successGreen.withValues(alpha: 0.24),
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(color: BanaagTheme.successGreen),
+                                  ),
+                                  child: const Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.auto_fix_high, size: 12, color: Colors.greenAccent),
+                                      SizedBox(width: 4),
+                                      Text(
+                                        '⚡ Generate Clean CAD',
+                                        style: TextStyle(color: Colors.greenAccent, fontSize: 10.5, fontWeight: FontWeight.bold),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              // 2. Grid: OFF/ON Toggle (Default OFF on Photo)
+                              GestureDetector(
+                                onTap: () {
+                                  setState(() => _showCadGrid = !_showCadGrid);
+                                  HapticFeedback.selectionClick();
+                                },
+                                child: Container(
+                                  margin: const EdgeInsets.only(right: 6),
+                                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: _showCadGrid
+                                        ? Colors.cyanAccent.withValues(alpha: 0.22)
+                                        : Colors.white.withValues(alpha: 0.08),
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(
+                                      color: _showCadGrid ? Colors.cyanAccent : Colors.white24,
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        _showCadGrid ? Icons.grid_on : Icons.grid_off,
+                                        size: 12,
+                                        color: _showCadGrid ? Colors.cyanAccent : Colors.white70,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        _showCadGrid ? 'Grid: ON' : 'Grid: OFF',
+                                        style: TextStyle(
+                                          color: _showCadGrid ? Colors.cyanAccent : Colors.white70,
+                                          fontSize: 10.5,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              // 3. Topology Cycle (2-Room Split / 3-Space / 1-Room L-Shape)
+                              GestureDetector(
+                                onTap: () {
+                                  setState(() {
+                                    _sketchModel!.topologyMode = (_sketchModel!.topologyMode + 1) % 3;
+                                  });
+                                  HapticFeedback.selectionClick();
+                                },
+                                child: Container(
+                                  margin: const EdgeInsets.only(right: 6),
+                                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: BanaagTheme.primaryAmber.withValues(alpha: 0.18),
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(color: BanaagTheme.primaryAmber),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(Icons.dashboard_customize, size: 12, color: BanaagTheme.primaryAmber),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        'Shape: $topoLabel',
+                                        style: const TextStyle(color: BanaagTheme.primaryAmber, fontSize: 10.5, fontWeight: FontWeight.bold),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              // 4. Ortho Lock Indicator (Default ON)
+                              Container(
+                                margin: const EdgeInsets.only(right: 6),
+                                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: BanaagTheme.primaryAmber.withValues(alpha: 0.18),
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(color: BanaagTheme.primaryAmber.withValues(alpha: 0.6)),
+                                ),
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.square_foot, size: 12, color: BanaagTheme.primaryAmber),
+                                    SizedBox(width: 4),
+                                    Text(
+                                      'Ortho: ON',
+                                      style: TextStyle(color: BanaagTheme.primaryAmber, fontSize: 10.5, fontWeight: FontWeight.bold),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              // 5. Full Bay Table Modal
+                              GestureDetector(
+                                onTap: () {
+                                  MultiRoomSketchBuilderModal.show(
+                                    context,
+                                    referenceWidthMeters: _sketchModel!.totalTopWidthM,
+                                    pinA: _pinA,
+                                    pinB: _pinB,
+                                    pixelsPerMeter: _pixelsPerMeter,
+                                    blueprintImagePath: _blueprintPath,
+                                    onApply: (newSpaces, newPolygons) {
+                                      setState(() {
+                                        if (widget.project != null) {
+                                          widget.project!.spaces
+                                            ..clear()
+                                            ..addAll(newSpaces);
+                                        }
+                                        _roomPolygons.clear();
+                                        _roomBoxes.clear();
+                                        newPolygons.forEach((k, v) {
+                                          _roomPolygons[k] = v;
+                                          _roomBoxes[k] = _boundingBoxOfPolygon(v);
+                                        });
+                                        _isUnderlayVisible = false;
+                                        _showCadGrid = true;
+                                        _stage1SubStep = 2;
+                                        _selectedRoomIndex = 0;
+                                        _syncRoomSpacesFromBoxes(persist: true);
+                                        _fitSheetToViewport();
+                                      });
+                                    },
+                                  );
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withValues(alpha: 0.10),
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(color: Colors.white30),
+                                  ),
+                                  child: const Text(
+                                    '📋 Bay Table',
+                                    style: TextStyle(color: Colors.white70, fontSize: 10.5, fontWeight: FontWeight.bold),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    );
+                  }
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -4486,6 +5097,10 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                                 showConduits: _showConduits,
                                 activeLayerFilter: _activeLayerFilter,
                                 hasBlueprintUnderlay: _hasBlueprintFile && _isUnderlayVisible,
+                                showCadGrid: _showCadGrid,
+                                sketchModel: _isCustomUploadedSketch ? _sketchModel : null,
+                                activeWallPromptIndex: _activeWallPromptIndex,
+                                activeDraggingSketchHandle: _activeDraggingSketchHandle,
                                 selectedPoint: _selectedPoint,
                                 isCalibrating: (_canvasStage == 1 && _stage1SubStep == 0) || _selectedTool == 'CALIBRATE',
                                 pinA: _pinA,
@@ -4638,6 +5253,21 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                             ),
                             const SizedBox(width: 6),
                             GestureDetector(
+                              onTap: () {
+                                setState(() => _showCadGrid = !_showCadGrid);
+                                HapticFeedback.selectionClick();
+                              },
+                              child: Tooltip(
+                                message: 'Toggle CAD Grid',
+                                child: Icon(
+                                  _showCadGrid ? Icons.grid_on : Icons.grid_off,
+                                  size: 15,
+                                  color: _showCadGrid ? Colors.cyanAccent : Colors.white38,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            GestureDetector(
                               onTap: () => setState(() => _isUnderlayVisible = !_isUnderlayVisible),
                               child: Icon(
                                 _isUnderlayVisible ? Icons.visibility : Icons.visibility_off,
@@ -4749,6 +5379,60 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                 final spaces = widget.project?.spaces ?? [];
                 final int totalRooms = spaces.length;
                 final int activeIdx = totalRooms > 0 ? _selectedRoomIndex.clamp(0, totalRooms - 1) : 0;
+
+                if (_stage1SubStep == 0 && _isCustomUploadedSketch && _sketchModel != null) {
+                  final prompts = _sketchModel!.wallPrompts;
+                  final int wIdx = _activeWallPromptIndex.clamp(0, prompts.length - 1);
+                  final activeWp = prompts[wIdx];
+                  final bool isLastWall = wIdx >= prompts.length - 1;
+
+                  return Row(
+                    children: [
+                      SizedBox(
+                        height: 38,
+                        child: OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: BanaagTheme.primaryAmber,
+                            side: const BorderSide(color: BanaagTheme.primaryAmber),
+                            padding: const EdgeInsets.symmetric(horizontal: 10),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                          icon: const Icon(Icons.edit, size: 14),
+                          label: Text(
+                            '${activeWp.shortCode}: ${activeWp.meters.toStringAsFixed(1)}m',
+                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                          ),
+                          onPressed: () => _showEditSketchWallDialog(wIdx),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: SizedBox(
+                          height: 38,
+                          child: ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: isLastWall ? BanaagTheme.successGreen : BanaagTheme.primaryAmber,
+                              foregroundColor: isLastWall ? Colors.white : Colors.black,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                            icon: Icon(
+                              isLastWall ? Icons.auto_fix_high : Icons.check_circle,
+                              size: 16,
+                            ),
+                            label: Text(
+                              isLastWall
+                                  ? '⚡ Confirm ${activeWp.shortCode} (${activeWp.meters.toStringAsFixed(1)}m) → Generate CAD'
+                                  : '✅ Tama: ${activeWp.shortCode} = ${activeWp.meters.toStringAsFixed(1)}m → Next (${wIdx + 2}/${prompts.length})',
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11.0),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            onPressed: () => _confirmCurrentSketchWallAndAdvance(),
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                }
 
                 return Row(
                   children: [
@@ -6832,13 +7516,22 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
         setState(() {
           _blueprintPath = path;
           _isUnderlayVisible = true;
+          _showCadGrid = false;
+          _isOrthoSnapEnabled = true;
           _pdfSheetIndex = 0;
           _renderedPdfImagePath = null;
-          // Immediately initiate Stage 1 -> Step 0 (Scale Pin A–B & Wall Thickness) upon floor plan import!
           _canvasStage = 1;
           _stage1SubStep = 0;
           _selectedRoomIndex = 0;
           _selectedTool = 'SELECT';
+          _customProjectColumns.clear();
+          _dynamicVisionCorners.clear();
+          if (!PdfBlueprintEngine.isPdf(path)) {
+            _roomPolygons.clear();
+            _roomBoxes.clear();
+            widget.project?.spaces.clear();
+            _initDefaultSketchModelSync();
+          }
           _fitSheetToViewport();
           if (widget.project != null) {
             widget.project!.blueprintImagePath = path;
@@ -6847,8 +7540,10 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
         });
         if (PdfBlueprintEngine.isPdf(path)) {
           _loadPdfBlueprint();
+          _triggerSilentBlueprintOcrScanIfNeeded(forceRescan: true);
+        } else {
+          _runSketchRecreatorAnalysis(path);
         }
-        _triggerSilentBlueprintOcrScanIfNeeded(forceRescan: true);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -6909,6 +7604,10 @@ class CanvasPainter extends CustomPainter {
   final bool showConduits;
   final String activeLayerFilter;
   final bool hasBlueprintUnderlay;
+  final bool showCadGrid;
+  final RecreatedSketchModel? sketchModel;
+  final int activeWallPromptIndex;
+  final int? activeDraggingSketchHandle;
   final CanvasPoint? selectedPoint;
   final bool isCalibrating;
   final Offset pinA;
@@ -6954,6 +7653,10 @@ class CanvasPainter extends CustomPainter {
     this.showConduits = true,
     this.activeLayerFilter = 'ALL',
     this.hasBlueprintUnderlay = false,
+    this.showCadGrid = false,
+    this.sketchModel,
+    this.activeWallPromptIndex = 0,
+    this.activeDraggingSketchHandle,
     this.selectedPoint,
     this.isCalibrating = false,
     this.pinA = const Offset(60, 200),
@@ -6986,16 +7689,18 @@ class CanvasPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    // Draw Subtle CAD Grid Lines
-    final gridPaint = Paint()
-      ..color = const Color(0xFF1E232E)
-      ..strokeWidth = 0.8;
+    // Draw Subtle CAD Grid Lines ONLY when showCadGrid is enabled (default OFF on photos!)
+    if (showCadGrid) {
+      final gridPaint = Paint()
+        ..color = const Color(0xFF1E232E)
+        ..strokeWidth = 0.8;
 
-    for (double x = 0; x < size.width; x += 30) {
-      canvas.drawLine(Offset(x, 0), Offset(x, size.height), gridPaint);
-    }
-    for (double y = 0; y < size.height; y += 30) {
-      canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
+      for (double x = 0; x < size.width; x += 30) {
+        canvas.drawLine(Offset(x, 0), Offset(x, size.height), gridPaint);
+      }
+      for (double y = 0; y < size.height; y += 30) {
+        canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
+      }
     }
 
     // Draw Auto-Recreated CAD Floor Plan Walls only when no real blueprint underlay exists
@@ -7009,11 +7714,14 @@ class CanvasPainter extends CustomPainter {
       _drawCalibrationOverlay(canvas, size);
     }
 
-    // STAGE 1: Step 0 (Solo Scale Pin A–B) -> Step 1/3 (1-by-1 Polygon Room Wizard) -> Step 2 (Completeness Gate)
+    // STAGE 1: Step 0 (Sketch Shape Recreator OR Solo Scale Pin A–B) -> Step 1/3 -> Step 2 (Completeness Gate)
     if (canvasStage == 1) {
-      // STEP 0: Draw ONLY Reference Scale Pin A — Pin B on the Blank Floor Plan (Zero room boxes!)
       if (stage1SubStep == 0) {
-        _drawCalibrationOverlay(canvas, size);
+        if (sketchModel != null) {
+          _drawSketchRecreatorOverlay(canvas, size, sketchModel!);
+        } else {
+          _drawCalibrationOverlay(canvas, size);
+        }
         return;
       }
 
@@ -7058,21 +7766,51 @@ class CanvasPainter extends CustomPainter {
           continue;
         }
 
-        // Case B: Step 2 Completeness Gate Overview -> Clean Confirmed Polygons + Compact Room Summary Badge (No Handles)
+        // Case B: Step 2 Completeness Gate Overview -> Clean Confirmed Polygons + Wall Dimension Labels + Room Summary Badge
         if (isAllConfirmedOverview) {
           canvas.drawPath(
             polyPath,
             Paint()
-              ..color = baseColor.withValues(alpha: 0.14)
+              ..color = baseColor.withValues(alpha: 0.15)
               ..style = PaintingStyle.fill,
           );
+          // Double-line Architectural CAD CHB Wall rendering
           canvas.drawPath(
             polyPath,
             Paint()
-              ..color = baseColor.withValues(alpha: 0.82)
-              ..strokeWidth = 1.8
+              ..color = baseColor
+              ..strokeWidth = 3.2
               ..style = PaintingStyle.stroke,
           );
+          // Draw exact meter measurements on each wall segment
+          for (int v = 0; v < poly.length; v++) {
+            final p1 = poly[v];
+            final p2 = poly[(v + 1) % poly.length];
+            final segPx = (p2 - p1).distance;
+            if (segPx < 25.0) continue;
+            final segM = segPx / ppm;
+            final mid = Offset((p1.dx + p2.dx) / 2.0, (p1.dy + p2.dy) / 2.0);
+            final dimTp = TextPainter(
+              text: TextSpan(
+                text: '${segM.toStringAsFixed(2)}m',
+                style: const TextStyle(color: Colors.amberAccent, fontSize: 9.0, fontWeight: FontWeight.w900),
+              ),
+              textDirection: TextDirection.ltr,
+            )..layout();
+            final dRect = RRect.fromRectAndRadius(
+              Rect.fromCenter(center: mid, width: dimTp.width + 8, height: dimTp.height + 4),
+              const Radius.circular(4),
+            );
+            canvas.drawRRect(dRect, Paint()..color = const Color(0xDD0D1117));
+            canvas.drawRRect(
+              dRect,
+              Paint()
+                ..color = baseColor.withValues(alpha: 0.65)
+                ..style = PaintingStyle.stroke
+                ..strokeWidth = 0.9,
+            );
+            dimTp.paint(canvas, Offset(mid.dx - dimTp.width / 2, mid.dy - dimTp.height / 2));
+          }
           final Rect bounds = polyPath.getBounds();
           final tp = TextPainter(
             text: TextSpan(
@@ -7896,7 +8634,201 @@ class CanvasPainter extends CustomPainter {
     }
   }
 
+  void _drawSketchRecreatorOverlay(Canvas canvas, Size size, RecreatedSketchModel model) {
+    final overlayPolys = model.getOverlayPolygons();
+    final List<Color> polyColors = [
+      Colors.cyanAccent,
+      Colors.amberAccent,
+      Colors.lightGreenAccent,
+    ];
+
+    // 1. Draw Recreated Orthogonal CAD Rooms directly aligned over the user's photo
+    for (int i = 0; i < overlayPolys.length; i++) {
+      final poly = overlayPolys[i];
+      if (poly.length < 3) continue;
+      final path = Path()..moveTo(poly.first.dx, poly.first.dy);
+      for (int k = 1; k < poly.length; k++) {
+        path.lineTo(poly[k].dx, poly[k].dy);
+      }
+      path.close();
+
+      final c = polyColors[i % polyColors.length];
+      canvas.drawPath(
+        path,
+        Paint()
+          ..color = c.withValues(alpha: 0.11)
+          ..style = PaintingStyle.fill,
+      );
+      canvas.drawPath(
+        path,
+        Paint()
+          ..color = c.withValues(alpha: 0.88)
+          ..strokeWidth = 2.6
+          ..style = PaintingStyle.stroke,
+      );
+    }
+
+    // 2. Draw Custom Long-Press Snap Points (if user added any)
+    for (final col in activeStructuralColumns) {
+      canvas.drawCircle(col, 8.0, Paint()..color = Colors.cyanAccent..style = PaintingStyle.stroke..strokeWidth = 2.0);
+      canvas.drawCircle(col, 2.5, Paint()..color = Colors.cyanAccent);
+    }
+
+    // 3. Draw 8 Draggable 90-Degree Ortho Corner Grips ([ ])
+    final handles = model.getDraggableHandles();
+    for (int h = 0; h < handles.length; h++) {
+      final pt = handles[h];
+      final bool isDragging = activeDraggingSketchHandle == h;
+      final double sz = isDragging ? 9.0 : 6.0;
+      final rect = Rect.fromCenter(center: pt, width: sz * 2, height: sz * 2);
+      canvas.drawRect(
+        rect,
+        Paint()
+          ..color = isDragging ? BanaagTheme.primaryAmber : const Color(0xEE111622)
+          ..style = PaintingStyle.fill,
+      );
+      canvas.drawRect(
+        rect,
+        Paint()
+          ..color = isDragging ? Colors.white : Colors.cyanAccent
+          ..strokeWidth = 1.8
+          ..style = PaintingStyle.stroke,
+      );
+    }
+
+    // 4. Draw the 5 Wall-by-Wall Dimension Highlights & Interactive Question Badges
+    for (int i = 0; i < model.wallPrompts.length; i++) {
+      final wp = model.wallPrompts[i];
+      final bool isActive = i == activeWallPromptIndex;
+      final bool isDone = wp.isConfirmed;
+
+      if (isActive) {
+        // Outer Neon Amber Pulsing Glow along the active wall
+        canvas.drawLine(
+          wp.startCanvas,
+          wp.endCanvas,
+          Paint()
+            ..color = BanaagTheme.primaryAmber.withValues(alpha: 0.38)
+            ..strokeWidth = 15.0
+            ..strokeCap = StrokeCap.round,
+        );
+        // Crisp Bright Core Line
+        canvas.drawLine(
+          wp.startCanvas,
+          wp.endCanvas,
+          Paint()
+            ..color = Colors.amberAccent
+            ..strokeWidth = 4.8
+            ..strokeCap = StrokeCap.round,
+        );
+        // Endpoint target rings
+        canvas.drawCircle(wp.startCanvas, 7.0, Paint()..color = BanaagTheme.primaryAmber);
+        canvas.drawCircle(wp.endCanvas, 7.0, Paint()..color = BanaagTheme.primaryAmber);
+      } else if (isDone) {
+        canvas.drawLine(
+          wp.startCanvas,
+          wp.endCanvas,
+          Paint()
+            ..color = BanaagTheme.successGreen.withValues(alpha: 0.85)
+            ..strokeWidth = 3.2
+            ..strokeCap = StrokeCap.round,
+        );
+      }
+
+      // Draw Interactive Dimension Pill Badge at wall midpoint
+      final String badgeLabel = isActive
+          ? '⚡ ${wp.shortCode}: ${wp.meters.toStringAsFixed(1)}m ?'
+          : (isDone
+              ? '✓ ${wp.shortCode}: ${wp.meters.toStringAsFixed(1)}m'
+              : '${wp.shortCode}: ${wp.meters.toStringAsFixed(1)}m?');
+
+      final tp = TextPainter(
+        text: TextSpan(
+          text: badgeLabel,
+          style: TextStyle(
+            color: isActive ? Colors.black : (isDone ? Colors.white : Colors.cyanAccent),
+            fontSize: isActive ? 11.5 : 9.5,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+
+      final Offset center = wp.midPoint;
+      final RRect pill = RRect.fromRectAndRadius(
+        Rect.fromCenter(
+          center: center,
+          width: tp.width + (isActive ? 16.0 : 12.0),
+          height: tp.height + (isActive ? 9.0 : 6.0),
+        ),
+        const Radius.circular(6),
+      );
+
+      canvas.drawRRect(
+        pill,
+        Paint()
+          ..color = isActive
+              ? BanaagTheme.primaryAmber
+              : (isDone ? const Color(0xEE14532D) : const Color(0xDD111622)),
+      );
+      canvas.drawRRect(
+        pill,
+        Paint()
+          ..color = isActive
+              ? Colors.white
+              : (isDone ? Colors.greenAccent : Colors.cyanAccent.withValues(alpha: 0.8))
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = isActive ? 2.0 : 1.2,
+      );
+      tp.paint(canvas, Offset(center.dx - tp.width / 2, center.dy - tp.height / 2));
+    }
+  }
+
   void _drawArchitecturalFloorPlan(Canvas canvas, Size size) {
+    // If we have recreated or confirmed room polygons, draw them as a crisp CAD blueprint!
+    if (roomPolygons.isNotEmpty && canvasStage != 1) {
+      final double ppm = pixelsPerMeter > 5.0 ? pixelsPerMeter : 44.77;
+      for (int i = 0; i < spaces.length; i++) {
+        final sp = spaces[i];
+        final poly = roomPolygons[sp.id];
+        if (poly == null || poly.length < 3) continue;
+        final path = Path()..moveTo(poly.first.dx, poly.first.dy);
+        for (int v = 1; v < poly.length; v++) {
+          path.lineTo(poly[v].dx, poly[v].dy);
+        }
+        path.close();
+        canvas.drawPath(
+          path,
+          Paint()
+            ..color = const Color(0xFF131A26).withValues(alpha: 0.55)
+            ..style = PaintingStyle.fill,
+        );
+        canvas.drawPath(
+          path,
+          Paint()
+            ..color = const Color(0xFF48658A)
+            ..strokeWidth = 3.2
+            ..style = PaintingStyle.stroke,
+        );
+        for (int v = 0; v < poly.length; v++) {
+          final p1 = poly[v];
+          final p2 = poly[(v + 1) % poly.length];
+          final segPx = (p2 - p1).distance;
+          if (segPx < 30.0) continue;
+          final segM = segPx / ppm;
+          final mid = Offset((p1.dx + p2.dx) / 2.0, (p1.dy + p2.dy) / 2.0);
+          final dimTp = TextPainter(
+            text: TextSpan(
+              text: '${segM.toStringAsFixed(2)}m',
+              style: const TextStyle(color: Colors.white54, fontSize: 8.5, fontWeight: FontWeight.bold),
+            ),
+            textDirection: TextDirection.ltr,
+          )..layout();
+          dimTp.paint(canvas, Offset(mid.dx - dimTp.width / 2, mid.dy - dimTp.height / 2));
+        }
+      }
+      return;
+    }
     if (points.isEmpty) return;
 
     // Calculate dynamic bounding envelope encompassing all electrical fixtures
