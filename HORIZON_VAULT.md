@@ -375,4 +375,21 @@
   2. I-verify ang contrast ratios para sa outdoor sun-glare readability (field engineers).
 
 
+
+---
+
+### [HRZ-026] Interactive In-App Drawing Guidelines, Onboarding Visuals & 1-Tap Benchmark Demo
+- **Status**: 🚀 GRADUATED / IN PRODUCTION (`v1.0.8`)
+- **Blocker Category**: None (Feature Ready)
+- **Strategic / Business Impact**: High (Drastically reduces intake recognition errors from blurry pencil sketches or messy notebook lines, educates contractors on optimal dimensioning, and provides an instant 1-tap demo plan)
+- **Technical Effort**: Medium
+- **Key Deliverables**:
+  1. `DrawingGuidelinesModal`: 3-tab visual carousel in Obsidian Thermal styling:
+     - **Tab 1 (Papel & Pen)**: Plain white paper vs Ruled notebook blue filter, dark gel/felt pens (0.5mm - 1.0mm), single solid strokes, top-down lighting.
+     - **Tab 2 (Sukat & Linya)**: Outside perimeter dimensioning (`|--- 5m ---|`), mandatory `'m'` unit tags, closed 90° corners, room labels in center.
+     - **Tab 3 (Sample Plan & 1-Tap Demo)**: Custom-painted architectural blueprint diagram with callout pointers + **"⚡ Subukan ang Sample Plan na Ito"** 1-tap interactive demo loader.
+  2. **Intake Bottom Sheet Integration**: Dedicated `📖 Drawing Guidelines & Sample Tips` banner in `workflow_screen.dart`.
+  3. **Canvas Step 0 Integration**: Direct Help icon button in `plan_canvas_screen.dart` Step 0 toolbars.
+  4. **Demo Model Factory**: `RecreatedSketchModel.createDemoSampleModel()` pre-calibrated 2-room plan.
+
 *Laging panatilihing updated ang file na ito gamit ang `/horizon` tuwing may bagong situational development o unblocked feature!*

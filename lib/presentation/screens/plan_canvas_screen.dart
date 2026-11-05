@@ -2,6 +2,7 @@ import '../../domain/pec_placement_advisor.dart';
 import 'dart:io';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import '../widgets/drawing_guidelines_modal.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -42,6 +43,25 @@ class PlanCanvasScreen extends StatefulWidget {
 }
 
 class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
+  void _loadDemoSamplePlan() {
+    setState(() {
+      _blueprintPath = 'DEMO_SAMPLE_PLAN';
+      _sketchModel = RecreatedSketchModel.createDemoSampleModel(
+        canvasRect: const Rect.fromLTWH(250, 300, 900, 720),
+      );
+      _stage1SubStep = 0;
+      _activeWallPromptIndex = 0;
+      _points.clear();
+      _routes.clear();
+      _roomPolygons.clear();
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('⚡ Loaded BANAAG Ideal Sample Plan: 2 Rooms (5.0m x 4.0m)'),
+        backgroundColor: BanaagTheme.primaryAmber,
+      ),
+    );
+  }
   late List<CanvasPoint> _points;
   late List<ConduitRoute> _routes;
   RoomGeometry? _roomGeometry;
@@ -2017,6 +2037,11 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
     super.initState();
     _roomGeometry = widget.project?.roomGeometry;
     _blueprintPath = widget.project?.blueprintImagePath;
+    if (_blueprintPath == 'DEMO_SAMPLE_PLAN') {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _loadDemoSamplePlan();
+      });
+    }
     _invertBlueprint = widget.project?.invertBlueprint ?? false;
     _initRoomBoxesAndScale();
     _autoPositionScalePinsToNeedles();
@@ -4253,6 +4278,13 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
+                            IconButton(
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                              icon: const Icon(Icons.help_outline_rounded, color: BanaagTheme.primaryAmber, size: 18),
+                              tooltip: 'Drawing Guidelines & Tips',
+                              onPressed: () => DrawingGuidelinesModal.show(context, onLoadSamplePlan: _loadDemoSamplePlan),
+                            ),
                           ],
                         ),
                         const SizedBox(height: 6),
@@ -4552,6 +4584,13 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                               style: TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.bold),
                               overflow: TextOverflow.ellipsis,
                             ),
+                          ),
+                          IconButton(
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                            icon: const Icon(Icons.help_outline_rounded, color: BanaagTheme.primaryAmber, size: 18),
+                            tooltip: 'Drawing Guidelines & Tips',
+                            onPressed: () => DrawingGuidelinesModal.show(context, onLoadSamplePlan: _loadDemoSamplePlan),
                           ),
                         ],
                       ),

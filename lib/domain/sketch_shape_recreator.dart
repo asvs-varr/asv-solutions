@@ -146,6 +146,26 @@ class RecreatedSketchModel {
     }
   }
 
+  static RecreatedSketchModel createDemoSampleModel({Rect? canvasRect}) {
+    final box = canvasRect ?? const Rect.fromLTWH(250, 300, 900, 720);
+    return RecreatedSketchModel(
+      outerBoxCanvas: box,
+      xRatios: [0.0, 0.60, 1.0],
+      yRatios: [0.0, 1.0],
+      vWalls: [
+        [true, true, true],
+      ],
+      hWalls: [
+        [true, true],
+        [true, true],
+      ],
+      initialWTopMeters: 5.0,
+      initialHRightMeters: 4.0,
+      wTopConfirmed: true,
+      hRightConfirmed: true,
+    );
+  }
+
   int get numRows => math.max(1, yRatios.length - 1);
   int get numCols => math.max(1, xRatios.length - 1);
 

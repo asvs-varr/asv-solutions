@@ -14,6 +14,7 @@ import '../widgets/utility_service_drop_dialog.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
 import 'plan_canvas_screen.dart';
+import '../widgets/drawing_guidelines_modal.dart';
 
 class WorkflowScreen extends StatefulWidget {
   final Project project;
@@ -1003,6 +1004,46 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
                 ],
               ),
               const Divider(color: Colors.white10, height: 24),
+              const SizedBox(height: 12),
+              InkWell(
+                onTap: () {
+                  Navigator.pop(ctx);
+                  DrawingGuidelinesModal.show(context, onLoadSamplePlan: () {
+                    _launchFloorPlanModal('DEMO_SAMPLE_PLAN');
+                  });
+                },
+                borderRadius: BorderRadius.circular(10),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: BanaagTheme.primaryAmber.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: BanaagTheme.primaryAmber.withValues(alpha: 0.4)),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.menu_book_rounded, color: BanaagTheme.primaryAmber, size: 20),
+                      SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '📖 Drawing Guidelines & Sample Tips',
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.white),
+                            ),
+                            Text(
+                              'Gabay sa papel, ballpen, at sukat para mabilis basahin ng AI',
+                              style: TextStyle(fontSize: 10, color: BanaagTheme.textMuted),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Icon(Icons.chevron_right_rounded, color: BanaagTheme.primaryAmber, size: 20),
+                    ],
+                  ),
+                ),
+              ),
               if (hasExisting) ...[
                 ListTile(
                   leading: Icon(
