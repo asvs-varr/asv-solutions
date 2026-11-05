@@ -1298,12 +1298,9 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
 
     final int idx = _activeWallPromptIndex.clamp(0, model.wallPrompts.length - 1);
     final wp = model.wallPrompts[idx];
+    final double targetMeters = (overrideMeters != null && overrideMeters > 0.1) ? overrideMeters : wp.meters;
     setState(() {
-      if (overrideMeters != null && overrideMeters > 0.1) {
-        wp.meters = overrideMeters;
-      }
-      wp.isConfirmed = true;
-      model.syncRatiosFromMeters();
+      model.applyWallPromptMeters(idx, targetMeters);
     });
     HapticFeedback.selectionClick();
 
@@ -1460,6 +1457,26 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
           ],
         ),
         actions: [
+          if (wp.isInteriorWall)
+            TextButton.icon(
+              icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 16),
+              label: const Text('Remove Wall', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+              onPressed: () {
+                Navigator.pop(ctx);
+                setState(() {
+                  model.removeInteriorWallPrompt(wallIndex);
+                  _activeWallPromptIndex = _activeWallPromptIndex.clamp(0, math.max(0, model.wallPrompts.length - 1));
+                });
+                HapticFeedback.heavyImpact();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('🗑️ Removed interior wall ${wp.shortCode}!'),
+                    backgroundColor: Colors.redAccent,
+                    duration: const Duration(seconds: 2),
+                  ),
+                );
+              },
+            ),
           TextButton(
             onPressed: () => Navigator.pop(ctx),
             child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
@@ -1481,6 +1498,283 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
             },
           ),
         ],
+      ),
+    );
+  }
+
+  void _showAddSketchWallSheet() {
+    final model = _sketchModel;
+    if (model == null) return;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF181D27),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: const [
+                    Icon(Icons.add_box_outlined, color: Colors.cyanAccent, size: 20),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        '➕ Magdagdag ng Interior Wall / Room Partition',
+                        style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  'Piliin kung anong pader o sulok na kwarto ang idadagdag. Maaari mo ring i-drag ang corner handle (■) pagkatapos:',
+                  style: TextStyle(color: Colors.white70, fontSize: 11.5),
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  '1. Corner Room Box (2 Pader nang sabay):',
+                  style: TextStyle(color: BanaagTheme.primaryAmber, fontSize: 11.5, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final item in [
+                      ('TOP_LEFT', '↖️ Top-Left Room Box'),
+                      ('TOP_RIGHT', '↗️ Top-Right Room Box'),
+                      ('BOTTOM_LEFT', '↙️ Bottom-Left Room Box'),
+                      ('BOTTOM_RIGHT', '↘️ Bottom-Right Room Box'),
+                    ])
+                      ActionChip(
+                        backgroundColor: BanaagTheme.primaryAmber.withValues(alpha: 0.16),
+                        side: const BorderSide(color: BanaagTheme.primaryAmber),
+                        label: Text(
+                          item.$2,
+                          style: const TextStyle(color: BanaagTheme.primaryAmber, fontSize: 11.5, fontWeight: FontWeight.bold),
+                        ),
+                        onPressed: () {
+                          Navigator.pop(ctx);
+                          setState(() {
+                            model.addCornerBoxRoom(item.$1);
+                            _activeWallPromptIndex = (model.wallPrompts.length - 1).clamp(0, 99);
+                          });
+                          HapticFeedback.mediumImpact();
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('➕ Added ${item.$2}! Drag the ■ corner handles or confirm wall lengths.'),
+                              backgroundColor: BanaagTheme.successGreen,
+                              duration: const Duration(seconds: 2),
+                            ),
+                          );
+                        },
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  '2. Vertical Partition Wall (Patayong Pader):',
+                  style: TextStyle(color: Colors.cyanAccent, fontSize: 11.5, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final vItem in [
+                      (0.35, 0.0, 1.0, '┃ Left Split (Buong Taas)'),
+                      (0.50, 0.0, 1.0, '┃ Center Split (Buong Taas)'),
+                      (0.68, 0.0, 1.0, '┃ Right Split (Buong Taas)'),
+                      (0.35, 0.0, 0.50, '╹ Upper-Left Vertical Wall'),
+                      (0.50, 0.50, 1.0, '╻ Lower-Center Vertical Wall'),
+                    ])
+                      ActionChip(
+                        backgroundColor: Colors.cyanAccent.withValues(alpha: 0.14),
+                        side: const BorderSide(color: Colors.cyanAccent),
+                        label: Text(
+                          vItem.$4,
+                          style: const TextStyle(color: Colors.cyanAccent, fontSize: 11.5, fontWeight: FontWeight.bold),
+                        ),
+                        onPressed: () {
+                          Navigator.pop(ctx);
+                          setState(() {
+                            model.addInteriorWall(
+                              isVertical: true,
+                              posRatio: vItem.$1,
+                              startRatio: vItem.$2,
+                              endRatio: vItem.$3,
+                            );
+                            _activeWallPromptIndex = (model.wallPrompts.length - 1).clamp(0, 99);
+                          });
+                          HapticFeedback.mediumImpact();
+                        },
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  '3. Horizontal Partition Wall (Pahalang na Pader):',
+                  style: TextStyle(color: Colors.lightGreenAccent, fontSize: 11.5, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final hItem in [
+                      (0.38, 0.0, 1.0, '━ Upper Split (Buong Lapad)'),
+                      (0.50, 0.0, 1.0, '━ Middle Split (Buong Lapad)'),
+                      (0.65, 0.0, 1.0, '━ Lower Split (Buong Lapad)'),
+                      (0.45, 0.0, 0.45, '╸ Left Horizontal Wall'),
+                      (0.55, 0.45, 1.0, '╺ Right Horizontal Wall'),
+                    ])
+                      ActionChip(
+                        backgroundColor: Colors.lightGreenAccent.withValues(alpha: 0.14),
+                        side: const BorderSide(color: Colors.lightGreenAccent),
+                        label: Text(
+                          hItem.$4,
+                          style: const TextStyle(color: Colors.lightGreenAccent, fontSize: 11.5, fontWeight: FontWeight.bold),
+                        ),
+                        onPressed: () {
+                          Navigator.pop(ctx);
+                          setState(() {
+                            model.addInteriorWall(
+                              isVertical: false,
+                              posRatio: hItem.$1,
+                              startRatio: hItem.$2,
+                              endRatio: hItem.$3,
+                            );
+                            _activeWallPromptIndex = (model.wallPrompts.length - 1).clamp(0, 99);
+                          });
+                          HapticFeedback.mediumImpact();
+                        },
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _removeCurrentOrPickSketchWall() {
+    final model = _sketchModel;
+    if (model == null) return;
+
+    final int curIdx = _activeWallPromptIndex.clamp(0, math.max(0, model.wallPrompts.length - 1));
+    if (curIdx < model.wallPrompts.length && model.wallPrompts[curIdx].isInteriorWall) {
+      final removedCode = model.wallPrompts[curIdx].shortCode;
+      setState(() {
+        model.removeInteriorWallPrompt(curIdx);
+        _activeWallPromptIndex = _activeWallPromptIndex.clamp(0, math.max(0, model.wallPrompts.length - 1));
+      });
+      HapticFeedback.heavyImpact();
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('🗑️ Removed interior wall $removedCode!'),
+          backgroundColor: Colors.redAccent,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+
+    final interiorIndices = <int>[];
+    for (int i = 0; i < model.wallPrompts.length; i++) {
+      if (model.wallPrompts[i].isInteriorWall) {
+        interiorIndices.add(i);
+      }
+    }
+
+    if (interiorIndices.isEmpty) {
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('ℹ️ Walang interior wall na pwedeng burahin (Outer walls W1 & L1 ay kailangan).'),
+          backgroundColor: Colors.orangeAccent,
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF181D27),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: const [
+                  Icon(Icons.delete_sweep_outlined, color: Colors.redAccent, size: 20),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      '🗑️ Piliin ang Interior Wall na Aalisin',
+                      style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              ...interiorIndices.map((idx) {
+                final wp = model.wallPrompts[idx];
+                return ListTile(
+                  dense: true,
+                  leading: CircleAvatar(
+                    radius: 14,
+                    backgroundColor: Colors.redAccent.withValues(alpha: 0.2),
+                    child: Text(
+                      wp.shortCode,
+                      style: const TextStyle(color: Colors.redAccent, fontSize: 11, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  title: Text(
+                    '${wp.label} (${wp.meters.toStringAsFixed(1)}m)',
+                    style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+                  ),
+                  subtitle: Text(
+                    wp.isVertical ? 'Patayong Pader (Vertical)' : 'Pahalang na Pader (Horizontal)',
+                    style: const TextStyle(color: Colors.white60, fontSize: 11),
+                  ),
+                  trailing: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    setState(() {
+                      model.removeInteriorWallPrompt(idx);
+                      _activeWallPromptIndex = _activeWallPromptIndex.clamp(0, math.max(0, model.wallPrompts.length - 1));
+                    });
+                    HapticFeedback.heavyImpact();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('🗑️ Removed interior wall ${wp.shortCode}!'),
+                        backgroundColor: Colors.redAccent,
+                        duration: const Duration(seconds: 2),
+                      ),
+                    );
+                  },
+                );
+              }),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -3929,9 +4223,10 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                     final prompts = _sketchModel!.wallPrompts;
                     final int wIdx = _activeWallPromptIndex.clamp(0, prompts.length - 1);
                     final activeWp = prompts[wIdx];
+                    final int dynRoomCount = _sketchModel!.getOverlayPolygons().length;
                     final String topoLabel = _sketchModel!.topologyMode == 0
-                        ? '2-Room Split'
-                        : (_sketchModel!.topologyMode == 1 ? '3-Space (+Alcove)' : '1-Room L-Shape');
+                        ? '$dynRoomCount-Room Auto'
+                        : (_sketchModel!.topologyMode == 1 ? 'Split (+Alcove)' : '1-Room Envelope');
 
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -4040,6 +4335,53 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                                       Text(
                                         '⚡ Generate Clean CAD',
                                         style: TextStyle(color: Colors.greenAccent, fontSize: 10.5, fontWeight: FontWeight.bold),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              // 1.5 Add Wall & Remove Wall Interactive Controls
+                              GestureDetector(
+                                onTap: _showAddSketchWallSheet,
+                                child: Container(
+                                  margin: const EdgeInsets.only(right: 6),
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: Colors.cyanAccent.withValues(alpha: 0.20),
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(color: Colors.cyanAccent),
+                                  ),
+                                  child: const Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.add_circle_outline, size: 12, color: Colors.cyanAccent),
+                                      SizedBox(width: 4),
+                                      Text(
+                                        '+ Add Wall',
+                                        style: TextStyle(color: Colors.cyanAccent, fontSize: 10.5, fontWeight: FontWeight.bold),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              GestureDetector(
+                                onTap: _removeCurrentOrPickSketchWall,
+                                child: Container(
+                                  margin: const EdgeInsets.only(right: 6),
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: Colors.redAccent.withValues(alpha: 0.18),
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(color: Colors.redAccent),
+                                  ),
+                                  child: const Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.delete_outline, size: 12, color: Colors.redAccent),
+                                      SizedBox(width: 3),
+                                      Text(
+                                        'Remove Wall',
+                                        style: TextStyle(color: Colors.redAccent, fontSize: 10.5, fontWeight: FontWeight.bold),
                                       ),
                                     ],
                                   ),
@@ -8817,6 +9159,8 @@ class CanvasPainter extends CustomPainter {
       Colors.cyanAccent,
       Colors.amberAccent,
       Colors.lightGreenAccent,
+      Colors.orangeAccent,
+      Colors.purpleAccent,
     ];
 
     // 1. Draw Recreated Orthogonal CAD Rooms directly aligned over the user's photo
