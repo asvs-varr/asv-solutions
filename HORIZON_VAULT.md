@@ -315,17 +315,18 @@
 ---
 
 ### [HRZ-021] Dun & Bradstreet (D-U-N-S) Number for A.E. CCTV & Computer Installation Services
-- **Status**: ⏳ PENDING EXTERNAL ACTION / CRIF REVIEW
+- **Status**: ⏳ READY TO UNBLOCK (Awaiting 48-72h Global Database Sync)
 - **Blocker Category**: `[LEGAL-BLOCKED]`
 - **Strategic / Business Impact**: 🏆 Game-Changer (Direct Production Release on Google Play without 14-day 20-tester closed testing)
 - **Technical Effort**: Low
 - **Current Progress**:
   - ✅ Live official corporate website deployed at `https://asvs-varr.github.io/asv-solutions/` showcasing DTI Certificate No. 8285425 and ASVS branding.
-  - ✅ Official inquiry ticket submitted to CRIF Philippines (Dun & Bradstreet partner) on October 22, 2026.
+  - ✅ Official inquiry ticket processed and issued by CRIF Philippines (Dun & Bradstreet partner) on November 5, 2026.
+  - 🔑 **OFFICIAL D-U-N-S NUMBER RECEIVED**: `728640855` (Issued to A.E. CCTV & Computer Installation Services).
 - **Actionable Unblocking Steps**:
-  1. Complete identity and document submission (DTI certificate, ID) when CRIF contacts via email (`mr.arvin03@gmail.com`) or phone.
-  2. Receive the 9-digit D-U-N-S number.
-  3. Resume Google Play Console Organization signup flow at `Link a payments profile` and input the 9-digit D-U-N-S.
+  1. Maghintay ng 48–72 hours (hanggang November 8, 2026) upang makumpleto ang global replication ng record mula sa CRIF D-B Philippines papunta sa Google global D&B verification bot.
+  2. I-verify ang D-U-N-S sa D&B Business Directory portal kung kinakailangan.
+  3. Buksan ang Google Play Console Organization signup flow at i-input ang `728640855` para sa official organization verification at direct production release.
 
 ---
 
@@ -354,5 +355,24 @@
   3. Kopyahin ang Measurement ID at i-paste natin sa `index.html`.
 
 ---
+
+
+---
+
+### [HRZ-025] Comprehensive Obsidian Thermal Theme & Modal Dialog Harmonization
+- **Status**: 🧊 DEFERRED (Planned Pre-PlayStore Polish)
+- **Blocker Category**: `[STORE-BLOCKED]`
+- **Strategic / Business Impact**: High (Flawless, cohesive enterprise-grade visual identity across all 15+ sub-modals & dialogs)
+- **Technical Effort**: Medium
+- **Why It's Deferred Today**: Na-unify na ang core screens (Workflow checklist, Dashboard Operations Hub, Plan Canvas, at broken label encodings). Ang malalalim na secondary dialogs ay gagawing unified pass bago ang official Play Store production submission.
+- **Scope & Targets**:
+  1. `SiteInspectionDialog`: I-switch mula sa legacy slate surface (`0xFF1E222B`) patungo sa `#181412` na may subtle bronze border (`#2C221C`).
+  2. `UtilityServiceDropDialog`: Palitan ang heavy bordered containers ng refined amber/bronze pill cards.
+  3. `ClientNeedsAnalysisScreen`: I-align ang tally inputs sa Obsidian Thermal warm charcoal background.
+  4. `ProjectManagementDialogs`: Gawing consistent ang New/Edit Project dialogs sa modern glassmorphic rounded cards.
+- **Actionable Unblocking Steps**:
+  1. Patakbuhin ang batch design pass sa 4 target dialogs.
+  2. I-verify ang contrast ratios para sa outdoor sun-glare readability (field engineers).
+
 
 *Laging panatilihing updated ang file na ito gamit ang `/horizon` tuwing may bagong situational development o unblocked feature!*

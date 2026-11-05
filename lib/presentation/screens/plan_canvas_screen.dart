@@ -7966,7 +7966,7 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Text(
-                remaining == 0 ? 'âœ“' : '$remaining left',
+                remaining == 0 ? '✓' : '$remaining left',
                 style: TextStyle(
                   color: remaining == 0 ? const Color(0xFF10B981) : Colors.amberAccent,
                   fontWeight: FontWeight.bold,

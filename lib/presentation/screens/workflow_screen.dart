@@ -201,14 +201,14 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
 
             return Card(
               margin: const EdgeInsets.only(bottom: 16.0),
-              color: isCurrent ? const Color(0xFF222834) : BanaagTheme.surfaceCard,
+              color: isCurrent ? const Color(0xFF181412) : const Color(0xFF12100E),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(16),
                 side: BorderSide(
                   color: isCurrent
-                      ? BanaagTheme.primaryAmber
-                      : (phase.isCompleted ? BanaagTheme.successGreen : BanaagTheme.surfaceCardBorder),
-                  width: isCurrent ? 2.0 : 1.0,
+                      ? BanaagTheme.primaryAmber.withValues(alpha: 0.7)
+                      : (phase.isCompleted ? BanaagTheme.successGreen.withValues(alpha: 0.6) : const Color(0xFF2C221C)),
+                  width: 1.0,
                 ),
               ),
               child: ExpansionTile(
@@ -251,9 +251,9 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
       margin: const EdgeInsets.only(bottom: 16.0),
       padding: const EdgeInsets.all(14.0),
       decoration: BoxDecoration(
-        color: const Color(0xFF1E232D),
+        color: const Color(0xFF181412),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: BanaagTheme.primaryAmber.withValues(alpha: 0.8), width: 1.5),
+        border: Border.all(color: BanaagTheme.primaryAmber.withValues(alpha: 0.5), width: 1.0),
         boxShadow: [
           BoxShadow(
             color: BanaagTheme.primaryAmber.withValues(alpha: 0.1),
@@ -512,7 +512,7 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
                   color: BanaagTheme.primaryAmber.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(4),
                 ),
-                child: const Text('OPEN TALLY ➔', style: TextStyle(color: BanaagTheme.primaryAmber, fontSize: 10, fontWeight: FontWeight.bold)),
+                child: Row(mainAxisSize: MainAxisSize.min, children: const [Text('OPEN TALLY', style: TextStyle(color: BanaagTheme.primaryAmber, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 0.4)), SizedBox(width: 4), Icon(Icons.arrow_forward_rounded, color: BanaagTheme.primaryAmber, size: 12)]),
               ),
             ),
           if ((item.id == 'c_takeoff' || item.id == 'p_takeoff') && !isLocked)
@@ -528,7 +528,7 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
                       color: Colors.cyanAccent.withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(4),
                     ),
-                    child: const Text('OPEN CANVAS âž”', style: TextStyle(color: Colors.cyanAccent, fontSize: 10, fontWeight: FontWeight.bold)),
+                    child: Row(mainAxisSize: MainAxisSize.min, children: const [Text('OPEN CANVAS', style: TextStyle(color: Colors.cyanAccent, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 0.4)), SizedBox(width: 4), Icon(Icons.arrow_forward_rounded, color: Colors.cyanAccent, size: 12)]),
                   ),
                   if (_project.blueprintImagePath != null && _project.blueprintImagePath!.isNotEmpty)
                     GestureDetector(
@@ -539,7 +539,7 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
                           color: BanaagTheme.primaryAmber.withValues(alpha: 0.2),
                           borderRadius: BorderRadius.circular(4),
                         ),
-                        child: const Text('RE-SCAN PLAN ðŸ”', style: TextStyle(color: BanaagTheme.primaryAmber, fontSize: 10, fontWeight: FontWeight.bold)),
+                        child: Row(mainAxisSize: MainAxisSize.min, children: const [Icon(Icons.document_scanner_rounded, color: BanaagTheme.primaryAmber, size: 12), SizedBox(width: 4), Text('RE-SCAN PLAN', style: TextStyle(color: BanaagTheme.primaryAmber, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 0.4))]),
                       ),
                     ),
                 ],
@@ -554,7 +554,7 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
                   color: BanaagTheme.primaryAmber.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(4),
                 ),
-                child: const Text('ASSESS SITE âž”', style: TextStyle(color: BanaagTheme.primaryAmber, fontSize: 10, fontWeight: FontWeight.bold)),
+                child: Row(mainAxisSize: MainAxisSize.min, children: const [Text('ASSESS SITE', style: TextStyle(color: BanaagTheme.primaryAmber, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 0.4)), SizedBox(width: 4), Icon(Icons.arrow_forward_rounded, color: BanaagTheme.primaryAmber, size: 12)]),
               ),
             ),
           if (item.id == 'c2' && item.isCompleted)
@@ -566,7 +566,7 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
                   color: BanaagTheme.successGreen.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(4),
                 ),
-                child: const Text('ASSESSED âœ…', style: TextStyle(color: BanaagTheme.successGreen, fontSize: 10, fontWeight: FontWeight.bold)),
+                child: Row(mainAxisSize: MainAxisSize.min, children: const [Icon(Icons.check_circle_rounded, color: BanaagTheme.successGreen, size: 12), SizedBox(width: 4), Text('ASSESSED', style: TextStyle(color: BanaagTheme.successGreen, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 0.4))]),
               ),
             ),
           if (item.id == 'c3' && !isLocked && !item.isCompleted)
@@ -578,7 +578,7 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
                   color: BanaagTheme.primaryAmber.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(4),
                 ),
-                child: const Text('CALCULATE DROP âž”', style: TextStyle(color: BanaagTheme.primaryAmber, fontSize: 10, fontWeight: FontWeight.bold)),
+                child: Row(mainAxisSize: MainAxisSize.min, children: const [Text('CALCULATE DROP', style: TextStyle(color: BanaagTheme.primaryAmber, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 0.4)), SizedBox(width: 4), Icon(Icons.arrow_forward_rounded, color: BanaagTheme.primaryAmber, size: 12)]),
               ),
             ),
           if (item.id == 'c3' && item.isCompleted)
@@ -590,7 +590,7 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
                   color: BanaagTheme.successGreen.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(4),
                 ),
-                child: const Text('DROP VERIFIED âœ…', style: TextStyle(color: BanaagTheme.successGreen, fontSize: 10, fontWeight: FontWeight.bold)),
+                child: Row(mainAxisSize: MainAxisSize.min, children: const [Icon(Icons.check_circle_rounded, color: BanaagTheme.successGreen, size: 12), SizedBox(width: 4), Text('DROP VERIFIED', style: TextStyle(color: BanaagTheme.successGreen, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 0.4))]),
               ),
             ),
           if (item.id == 'c_dxf' && !isLocked && !item.isCompleted)
@@ -602,7 +602,7 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
                   color: BanaagTheme.primaryAmber.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(4),
                 ),
-                child: const Text('UPLOAD âž”', style: TextStyle(color: BanaagTheme.primaryAmber, fontSize: 10, fontWeight: FontWeight.bold)),
+                child: Row(mainAxisSize: MainAxisSize.min, children: const [Text('UPLOAD DXF', style: TextStyle(color: BanaagTheme.primaryAmber, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 0.4)), SizedBox(width: 4), Icon(Icons.arrow_forward_rounded, color: BanaagTheme.primaryAmber, size: 12)]),
               ),
             ),
           if (item.id == 'c_dxf' && item.isCompleted)
@@ -614,7 +614,7 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
                   color: BanaagTheme.successGreen.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(4),
                 ),
-                child: const Text('PARSED âœ…', style: TextStyle(color: BanaagTheme.successGreen, fontSize: 10, fontWeight: FontWeight.bold)),
+                child: Row(mainAxisSize: MainAxisSize.min, children: const [Icon(Icons.check_circle_rounded, color: BanaagTheme.successGreen, size: 12), SizedBox(width: 4), Text('PARSED', style: TextStyle(color: BanaagTheme.successGreen, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 0.4))]),
               ),
             ),
           if (item.id == 'p1' && !isLocked && !item.isCompleted)
@@ -626,7 +626,7 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
                   color: BanaagTheme.primaryAmber.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(4),
                 ),
-                child: const Text('GENERATE SLD âž”', style: TextStyle(color: BanaagTheme.primaryAmber, fontSize: 10, fontWeight: FontWeight.bold)),
+                child: Row(mainAxisSize: MainAxisSize.min, children: const [Text('GENERATE SLD', style: TextStyle(color: BanaagTheme.primaryAmber, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 0.4)), SizedBox(width: 4), Icon(Icons.arrow_forward_rounded, color: BanaagTheme.primaryAmber, size: 12)]),
               ),
             ),
           if (item.id == 'p1' && item.isCompleted)
@@ -638,7 +638,7 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
                   color: BanaagTheme.successGreen.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(4),
                 ),
-                child: const Text('SLD READY âœ…', style: TextStyle(color: BanaagTheme.successGreen, fontSize: 10, fontWeight: FontWeight.bold)),
+                child: Row(mainAxisSize: MainAxisSize.min, children: const [Icon(Icons.check_circle_rounded, color: BanaagTheme.successGreen, size: 12), SizedBox(width: 4), Text('SLD READY', style: TextStyle(color: BanaagTheme.successGreen, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 0.4))]),
               ),
             ),
         ],
@@ -797,7 +797,7 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
             _toggleCheckItem(phase, item);
           });
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('ðŸ“¸ Pre-cover rough-in photo proof saved & verified!')),
+            const SnackBar(content: Text('Pre-cover rough-in photo proof saved & verified!')),
           );
         },
       );
@@ -850,7 +850,7 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
                     ],
                   ),
                   const SizedBox(height: 6),
-                  const Text('File size: 1.4 MB â€¢ Format: ASCII DXF Release 2018', style: TextStyle(fontSize: 11, color: BanaagTheme.textMuted)),
+                  const Text('File size: 1.4 MB | Format: ASCII DXF Release 2018', style: TextStyle(fontSize: 11, color: BanaagTheme.textMuted)),
                   const Divider(color: Colors.white12, height: 16),
                   const Text('Layer Audit & Entity Scan Results:', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: BanaagTheme.primaryAmber)),
                   const SizedBox(height: 4),
@@ -903,7 +903,7 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
 
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
-                  content: Text('âœ… AutoCAD .DXF uploaded & validated! Checklist automatically checked.'),
+                  content: Text('AutoCAD .DXF uploaded & validated! Checklist automatically checked.'),
                   backgroundColor: BanaagTheme.successGreen,
                 ),
               );

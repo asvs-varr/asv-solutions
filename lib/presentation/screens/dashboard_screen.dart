@@ -126,7 +126,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   margin: const EdgeInsets.only(bottom: 12),
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF1E2430),
+                    color: const Color(0xFF181412),
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(color: BanaagTheme.primaryAmber.withValues(alpha: 0.5), width: 1.0),
                   ),
@@ -136,7 +136,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          'BANAAG (Early Access) • Beta Engineering Preview v1.0.0',
+                          'BANAAG (Early Access) • Beta Engineering Preview v1.0.7',
                           style: TextStyle(
                             color: BanaagTheme.primaryAmber.withValues(alpha: 0.95),
                             fontSize: 11,
@@ -150,7 +150,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
                 // Top Financial Overview
                 Card(
-                  color: const Color(0xFF1B2028),
+                  color: const Color(0xFF181412),
                   child: Padding(
                     padding: const EdgeInsets.all(18.0),
                     child: Column(

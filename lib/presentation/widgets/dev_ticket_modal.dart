@@ -123,7 +123,7 @@ class _DevTicketModalContentState extends State<DevTicketModalContent> {
       });
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('âœ… Dev Ticket recorded in local engineering queue!'),
+          content: Text('Dev Ticket recorded in local engineering queue!'),
           backgroundColor: BanaagTheme.successGreen,
         ),
       );

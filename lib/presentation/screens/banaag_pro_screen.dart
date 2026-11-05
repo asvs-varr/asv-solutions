@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import '../../domain/security_engine.dart';
 import '../theme/banaag_theme.dart';
 import '../widgets/legal_disclaimer_dialog.dart';
@@ -214,7 +214,7 @@ class _BanaagProScreenState extends State<BanaagProScreen> {
                       label: const Text('Upload Company Logo (PNG / Vector)'),
                       onPressed: () {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('ðŸ“¸ Company Logo uploaded & locked to PDF Proposal templates!')),
+                          const SnackBar(content: Text('Company Logo uploaded & locked to PDF Proposal templates!')),
                         );
                       },
                     ),
@@ -251,7 +251,7 @@ class _BanaagProScreenState extends State<BanaagProScreen> {
                         BanaagTheme.currentThemeMode.value = BanaagThemeMode.industrialAmber;
                       }
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('ðŸŽ¨ Theme switched to "$val"')),
+                        SnackBar(content: Text('Theme switched to "$val"')),
                       );
                     }
                   },
@@ -382,7 +382,7 @@ class _BanaagProScreenState extends State<BanaagProScreen> {
               Navigator.pop(ctx);
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
-                  content: Text('âš¡ Supabase Cloud Architecture Connected! Projects ready for automatic cloud sync.'),
+                  content: Text('Supabase Cloud Architecture Connected! Projects ready for automatic cloud sync.'),
                 ),
               );
             },
