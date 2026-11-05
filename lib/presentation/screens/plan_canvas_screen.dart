@@ -5829,6 +5829,30 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
+                        // Floating Drawing Guidelines Pill Button
+                        GestureDetector(
+                          onTap: () => DrawingGuidelinesModal.show(context, onLoadSamplePlan: _loadDemoSamplePlan),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                            decoration: BoxDecoration(
+                              color: const Color(0xDD181412),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: BanaagTheme.primaryAmber.withValues(alpha: 0.8)),
+                            ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.menu_book_rounded, size: 14, color: BanaagTheme.primaryAmber),
+                                SizedBox(width: 4),
+                                Text(
+                                  'Guide',
+                                  style: TextStyle(color: BanaagTheme.primaryAmber, fontSize: 10.5, fontWeight: FontWeight.bold),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
                         // 1-Tap Auto-Fit Items & Sheet to Plan Button
                         GestureDetector(
                           onTap: () {

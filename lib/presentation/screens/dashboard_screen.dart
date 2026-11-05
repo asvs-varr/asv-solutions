@@ -17,6 +17,7 @@ import '../widgets/project_quota_voucher_modal.dart';
 import '../widgets/google_auth_modal.dart';
 import 'admin_verification_screen.dart';
 import '../../domain/banaag_auth_service.dart';
+import '../widgets/drawing_guidelines_modal.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -78,6 +79,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
         actions: [
           IconButton(
+            icon: const Icon(Icons.menu_book_rounded, color: BanaagTheme.primaryAmber, size: 20),
+            padding: const EdgeInsets.symmetric(horizontal: 3),
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            tooltip: 'Drawing Guidelines & Tips',
+            onPressed: () => DrawingGuidelinesModal.show(context),
+          ),
+          IconButton(
             icon: const Icon(Icons.receipt_long_outlined, color: BanaagTheme.primaryAmber, size: 20),
             padding: const EdgeInsets.symmetric(horizontal: 3),
             constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
@@ -136,12 +144,31 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          'BANAAG (Early Access) • Beta Engineering Preview v1.0.8',
+                          'BANAAG (Early Access) • Beta Engineering Preview v1.0.9',
                           style: TextStyle(
                             color: BanaagTheme.primaryAmber.withValues(alpha: 0.95),
                             fontSize: 11,
                             fontWeight: FontWeight.bold,
                             letterSpacing: 0.3,
+                          ),
+                        ),
+                      ),
+                      GestureDetector(
+                        onTap: () => DrawingGuidelinesModal.show(context),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
+                          decoration: BoxDecoration(
+                            color: BanaagTheme.primaryAmber.withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: BanaagTheme.primaryAmber.withValues(alpha: 0.7), width: 0.8),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.menu_book_rounded, color: BanaagTheme.primaryAmber, size: 12),
+                              SizedBox(width: 4),
+                              Text('GUIDE', style: TextStyle(color: BanaagTheme.primaryAmber, fontSize: 10, fontWeight: FontWeight.bold)),
+                            ],
                           ),
                         ),
                       ),

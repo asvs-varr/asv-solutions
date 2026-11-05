@@ -113,6 +113,11 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
         ),
         actions: [
           IconButton(
+            icon: const Icon(Icons.menu_book_rounded, color: BanaagTheme.primaryAmber),
+            tooltip: 'Drawing Guidelines & Tips',
+            onPressed: () => DrawingGuidelinesModal.show(context),
+          ),
+          IconButton(
             icon: const Icon(Icons.edit_outlined, color: BanaagTheme.primaryAmber),
             tooltip: 'Edit Project Info',
             onPressed: () {
@@ -466,28 +471,73 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
           if (item.id == 'c0' && !isLocked)
             Padding(
               padding: const EdgeInsets.only(top: 4.0),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: (item.isCompleted && _project.spaces.isNotEmpty)
-                      ? BanaagTheme.successGreen.withValues(alpha: 0.2)
-                      : Colors.cyanAccent.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Text(
-                  (item.isCompleted && _project.spaces.isNotEmpty)
-                      ? 'CALIBRATED (${_project.spaces.length} ROOMS) • VIEW / EDIT ➔'
-                      : (_project.blueprintImagePath != null && _project.blueprintImagePath!.isNotEmpty
-                          ? 'CALIBRATE ROOMS ➔'
-                          : 'UPLOAD PLAN ➔'),
-                  style: TextStyle(
-                    color: (item.isCompleted && _project.spaces.isNotEmpty)
-                        ? BanaagTheme.successGreen
-                        : Colors.cyanAccent,
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: (item.isCompleted && _project.spaces.isNotEmpty)
+                          ? BanaagTheme.successGreen.withValues(alpha: 0.15)
+                          : Colors.cyanAccent.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(
+                        color: (item.isCompleted && _project.spaces.isNotEmpty)
+                            ? BanaagTheme.successGreen.withValues(alpha: 0.4)
+                            : Colors.cyanAccent.withValues(alpha: 0.4),
+                        width: 0.8,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          (item.isCompleted && _project.spaces.isNotEmpty)
+                              ? 'CALIBRATED (${_project.spaces.length} ROOMS) • VIEW / EDIT'
+                              : (_project.blueprintImagePath != null && _project.blueprintImagePath!.isNotEmpty
+                                  ? 'CALIBRATE ROOMS'
+                                  : 'UPLOAD PLAN'),
+                          style: TextStyle(
+                            color: (item.isCompleted && _project.spaces.isNotEmpty)
+                                ? BanaagTheme.successGreen
+                                : Colors.cyanAccent,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 0.4,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Icon(
+                          Icons.arrow_forward_rounded,
+                          color: (item.isCompleted && _project.spaces.isNotEmpty)
+                              ? BanaagTheme.successGreen
+                              : Colors.cyanAccent,
+                          size: 12,
+                        ),
+                      ],
+                    ),
                   ),
-                ),
+                  GestureDetector(
+                    onTap: () => DrawingGuidelinesModal.show(context),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: BanaagTheme.primaryAmber.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: BanaagTheme.primaryAmber.withValues(alpha: 0.5), width: 0.8),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.menu_book_rounded, color: BanaagTheme.primaryAmber, size: 12),
+                          SizedBox(width: 4),
+                          Text('DRAWING GUIDE', style: TextStyle(color: BanaagTheme.primaryAmber, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 0.4)),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           if (item.id == 'c1' && isItemGated && !isLocked)
