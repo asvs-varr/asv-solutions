@@ -487,7 +487,7 @@
         width: 100%;
         gap: 12px;
       }
-      .btn-download-banaag, .btn-download-plusfocus, .btn-specs-banaag {
+      .btn-download-banaag, .btn-download-plusfocus, .btn-download-cashflow, .btn-specs-banaag {
         width: 100%;
         text-align: center;
         box-sizing: border-box;
@@ -501,6 +501,44 @@
         grid-template-columns: 1fr;
       }
     }
+  
+    .cashflow-showcase {
+      background: radial-gradient(circle at center, #0a1f18 0%, #0a0c10 70%);
+      border-bottom: 1px solid #103828;
+      padding: 5rem 1.5rem;
+    }
+    .showcase-text .tag.emerald-tag {
+      background: rgba(16, 185, 129, 0.15);
+      border: 1px solid #10b981;
+      color: #10b981;
+    }
+    .feature-icon.emerald-icon {
+      color: #10b981;
+      border-color: rgba(16, 185, 129, 0.4);
+      background: rgba(16, 185, 129, 0.1);
+    }
+    .btn-download-cashflow {
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+      color: #000 !important;
+      font-weight: 800;
+      padding: 0.85rem 1.6rem;
+      border-radius: 8px;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.95rem;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .btn-download-cashflow:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 0 25px rgba(16, 185, 129, 0.4);
+    }
+    .showcase-img.cashflow-frame img {
+      box-shadow: 0 20px 40px rgba(0,0,0,0.8), 0 0 50px rgba(16, 185, 129, 0.2);
+      border: 2px solid #103828;
+    }
+
   </style>
 </head>
 <body>
@@ -606,7 +644,7 @@
     <div class="showcase-container reverse-row">
       <div class="showcase-text">
         <div class="tag cyan-tag">PRODUCTIVITY & ROUTINE ENGINE</div>
-        <h2>PlusFocus: Deep Work & Routine Director</h2>
+        <h2>+ focus: Deep Work & Routine Director</h2>
         <p>A precision-engineered, time-bound agenda manager designed for zero-distraction deep work, Pomodoro task execution, and automated transition buffering. Built to eliminate cognitive friction with military-grade offline native alarm clocks and full-screen transition modals.</p>
         
         <ul class="feature-list">
@@ -634,19 +672,65 @@
 
         <div class="banaag-cta-group">
           <a href="plusfocus.apk" class="btn-download-plusfocus" download>
-            <span>📥</span> Download PlusFocus APK (v1.0.3)
+            <span>📥</span> Download + focus APK (v1.0.3)
           </a>
           <a href="#verification" class="btn-specs-banaag">Privacy & Specifications</a>
         </div>
       </div>
 
       <div class="showcase-img plusfocus-frame">
-        <img src="plusfocus_screen.png" alt="PlusFocus Mobile App - Dark Obsidian Theme">
+        <img src="plusfocus_screen.png" alt="+ focus Mobile App - Dark Obsidian Theme">
       </div>
     </div>
   </section>
 
   <!-- Software Showcase: SINAG (Solar Design Director) -->
+  
+  <!-- Software Showcase: cash · flow · save -->
+  <section class="cashflow-showcase">
+    <div class="showcase-container">
+      <div class="showcase-text">
+        <div class="tag emerald-tag">ULTRA-FAST PERSONAL & BUSINESS LEDGER</div>
+        <h2>cash &middot; flow &middot; save</h2>
+        <p>A zero-friction, lightning-fast cash ledger and due manager designed for micro-entrepreneurs, contractors, and individuals who want instant expense recording without unnecessary complexity or accounting clutter.</p>
+        
+        <ul class="feature-list">
+          <li>
+            <span class="feature-icon emerald-icon">&#10003;</span>
+            <div><strong>Instant Numpad & Quick Entry</strong>: Large, tactile numeric pad with preset amount buttons to record expenses or income in under 3 seconds.</div>
+          </li>
+          <li>
+            <span class="feature-icon emerald-icon">&#10003;</span>
+            <div><strong>Multi-Account & Mode of Payment</strong>: Seamlessly track and switch between Cash, GCash, Maya, and Bank accounts with single-tap calibration.</div>
+          </li>
+          <li>
+            <span class="feature-icon emerald-icon">&#10003;</span>
+            <div><strong>Collapsible Sets & Due Scheduling</strong>: Group related payees or regular obligations (e.g., Laniton, Store, Monthly Bills) with automated due reminders.</div>
+          </li>
+          <li>
+            <span class="feature-icon emerald-icon">&#10003;</span>
+            <div><strong>100% Offline-First with Cloud Backup</strong>: Instant offline SQLite local caching with automated Google Firebase Firestore cloud synchronization.</div>
+          </li>
+          <li>
+            <span class="feature-icon emerald-icon">&#10003;</span>
+            <div><strong>Strict Privacy & Zero Analytics</strong>: Your financial transaction history belongs strictly to you with bank-grade local security.</div>
+          </li>
+        </ul>
+
+        <div class="banaag-cta-group">
+          <a href="cashflowsave.apk" class="btn-download-cashflow" download>
+            <span>📥</span> Download cash &middot; flow &middot; save APK
+          </a>
+          <a href="mailto:mr.arvin03@gmail.com?subject=Inquiry%3A%20cash%20flow%20save%20App" class="btn-specs-banaag">Request Demo / Inquire</a>
+        </div>
+      </div>
+
+      <div class="showcase-img cashflow-frame">
+        <img src="cashflowsave_icon.png" alt="cash flow save - Mobile App Icon" style="max-width: 260px; border-radius: 36px; padding: 1.5rem; background: #0c1310;">
+      </div>
+    </div>
+  </section>
+
   <section class="sinag-showcase">
     <div class="showcase-container">
       <div class="showcase-text">
