@@ -539,6 +539,303 @@
       border: 2px solid #103828;
     }
 
+  
+    /* Phone Mockup & Auto-Cycling Carousel for cash · flow · save */
+    .phone-mockup-wrapper {
+      position: relative;
+      width: 320px;
+      height: 640px;
+      background: #090e0c;
+      border-radius: 44px;
+      border: 4px solid #1a2e24;
+      box-shadow: 0 25px 60px rgba(0, 0, 0, 0.9), 0 0 50px rgba(16, 185, 129, 0.22);
+      overflow: hidden;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+    }
+    .phone-notch {
+      width: 120px;
+      height: 24px;
+      background: #050a08;
+      position: absolute;
+      top: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      border-bottom-left-radius: 14px;
+      border-bottom-right-radius: 14px;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+    .notch-camera {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #111e17;
+      border: 1px solid #1f3a2c;
+    }
+    .notch-speaker {
+      width: 36px;
+      height: 4px;
+      border-radius: 3px;
+      background: #13241b;
+    }
+    .phone-screen-container {
+      width: 100%;
+      height: 100%;
+      position: relative;
+      overflow: hidden;
+      background: #0a0f0d;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+    .carousel-slide {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 0.6s cubic-bezier(0.4, 0, 0.2, 1), transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+      transform: scale(0.97);
+      display: flex;
+      flex-direction: column;
+      box-sizing: border-box;
+      padding: 34px 18px 24px;
+      pointer-events: none;
+    }
+    .carousel-slide.active {
+      opacity: 1;
+      visibility: visible;
+      transform: scale(1);
+      pointer-events: auto;
+    }
+    .slide-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: #10b981;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 12px;
+      background: rgba(16, 185, 129, 0.12);
+      padding: 4px 10px;
+      border-radius: 20px;
+      align-self: flex-start;
+      border: 1px solid rgba(16, 185, 129, 0.25);
+    }
+    .screen-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 14px;
+    }
+    .screen-title {
+      font-size: 1.15rem;
+      font-weight: 800;
+      color: #f0fdf4;
+    }
+    .screen-balance-pill {
+      background: rgba(16, 185, 129, 0.15);
+      border: 1px solid #10b981;
+      color: #34d399;
+      font-size: 0.75rem;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 12px;
+    }
+    
+    /* Screen 1: Numpad Quick Entry */
+    .amount-display {
+      background: #0f1814;
+      border: 1px solid #1a3325;
+      border-radius: 16px;
+      padding: 12px 14px;
+      text-align: center;
+      margin-bottom: 12px;
+    }
+    .amount-label {
+      font-size: 0.7rem;
+      color: #6ee7b7;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .amount-val {
+      font-size: 1.85rem;
+      font-weight: 900;
+      color: #ffffff;
+      margin: 2px 0;
+    }
+    .preset-chips {
+      display: flex;
+      gap: 6px;
+      justify-content: center;
+      margin-bottom: 12px;
+    }
+    .chip {
+      background: #14241c;
+      border: 1px solid #1e3a2b;
+      color: #a7f3d0;
+      font-size: 0.75rem;
+      font-weight: 700;
+      padding: 4px 10px;
+      border-radius: 10px;
+    }
+    .chip.active {
+      background: #10b981;
+      color: #000;
+      border-color: #10b981;
+    }
+    .numpad-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .num-btn {
+      background: #111d17;
+      border: 1px solid #1b3326;
+      border-radius: 12px;
+      color: #f0fdf4;
+      font-size: 1.15rem;
+      font-weight: 700;
+      padding: 9px 0;
+      text-align: center;
+    }
+    .btn-save-instant {
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+      color: #000;
+      font-weight: 800;
+      font-size: 0.92rem;
+      padding: 11px;
+      border-radius: 14px;
+      text-align: center;
+      box-shadow: 0 4px 16px rgba(16, 185, 129, 0.4);
+    }
+
+    /* Screen 2: Due Schedules & Sets */
+    .schedule-set-card {
+      background: #0f1814;
+      border: 1px solid #1b3326;
+      border-radius: 14px;
+      padding: 10px 12px;
+      margin-bottom: 10px;
+    }
+    .set-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+      font-size: 0.8rem;
+      font-weight: 800;
+      color: #34d399;
+    }
+    .due-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 7px 0;
+      border-bottom: 1px solid #14241c;
+    }
+    .due-item:last-child { border-bottom: none; }
+    .due-title { font-size: 0.82rem; font-weight: 700; color: #f0fdf4; }
+    .due-meta { font-size: 0.68rem; color: #6ee7b7; }
+    .due-amt { font-size: 0.85rem; font-weight: 800; color: #f87171; text-align: right; }
+    .due-status-chip {
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      color: #f87171;
+      font-size: 0.62rem;
+      font-weight: 700;
+      padding: 1px 6px;
+      border-radius: 6px;
+      display: inline-block;
+    }
+
+    /* Screen 3: Multi-Account Wallets */
+    .account-card-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 9px;
+      margin-bottom: 14px;
+    }
+    .acc-tile {
+      background: #0f1814;
+      border: 1px solid #1b3326;
+      border-radius: 14px;
+      padding: 12px;
+    }
+    .acc-tile.primary {
+      border-color: #10b981;
+      background: linear-gradient(145deg, #12241b 0%, #0c1611 100%);
+    }
+    .acc-type { font-size: 0.68rem; font-weight: 700; color: #6ee7b7; text-transform: uppercase; }
+    .acc-bal { font-size: 1.1rem; font-weight: 900; color: #ffffff; margin-top: 4px; }
+    .acc-tag { font-size: 0.62rem; color: #34d399; margin-top: 2px; }
+
+    /* Screen 4: Transaction Ledger History */
+    .history-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .tx-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #0f1814;
+      border: 1px solid #162a1f;
+      border-radius: 12px;
+      padding: 9px 12px;
+    }
+    .tx-left { display: flex; align-items: center; gap: 9px; }
+    .tx-icon {
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.85rem;
+    }
+    .tx-icon.in { background: rgba(16, 185, 129, 0.2); color: #34d399; }
+    .tx-icon.out { background: rgba(239, 68, 68, 0.2); color: #f87171; }
+    .tx-desc { font-size: 0.8rem; font-weight: 700; color: #f0fdf4; }
+    .tx-sub { font-size: 0.65rem; color: #6ee7b7; }
+    .tx-right { text-align: right; }
+    .tx-val { font-size: 0.85rem; font-weight: 800; }
+    .tx-val.in { color: #34d399; }
+    .tx-val.out { color: #f87171; }
+    .tx-acc { font-size: 0.65rem; color: #6ee7b7; }
+
+    /* Carousel Dot Navigation */
+    .carousel-indicators {
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+      margin-top: 16px;
+    }
+    .carousel-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.2);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+    .carousel-dot.active {
+      background: #10b981;
+      width: 26px;
+      border-radius: 10px;
+      box-shadow: 0 0 10px rgba(16, 185, 129, 0.6);
+    }
+
   </style>
 </head>
 <body>
@@ -725,8 +1022,198 @@
         </div>
       </div>
 
-      <div class="showcase-img cashflow-frame">
-        <img src="cashflowsave_icon.png" alt="cash flow save - Mobile App Icon" style="max-width: 260px; border-radius: 36px; padding: 1.5rem; background: #0c1310;">
+            <div class="showcase-img cashflow-frame" style="flex-direction: column; align-items: center;">
+        <div class="phone-mockup-wrapper">
+          <div class="phone-notch">
+            <div class="notch-speaker"></div>
+            <div class="notch-camera"></div>
+          </div>
+          <div class="phone-screen-container" id="cashflowPhoneScreen">
+            
+            <!-- Slide 1: Quick Numpad Entry -->
+            <div class="carousel-slide active" data-slide="0">
+              <div class="slide-badge">⚡ Ultra-Fast Cash In/Out</div>
+              <div class="screen-header">
+                <div class="screen-title">Quick Entry</div>
+                <div class="screen-balance-pill">Wallet: ₱68,250</div>
+              </div>
+              <div class="amount-display">
+                <div class="amount-label">Ilalagay na Halaga</div>
+                <div class="amount-val">₱ 1,500.00</div>
+                <div style="font-size: 0.72rem; color: #34d399; font-weight: 600;">Expense &bull; Groceries & Supplies</div>
+              </div>
+              <div class="preset-chips">
+                <div class="chip">₱100</div>
+                <div class="chip">₱500</div>
+                <div class="chip active">₱1,500</div>
+                <div class="chip">₱2,000</div>
+              </div>
+              <div class="numpad-grid">
+                <div class="num-btn">1</div><div class="num-btn">2</div><div class="num-btn">3</div>
+                <div class="num-btn">4</div><div class="num-btn">5</div><div class="num-btn">6</div>
+                <div class="num-btn">7</div><div class="num-btn">8</div><div class="num-btn">9</div>
+                <div class="num-btn">.</div><div class="num-btn">0</div><div class="num-btn">&#9003;</div>
+              </div>
+              <div class="btn-save-instant">&#10004; I-Save Agad (2s)</div>
+            </div>
+
+            <!-- Slide 2: Due Schedules & Collapsible Sets -->
+            <div class="carousel-slide" data-slide="1">
+              <div class="slide-badge">📋 Due Checklist & Sets</div>
+              <div class="screen-header">
+                <div class="screen-title">Schedules & Dues</div>
+                <div class="screen-balance-pill">3 Upcoming</div>
+              </div>
+              <div class="schedule-set-card">
+                <div class="set-header">
+                  <span>📁 Sari-Sari Store & Utilities</span>
+                  <span style="font-size: 0.68rem; color: #a7f3d0;">Collapse &#9652;</span>
+                </div>
+                <div class="due-item">
+                  <div>
+                    <div class="due-title">Electric Bill (CANORECO)</div>
+                    <div class="due-meta">Due: Nov 15 &bull; <span class="due-status-chip">3 Days Left</span></div>
+                  </div>
+                  <div class="due-amt">₱ 3,450.00</div>
+                </div>
+                <div class="due-item">
+                  <div>
+                    <div class="due-title">Water Utility (San Lorenzo)</div>
+                    <div class="due-meta">Due: Nov 18 &bull; Mode: Cash</div>
+                  </div>
+                  <div class="due-amt">₱ 620.00</div>
+                </div>
+              </div>
+              <div class="schedule-set-card">
+                <div class="set-header">
+                  <span>📁 Project Laniton Supplier</span>
+                  <span style="font-size: 0.68rem; color: #a7f3d0;">Collapse &#9652;</span>
+                </div>
+                <div class="due-item">
+                  <div>
+                    <div class="due-title">Hardware Materials Due</div>
+                    <div class="due-meta">Due: Nov 20 &bull; Mode: GCash</div>
+                  </div>
+                  <div class="due-amt">₱ 12,800.00</div>
+                </div>
+              </div>
+              <div style="margin-top: auto; font-size: 0.72rem; text-align: center; color: #6ee7b7; background: #0f1814; padding: 7px; border-radius: 10px; border: 1px solid #1a3325;">
+                🔔 Pop-up alert confirms exact mode of payment upon settling
+              </div>
+            </div>
+
+            <!-- Slide 3: Multi-Account Wallets -->
+            <div class="carousel-slide" data-slide="2">
+              <div class="slide-badge">💳 Multi-Account Calibration</div>
+              <div class="screen-header">
+                <div class="screen-title">Accounts Ledger</div>
+                <div class="screen-balance-pill">Total: ₱68,250</div>
+              </div>
+              <div class="account-card-grid">
+                <div class="acc-tile primary">
+                  <div class="acc-type">💵 Cash on Hand</div>
+                  <div class="acc-bal">₱ 14,250</div>
+                  <div class="acc-tag">&#10004; Default Wallet</div>
+                </div>
+                <div class="acc-tile">
+                  <div class="acc-type">🔵 GCash Wallet</div>
+                  <div class="acc-bal">₱ 8,600</div>
+                  <div class="acc-tag">Connected</div>
+                </div>
+                <div class="acc-tile">
+                  <div class="acc-type">🟢 Maya Account</div>
+                  <div class="acc-bal">₱ 5,400</div>
+                  <div class="acc-tag">Connected</div>
+                </div>
+                <div class="acc-tile">
+                  <div class="acc-type">🏦 Bank Savings</div>
+                  <div class="acc-bal">₱ 40,000</div>
+                  <div class="acc-tag">Personal / BDO</div>
+                </div>
+              </div>
+              <div style="background: #0f1814; border: 1px solid #1a3325; border-radius: 14px; padding: 12px; margin-top: auto;">
+                <div style="font-size: 0.75rem; font-weight: 700; color: #f0fdf4; margin-bottom: 4px;">⚡ 1-Tap Account Switch</div>
+                <div style="font-size: 0.68rem; color: #6ee7b7; line-height: 1.4;">Bawat transaksyon, puwedeng i-divert sa tamang pitaka para laging balanse ang Cash at Digital wallets mo nang walang kalat.</div>
+              </div>
+            </div>
+
+            <!-- Slide 4: Filtered History & Balance Overview -->
+            <div class="carousel-slide" data-slide="3">
+              <div class="slide-badge">📊 Transparent Audit Ledger</div>
+              <div class="screen-header">
+                <div class="screen-title">Recent History</div>
+                <div class="screen-balance-pill">This Month</div>
+              </div>
+              <div class="history-list">
+                <div class="tx-row">
+                  <div class="tx-left">
+                    <div class="tx-icon in">&#8595;</div>
+                    <div>
+                      <div class="tx-desc">CCTV Labor Payment</div>
+                      <div class="tx-sub">Today &bull; GCash &bull; Income</div>
+                    </div>
+                  </div>
+                  <div class="tx-right">
+                    <div class="tx-val in">+₱ 4,500.00</div>
+                    <div class="tx-acc">Client P.</div>
+                  </div>
+                </div>
+                <div class="tx-row">
+                  <div class="tx-left">
+                    <div class="tx-icon out">&#8593;</div>
+                    <div>
+                      <div class="tx-desc">Gasoline & Transit</div>
+                      <div class="tx-sub">Today &bull; Cash &bull; Expense</div>
+                    </div>
+                  </div>
+                  <div class="tx-right">
+                    <div class="tx-val out">-₱ 350.00</div>
+                    <div class="tx-acc">Laniton Trip</div>
+                  </div>
+                </div>
+                <div class="tx-row">
+                  <div class="tx-left">
+                    <div class="tx-icon in">&#8595;</div>
+                    <div>
+                      <div class="tx-desc">Store Retail Sales</div>
+                      <div class="tx-sub">Yesterday &bull; Cash</div>
+                    </div>
+                  </div>
+                  <div class="tx-right">
+                    <div class="tx-val in">+₱ 2,150.00</div>
+                    <div class="tx-acc">Daily POS</div>
+                  </div>
+                </div>
+                <div class="tx-row">
+                  <div class="tx-left">
+                    <div class="tx-icon out">&#8593;</div>
+                    <div>
+                      <div class="tx-desc">Office Coffee & Supplies</div>
+                      <div class="tx-sub">Nov 04 &bull; Maya</div>
+                    </div>
+                  </div>
+                  <div class="tx-right">
+                    <div class="tx-val out">-₱ 280.00</div>
+                    <div class="tx-acc">Snacks</div>
+                  </div>
+                </div>
+              </div>
+              <div style="margin-top: auto; display: flex; justify-content: space-between; align-items: center; background: #0c1611; border: 1px solid #142a1d; padding: 8px 12px; border-radius: 12px; font-size: 0.72rem;">
+                <span style="color: #6ee7b7;">Net Flow: <strong style="color:#34d399;">+₱ 6,020.00</strong></span>
+                <span style="color: #a7f3d0; font-weight: 700;">Export CSV &bull; PDF</span>
+              </div>
+            </div>
+
+          </div>
+        </div>
+        
+        <!-- Interactive Indicators -->
+        <div class="carousel-indicators" id="cashflowIndicators">
+          <div class="carousel-dot active" onclick="setCashflowSlide(0)"></div>
+          <div class="carousel-dot" onclick="setCashflowSlide(1)"></div>
+          <div class="carousel-dot" onclick="setCashflowSlide(2)"></div>
+          <div class="carousel-dot" onclick="setCashflowSlide(3)"></div>
+        </div>
       </div>
     </div>
   </section>
@@ -824,6 +1311,56 @@
     <p style="margin-top: 0.5rem; font-size: 0.8rem;">DTI Business Name No. 8285425 | Philippines</p>
     <p style="margin-top: 0.5rem; font-size: 0.8rem;"><a href="privacy.html">Privacy Policy</a> | <a href="terms.html">Terms of Service</a></p>
   </footer>
+
+
+  <script>
+    // Auto-Cycling Carousel for cash · flow · save
+    let currentCashflowSlide = 0;
+    const totalCashflowSlides = 4;
+    let cashflowAutoTimer = null;
+
+    function showCashflowSlide(index) {
+      const slides = document.querySelectorAll('#cashflowPhoneScreen .carousel-slide');
+      const dots = document.querySelectorAll('#cashflowIndicators .carousel-dot');
+      if (!slides.length) return;
+
+      slides.forEach((s, i) => {
+        if (i === index) {
+          s.classList.add('active');
+        } else {
+          s.classList.remove('active');
+        }
+      });
+
+      dots.forEach((d, i) => {
+        if (i === index) {
+          d.classList.add('active');
+        } else {
+          d.classList.remove('active');
+        }
+      });
+      currentCashflowSlide = index;
+    }
+
+    function setCashflowSlide(index) {
+      showCashflowSlide(index);
+      resetCashflowTimer();
+    }
+
+    function nextCashflowSlide() {
+      const nextIndex = (currentCashflowSlide + 1) % totalCashflowSlides;
+      showCashflowSlide(nextIndex);
+    }
+
+    function resetCashflowTimer() {
+      if (cashflowAutoTimer) clearInterval(cashflowAutoTimer);
+      cashflowAutoTimer = setInterval(nextCashflowSlide, 3500);
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      resetCashflowTimer();
+    });
+  </script>
 
 </body>
 </html>
