@@ -144,7 +144,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          'BANAAG (Early Access) • Beta Engineering Preview v1.0.9',
+                          'BANAAG (Early Access) • Beta Engineering Preview v1.0.10',
                           style: TextStyle(
                             color: BanaagTheme.primaryAmber.withValues(alpha: 0.95),
                             fontSize: 11,

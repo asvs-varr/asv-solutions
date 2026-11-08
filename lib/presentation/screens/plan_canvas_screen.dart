@@ -376,7 +376,10 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
       // Residential structural corner/post locations
       columns.addAll(BlueprintSnapEngine.residentialWallCorners.take(4));
     } else {
-      // Custom Upload / Sketch Blueprint: Do not inject template CAD columns
+      // Custom Upload / Sketch Blueprint: Include grid corners as structural snap centers
+      if (_sketchModel != null) {
+        columns.addAll(_sketchModel!.getAllGridCorners());
+      }
     }
     // Merge user-tagged or smart-detected columns for custom plans
     columns.addAll(_customProjectColumns);
@@ -392,9 +395,9 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
     } else if (_isResidentialPlan) {
       rawCorners.addAll(BlueprintSnapEngine.residentialWallCorners);
     } else {
-      // Custom Upload / Sketch Blueprint: In Step 0 Sketch Recreation, use only clean Ortho Handles (zero random ghost dots!)
-      if (_stage1SubStep == 0 && _sketchModel != null) {
-        return const [];
+      // Custom Upload / Sketch Blueprint: Include all grid corners and vision corners
+      if (_sketchModel != null) {
+        rawCorners.addAll(_sketchModel!.getAllGridCorners());
       }
       _roomPolygons.forEach((_, poly) {
         rawCorners.addAll(poly);
@@ -2835,12 +2838,18 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
       _hasMovedSignificantly = true;
     }
 
-    // 0. Dragging Recreated Sketch 90-Degree Ortho Handle (Step 0 Custom Sketch)
+    // 0. Dragging Recreated Sketch 90-Degree Ortho Handle with Magnetic Snapping (Step 0 Custom Sketch)
     if (_canvasStage == 1 && _stage1SubStep == 0 && _activeDraggingSketchHandle != null && _sketchModel != null) {
       Offset targetPos = newPos;
-      for (final col in _customProjectColumns) {
-        if ((col - newPos).distance <= 22.0) {
-          targetPos = col;
+      final List<Offset> snapTargets = [
+        ..._activeStructuralColumns,
+        ..._activeArchitecturalCorners,
+        ..._dynamicVisionCorners,
+        ..._customProjectColumns,
+      ];
+      for (final target in snapTargets) {
+        if ((target - newPos).distance <= 24.0) {
+          targetPos = target;
           break;
         }
       }
@@ -5987,8 +5996,8 @@ class _PlanCanvasScreenState extends State<PlanCanvasScreen> {
                             ),
                             label: Text(
                               isLastWall
-                                  ? '⚡ Confirm ${activeWp.shortCode} (${activeWp.meters.toStringAsFixed(1)}m) → Generate CAD'
-                                  : '✅ Tama: ${activeWp.shortCode} = ${activeWp.meters.toStringAsFixed(1)}m → Next (${wIdx + 2}/${prompts.length})',
+                                  ? '⚡ Confirm ${activeWp.shortCode} (${activeWp.meters.toStringAsFixed(1)}m${(activeWp.rawSourceText != null && activeWp.rawSourceText!.isNotEmpty) ? " • Plan: ${activeWp.rawSourceText}" : ""}) → Generate CAD'
+                                  : '✅ Tama: ${activeWp.shortCode} = ${activeWp.meters.toStringAsFixed(1)}m${(activeWp.rawSourceText != null && activeWp.rawSourceText!.isNotEmpty) ? " (Plan: ${activeWp.rawSourceText})" : ""} → Next (${wIdx + 2}/${prompts.length})',
                               style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11.0),
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -9252,10 +9261,44 @@ class CanvasPainter extends CustomPainter {
       );
     }
 
-    // 2. Draw Custom Long-Press Snap Points (if user added any)
-    for (final col in activeStructuralColumns) {
-      canvas.drawCircle(col, 8.0, Paint()..color = Colors.cyanAccent..style = PaintingStyle.stroke..strokeWidth = 2.0);
-      canvas.drawCircle(col, 2.5, Paint()..color = Colors.cyanAccent);
+    // 2. Draw Always-Visible Subtle Cyan Snap Reticles (Columns, Wall Corners & Grid Points)
+    final List<Offset> snapReticles = [
+      ...activeStructuralColumns,
+      ...activeArchitecturalCorners,
+    ];
+    for (final pt in snapReticles) {
+      // Subtle target halo ring
+      canvas.drawCircle(
+        pt,
+        7.5,
+        Paint()
+          ..color = Colors.cyanAccent.withValues(alpha: 0.35)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.0,
+      );
+      // Crisp center snap dot
+      canvas.drawCircle(
+        pt,
+        2.2,
+        Paint()
+          ..color = Colors.cyanAccent.withValues(alpha: 0.85)
+          ..style = PaintingStyle.fill,
+      );
+      // Micro crosshair ticks
+      canvas.drawLine(
+        pt + const Offset(-5, 0),
+        pt + const Offset(5, 0),
+        Paint()
+          ..color = Colors.cyanAccent.withValues(alpha: 0.55)
+          ..strokeWidth = 0.8,
+      );
+      canvas.drawLine(
+        pt + const Offset(0, -5),
+        pt + const Offset(0, 5),
+        Paint()
+          ..color = Colors.cyanAccent.withValues(alpha: 0.55)
+          ..strokeWidth = 0.8,
+      );
     }
 
     // 3. Draw 8 Draggable 90-Degree Ortho Corner Grips ([ ])

@@ -26,6 +26,7 @@ class SketchWallPrompt {
   final int endCellIndex;
   Offset startCanvas;
   Offset endCanvas;
+  String? rawSourceText;
 
   SketchWallPrompt({
     required this.id,
@@ -41,6 +42,7 @@ class SketchWallPrompt {
     this.endCellIndex = 1,
     this.startCanvas = Offset.zero,
     this.endCanvas = Offset.zero,
+    this.rawSourceText,
   });
 
   Offset get midPoint => Offset(
@@ -93,6 +95,8 @@ class RecreatedSketchModel {
   double _hRightMeters;
   bool _wTopConfirmed;
   bool _hRightConfirmed;
+  String? wTopRawSource;
+  String? hRightRawSource;
 
   RecreatedSketchModel({
     required this.outerBoxCanvas,
@@ -110,6 +114,8 @@ class RecreatedSketchModel {
     double initialHRightMeters = 5.0,
     bool wTopConfirmed = false,
     bool hRightConfirmed = false,
+    this.wTopRawSource,
+    this.hRightRawSource,
   })  : xRatios = xRatios ?? [0.0, topStepXRatio.clamp(0.15, 0.80), lowerSplitXRatio.clamp(0.25, 0.90), 1.0],
         yRatios = yRatios ?? [0.0, stepYRatio.clamp(0.12, 0.85), 1.0],
         vWalls = vWalls ??
@@ -144,6 +150,20 @@ class RecreatedSketchModel {
       }
       rebuildWallPrompts(preserveConfirmed: true);
     }
+  }
+
+  /// Returns all 90-degree grid intersections across the canvas bounding box
+  List<Offset> getAllGridCorners() {
+    final List<Offset> corners = [];
+    for (final yr in yRatios) {
+      for (final xr in xRatios) {
+        corners.add(Offset(
+          outerBoxCanvas.left + xr * outerBoxCanvas.width,
+          outerBoxCanvas.top + yr * outerBoxCanvas.height,
+        ));
+      }
+    }
+    return corners;
   }
 
   static RecreatedSketchModel createDemoSampleModel({Rect? canvasRect}) {
@@ -408,20 +428,26 @@ class RecreatedSketchModel {
     _ensureValidGridConsistency();
     computeRoomGridLoops(pruneDangling: true);
 
-    final Map<String, (double, bool)> prevConfirmed = {};
+    final Map<String, (double, bool, String?)> prevConfirmed = {};
     if (preserveConfirmed) {
       for (final wp in wallPrompts) {
         if (wp.isConfirmed) {
-          prevConfirmed[wp.id] = (wp.meters, true);
+          prevConfirmed[wp.id] = (wp.meters, true, wp.rawSourceText);
         }
       }
       if (prevConfirmed.containsKey('w_top')) {
         _wTopMeters = prevConfirmed['w_top']!.$1;
         _wTopConfirmed = true;
+        if (prevConfirmed['w_top']!.$3 != null) {
+          wTopRawSource = prevConfirmed['w_top']!.$3;
+        }
       }
       if (prevConfirmed.containsKey('h_right')) {
         _hRightMeters = prevConfirmed['h_right']!.$1;
         _hRightConfirmed = true;
+        if (prevConfirmed['h_right']!.$3 != null) {
+          hRightRawSource = prevConfirmed['h_right']!.$3;
+        }
       }
     }
 
@@ -443,6 +469,7 @@ class RecreatedSketchModel {
         gridLineIndex: 0,
         startCellIndex: 0,
         endCellIndex: C,
+        rawSourceText: wTopRawSource,
       ),
     );
 
@@ -464,6 +491,7 @@ class RecreatedSketchModel {
         gridLineIndex: C,
         startCellIndex: 0,
         endCellIndex: R,
+        rawSourceText: hRightRawSource,
       ),
     );
 
@@ -1217,6 +1245,8 @@ class SketchShapeRecreator {
 
     // Default proportional aspect ratio from the detected outer box on the paper
     final double boxAspect = (detectedBox.height / math.max(40.0, detectedBox.width)).clamp(0.5, 2.0);
+    String? topRawSource;
+    String? rightRawSource;
 
     // Run offline ML Kit OCR to spatially match handwritten numbers to their corresponding walls
     try {
@@ -1226,21 +1256,34 @@ class SketchShapeRecreator {
       await recognizer.close();
 
       final numRegex = RegExp(r'(\d+(?:[.,]\d+)?)\s*m?\b', caseSensitive: false);
-      final List<({double val, double canvasX, double canvasY})> spatialNums = [];
+      final List<({double val, String rawSource, double canvasX, double canvasY})> spatialNums = [];
 
       for (final block in recognized.blocks) {
         for (final line in block.lines) {
           final raw = line.text.trim();
           double? parsedVal;
+          String? rawSource;
           if (RegExp(r'^[Iil1|]\s*m$', caseSensitive: false).hasMatch(raw)) {
             parsedVal = 1.0;
+            rawSource = '1m';
           } else {
             final match = numRegex.firstMatch(raw);
             if (match != null) {
-              parsedVal = double.tryParse(match.group(1)!.replaceAll(',', '.'));
+              final numStr = match.group(1)!.replaceAll(',', '.');
+              final double? rawNum = double.tryParse(numStr);
+              if (rawNum != null) {
+                if (rawNum >= 600.0 && rawNum <= 60000.0) {
+                  // Architectural CAD Millimeters -> Convert to Meters (e.g. 4000 -> 4.0, 15500 -> 15.5)
+                  parsedVal = double.parse((rawNum / 1000.0).toStringAsFixed(2));
+                  rawSource = match.group(1)!;
+                } else if (rawNum >= 0.4 && rawNum <= 60.0) {
+                  parsedVal = double.parse(rawNum.toStringAsFixed(1));
+                  rawSource = raw.contains('m') ? raw : '${match.group(1)}m';
+                }
+              }
             }
           }
-          if (parsedVal != null && parsedVal >= 0.4 && parsedVal <= 30.0) {
+          if (parsedVal != null && parsedVal >= 0.4 && parsedVal <= 60.0) {
             if (!ocrNums.contains(parsedVal)) {
               ocrNums.add(parsedVal);
             }
@@ -1249,7 +1292,7 @@ class SketchShapeRecreator {
             final double uY = ((bb.top + bb.bottom) / 2.0) / math.max(1, fullImgH);
             final double cx = renderedImageRect.left + uX * renderedImageRect.width;
             final double cy = renderedImageRect.top + uY * renderedImageRect.height;
-            spatialNums.add((val: parsedVal, canvasX: cx, canvasY: cy));
+            spatialNums.add((val: parsedVal, rawSource: rawSource ?? '', canvasX: cx, canvasY: cy));
           }
         }
       }
@@ -1259,17 +1302,19 @@ class SketchShapeRecreator {
         double? topWallNum;
         double? rightWallNum;
         for (final sn in spatialNums) {
-          if (sn.val >= 2.5) {
-            final bool isNearTop = sn.canvasY <= detectedBox.top + detectedBox.height * 0.22 &&
-                sn.canvasX >= detectedBox.left - 60.0 &&
-                sn.canvasX <= detectedBox.right + 60.0;
-            final bool isNearRight = sn.canvasX >= detectedBox.right - detectedBox.width * 0.18 &&
+          if (sn.val >= 2.0) {
+            final bool isNearTop = sn.canvasY <= detectedBox.top + detectedBox.height * 0.28 &&
+                sn.canvasX >= detectedBox.left - 80.0 &&
+                sn.canvasX <= detectedBox.right + 80.0;
+            final bool isNearRight = sn.canvasX >= detectedBox.right - detectedBox.width * 0.22 &&
                 sn.canvasY >= detectedBox.top &&
-                sn.canvasY <= detectedBox.bottom + 40.0;
+                sn.canvasY <= detectedBox.bottom + 60.0;
             if (isNearTop && topWallNum == null) {
               topWallNum = sn.val;
+              topRawSource = sn.rawSource;
             } else if (isNearRight && rightWallNum == null) {
               rightWallNum = sn.val;
+              rightRawSource = sn.rawSource;
             }
           }
         }
@@ -1279,19 +1324,19 @@ class SketchShapeRecreator {
           hRightGuess = rightWallNum;
           hasExplicitRightDim = true;
         } else if (topWallNum != null) {
-          // E.g. '5m' written above the top wall only -> W1 = 5.0m, L1 estimated proportionally from box aspect!
+          // E.g. '5m' or '4000' written above the top wall only -> W1 = 5.0m, L1 estimated proportionally from box aspect!
           wTopGuess = topWallNum;
-          hRightGuess = double.parse((wTopGuess * boxAspect).clamp(1.5, 50.0).toStringAsFixed(1));
+          hRightGuess = double.parse((wTopGuess * boxAspect).clamp(1.5, 60.0).toStringAsFixed(1));
         } else if (rightWallNum != null) {
           hRightGuess = rightWallNum;
           hasExplicitRightDim = true;
-          wTopGuess = double.parse((hRightGuess / boxAspect).clamp(1.5, 50.0).toStringAsFixed(1));
+          wTopGuess = double.parse((hRightGuess / boxAspect).clamp(1.5, 60.0).toStringAsFixed(1));
         } else {
           // Fallback magnitude matching
-          final bigOnes = ocrNums.where((v) => v >= 2.5).toList()..sort((a, b) => b.compareTo(a));
+          final bigOnes = ocrNums.where((v) => v >= 2.0).toList()..sort((a, b) => b.compareTo(a));
           if (bigOnes.length == 1) {
             wTopGuess = bigOnes.first;
-            hRightGuess = double.parse((wTopGuess * boxAspect).clamp(1.5, 50.0).toStringAsFixed(1));
+            hRightGuess = double.parse((wTopGuess * boxAspect).clamp(1.5, 60.0).toStringAsFixed(1));
           } else if (bigOnes.length >= 2) {
             wTopGuess = bigOnes[1];
             hRightGuess = bigOnes[0];
@@ -1299,7 +1344,7 @@ class SketchShapeRecreator {
           }
         }
       } else {
-        hRightGuess = double.parse((wTopGuess * boxAspect).clamp(1.5, 50.0).toStringAsFixed(1));
+        hRightGuess = double.parse((wTopGuess * boxAspect).clamp(1.5, 60.0).toStringAsFixed(1));
       }
     } catch (_) {}
 
@@ -1317,6 +1362,8 @@ class SketchShapeRecreator {
       ocrCandidateMeters: ocrNums,
       initialWTopMeters: wTopGuess,
       initialHRightMeters: hRightGuess,
+      wTopRawSource: topRawSource,
+      hRightRawSource: rightRawSource,
     );
 
     // If OCR found specific small interior numbers (e.g. 1.0m on the 4m x 5m sketch) and there is a small step,
